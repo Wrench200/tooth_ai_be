@@ -1,6 +1,5 @@
 flask
 flask_cors
 requests
-sqlite3
 uuid
 pillow
