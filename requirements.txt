@@ -4,4 +4,4 @@ json
 requests
 sqlite3
 uuid
-PIL
+pillow
