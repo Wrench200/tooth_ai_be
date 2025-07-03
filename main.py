@@ -19,7 +19,7 @@ CORS(
     origins=[
         "http://localhost:3000", "http://127.0.0.1:3000",
         "http://localhost:5173", "http://127.0.0.1:5173",
-        "https://brand-app-psi.vercel.app"
+        "https://brand-app-psi.vercel.app","https://www.toothai.site" 
     ],  # Add your frontend URLs
     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "Accept"],
