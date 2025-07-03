@@ -6,7 +6,7 @@ form_questions = {
       "questions": [
         {
           "question_number": 1,
-          "question_text": "What is your purpose? (The 'why' behind what you do, beyond making a profit)"
+          "question_text": "Describe what your Business idea is and What change your brand wants to make in people’s lives"
         },
         {
           "question_number": 2,
@@ -40,7 +40,7 @@ form_questions = {
       "questions": [
         {
           "question_number": 1,
-          "question_text": "What is your brand name's personality? (If your brand was a person, what would they be like?)"
+          "question_text": "Suggest a brand name for your brand and why you choose that name?"
         },
         {
           "question_number": 2,
@@ -74,7 +74,7 @@ form_questions = {
         },
         {
           "question_number": 2,
-          "question_text": "How do you want your brand to feel different within your industry?"
+          "question_text": "How do you want people to feel when they see your visuals(logo, colours etc)"
         },
         {
           "question_number": 3,

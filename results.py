@@ -43,6 +43,25 @@ def check_keys(data, expected_structure):
 
 
 
+def clean_and_parse_json(raw_response):
+    """
+    Cleans the raw output from an LLM and parses it into a Python dictionary.
+    Handles responses that are lists of strings or strings with markdown fences.
+    """
+    if not raw_response:
+        return None
+    full_string = "".join(raw_response) if isinstance(raw_response, list) else str(raw_response)
+    start_index = full_string.find('{')
+    end_index = full_string.rfind('}')
+    if start_index == -1 or end_index == -1:
+        print("Warning: Could not find a JSON object in the response.")
+        return None
+    json_string = full_string[start_index : end_index + 1]
+    try:
+        return json.loads(json_string)
+    except json.JSONDecodeError as e:
+        print(f"Error decoding JSON after cleaning: {e}")
+        return None
 
 
 
@@ -228,7 +247,7 @@ def generate_results(userId, brandId):
     while passed == False:
         print("Processing section ...")
         response = openAI.get_text_prediction(system_prompt, prompt)
-        response = json.loads(response)
+        response = clean_and_parse_json(response)
         # Define the expected structure
         expected_structure = {
             "our_purpose": ["title", "what_our_customers_mean_to_us", "purpose_statement"],
@@ -275,7 +294,7 @@ def generate_results(userId, brandId):
     while passed == False:
         print("Processing section ...")
         response = openAI.get_text_prediction(system_prompt, prompt)
-        response = json.loads(response)
+        response = clean_and_parse_json(response)
         # Define the expected structure
         expected_structure = {
             "name": [],
@@ -338,7 +357,7 @@ def generate_results(userId, brandId):
     while passed == False:
         print("Processing section ...")
         response = openAI.get_text_prediction(system_prompt, prompt)
-        response = json.loads(response)
+        response = clean_and_parse_json(response)
         # Define the expected structure
         expected_structure = {
             "the_difference_we_provide": [],
@@ -380,7 +399,7 @@ def generate_results(userId, brandId):
     while passed == False:
         print("Processing section ...")
         response = openAI.get_text_prediction(system_prompt, prompt)
-        response = json.loads(response)
+        response = clean_and_parse_json(response)
         # Define the expected structure
         expected_structure = {
             "brand_name": [],
@@ -461,7 +480,7 @@ def generate_results(userId, brandId):
     while passed == False:
         print("Processing section ...")
         response = openAI.get_text_prediction(system_prompt, prompt)
-        response = json.loads(response)
+        response = clean_and_parse_json(response)
         # Define the expected structure
         expected_structure = {
             "about_the_brand": [],
@@ -514,6 +533,19 @@ def generate_results(userId, brandId):
 
 
 
+
+
+    system_prompt = "You are a brand content calender expert. Here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + "<<<, and here's info about our brand identity >>> "+str(response)+" <<<. I need you to write a content calender for the company for the entire month of june 2025, from the first week to the last. First start by listing all the national and international events that Cameroonians usually celebrate. Create a content calender as a csv of the format >>> Date | Event | Design concept | Caption <<< Make sure to use !@! as csv special characters to seperate columns. Make sure to specify the date, Event, design concept, caption. Make sure tto mention the name of the week in the dates. The design concept is a clearly detailed description of the design, defining the style, colours, Text, and every other detail. The caption should be more fun and engaging. We post on Happy new weaks on mondays, happy weekend on saturdays, and on major events. We also post from time to time to advertise a service, product, offer or a quiz, game, or anything to engage our audience. Make sure to always mix post with some marketing stuff in a smart way to pass message and still communicate about the brand, product or service. Make sure to cover just the specified month and nothing more or less. Be more elaborate with the responses, dont be too brief. Make it sound legit and good. Your resonses should not just be single sentences. Try to write a paragraph of valuable information. Sound more human as possible. Make it serious and not just rushed. Make sure to not say say any other thing, make sure to output just the csv, and do not say anything extra. Do not style anywhere in the csv with **, ---, #### or anything similar"
+                
+    prompt = "Please give me a content calender for the specified month"
+    
+    print("Processing section ...")
+    response = openAI.get_text_prediction(system_prompt, prompt)
+    content_calender = response
+    # print("\n\n\n\nContent calender")
+    # print(content_calender.replace('\\n', '\n'))
+    # print("\n\n\n\n")
+    print("Section success \n\n")
 
 
 
