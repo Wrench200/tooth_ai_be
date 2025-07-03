@@ -1,5 +1,4 @@
 import requests
-import os
 import json
 from setup import api_token
 
