@@ -1,5 +1,7 @@
 import requests
+import os
 import json
+import time
 from setup import api_token
 
 
@@ -11,10 +13,10 @@ headers = {
 }
 
 
-def get_text_prediction(system_prompt, prompt):
-    
+def get_text_prediction(system_prompt, prompt, max_retries=5, backoff_factor=1):
     answer = None
-    while answer is None or answer == "":
+    retries = 0
+    while (answer is None or answer == "") and retries < max_retries:
         data = {
             "input": {
                 "top_p": 1,
@@ -28,35 +30,48 @@ def get_text_prediction(system_prompt, prompt):
             }
         }
 
-        response = requests.post(
-            "https://api.replicate.com/v1/models/openai/gpt-4o/predictions",
-            headers=headers,
-            data=json.dumps(data)
-        )
-
-        result = response.json()
-        print(result)
-        
         try:
-            output = result.get('output')
+            response = requests.post(
+                "https://api.replicate.com/v1/models/openai/gpt-4o/predictions",
+                headers=headers,
+                data=json.dumps(data),
+                timeout=60 # Add a timeout for the request
+            )
+            response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
+
+            result = response.json()
+            print(result)
+            
+            output = result.get("output")
             if isinstance(output, list):
                 answer = ''.join(output)
             elif isinstance(output, str):
                 answer = output
             else:
                 answer = None
-        except Exception as e:
-            print(f"Error joining output: {e}")
+
+        except requests.exceptions.RequestException as e:
+            print(f"Request failed: {e}")
             answer = None
-        
+        except json.JSONDecodeError:
+            print("Failed to decode JSON response.")
+            answer = None
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
+            answer = None
+
+        if answer is None or answer == "":
+            retries += 1
+            sleep_time = backoff_factor * (2 ** (retries - 1))
+            print(f"Retrying in {sleep_time} seconds... (Attempt {retries}/{max_retries})")
+            time.sleep(sleep_time)
 
     return answer
 
 
 
-
 def validate_answer(question, answer):
-    systemPrompt = 'You are a question and answer validation bot, all you do is validate the answer against the question. You are supposed to check if the answer is relevant for the question. If the answer is relevant even in any way, just respond with a json {"error", False, "message", "passed"}, if the answer is absolutely not relevant to the question, output a json in the format {"error": true, "message": "explanation"} Make sure to add an explanation in the place of explanation. The explanation should be very brief and straigth forward, as to what the issue with the answer is, only add small suggestions when necessary. Make sure to not over write. Make sure to only give simple easy to understand and brief explanations. Your explanation is addressed to the user, so make sure to use a friendly tone. Do not paraphrase the question or the answer in your response. We need the answers to at least answer the question and give us some information. We need the information that we are requesting from the user. Make sure to explain exactly how the answer is not relevant to the question, and provide a small guide when necessary'
+    systemPrompt = 'You are a question and answer validation bot, all you do is validate the answer against the question. You are supposed to check if the answer is relevant for the question. If the answer is relevant even in any way, just respond with a json {"error", false, "message", "passed"}, if the answer is absolutely not relevant to the question, output a json in the format {"error": true, "message": "explanation"} Make sure to add an explanation in the place of explanation. The explanation should be very brief and straigth forward, as to what the issue with the answer is, only add small suggestions when necessary. Make sure to not over write. Make sure to only give simple easy to understand and brief explanations. Your explanation is addressed to the user, so make sure to use a friendly tone. Do not paraphrase the question or the answer in your response. We need the answers to at least answer the question and give us some information. We need the information that we are requesting from the user. Make sure to explain exactly how the answer is not relevant to the question, and provide a small guide when necessary'
     
     prompt = f"Here's the question >>> {question} <<<, and here is the users answer >>> {answer} <<<, validate it"
     print(f"Prompt: {prompt}")
@@ -69,7 +84,7 @@ def validate_answer(question, answer):
 
 
 
-system_prompt = "You are a brand identity expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + '''<<<. You are supposed to generate the communication for the brand as a json of this format >>> 
+system_prompt = "You are a brand identity expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + ''''<<<. You are supposed to generate the communication for the brand as a json of this format >>> 
 {
     "about_the_brand": sss,
     "logos": [
@@ -149,31 +164,4 @@ prompt = "Please give me the communication for my brand as json, and make sure t
 
 
 
-
-data = {
-    'id': 'dmmf021s49rm80cq7yrragjvg4',
-    'model': 'openai/gpt-4o',
-    'version': 'hidden',
-    'input': {
-        'frequency_penalty': 0,
-        'image_input': [],
-        'max_completion_tokens': 4096,
-        'presence_penalty': 0,
-        'prompt': 'Who was the 16th president of the United States?',
-        'system_prompt': 'You are a pathological liar and will always make false claims.',
-        'temperature': 1,
-        'top_p': 1},
-    'logs': '',
-    'output': ['', 'The 16th president of the United States', ' was George Washington.', ''],
-    'data_removed': False,
-    'error': None,
-    'status': 'processing',
-    'created_at': '2025-06-05T10:44:28.578Z',
-    'urls': {
-        'cancel': 'https://api.replicate.com/v1/predictions/dmmf021s49rm80cq7yrragjvg4/cancel',
-        'get': 'https://api.replicate.com/v1/predictions/dmmf021s49rm80cq7yrragjvg4',
-        'stream': 'https://stream-b.svc.ric1.c.replicate.net/v1/streams/7s4pmisef625e4kkaajfnuwphjscab7iay2jdn4ri4gi7lojc67a',
-        'web': 'https://replicate.com/p/dmmf021s49rm80cq7yrragjvg4'
-        }
-    }
 

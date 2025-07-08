@@ -19,7 +19,7 @@ CORS(
     origins=[
         "http://localhost:3000", "http://127.0.0.1:3000",
         "http://localhost:5173", "http://127.0.0.1:5173",
-        "https://brand-app-psi.vercel.app","https://www.toothai.site" 
+        "https://brand-app-psi.vercel.app"
     ],  # Add your frontend URLs
     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "Accept"],
@@ -39,27 +39,29 @@ def send_answer():
     data = request.get_json()
     # data = {
     #     'question': 1,
-    #     'section': 1,
     #     'answer': 'This is a sample answer.',
     #     'userId': 'userId',
     #     'brandId': 'brandId'
     # }
 
-    sectionNumber = data['section']
     questionNumber = data['question']
-
     brand = db.get_brand(data['brandId'])
     answer = data['answer']
-    question = questions.get_question(sectionNumber, questionNumber)
+    question = questions.get_question(questionNumber)
 
     response = openAI.validate_answer(question, answer)
-    # print(response)
     if isinstance(response, str):
-        response = json.loads(response)
+        start = response.find('{')
+        end = response.rfind('}') + 1
+        if start != -1 and end != -1:
+            json_str = response[start:end]
+            response = json.loads(json_str)
+            print(response)
+        else:
+            print("No JSON found")
 
     if not response["error"]:
-        db.update_answer(brand['answerId'], sectionNumber, questionNumber,
-                         answer)
+        db.update_answer(brand['answerId'], questionNumber, answer)
         return response, 200
     else:
         return response, 400
@@ -74,7 +76,6 @@ def get_suggestions():
     data = request.get_json()
     # data = {
     #     'question': 1,
-    #     'section': 1,
     #     'brandId': 'brandId',
     #     'userId': 'userId'
     # }
@@ -82,22 +83,17 @@ def get_suggestions():
     user = db.get_user(data['userId'])
     brand = db.get_brand(data['brandId'])
     answer = db.get_answer(brand['answerId'])
-    sectionNumber = data['section']
     questionNumber = data['question']
 
-    if sectionNumber == 1 and questionNumber == 1:
-        return jsonify(
-            {'error': 'No suggestions available for this question.'}), 400
+    if questionNumber == 1:
+        return jsonify({'error': 'No suggestions available for this question.'}), 400
 
-    mySuggestions = suggestions.generate_suggestions(sectionNumber,
-                                                     questionNumber,
-                                                     answer['answerId'])
+    mySuggestions = suggestions.generate_suggestions(questionNumber, answer['answerId'])
     mySuggestions = json.loads(mySuggestions)
 
     if not "error" in mySuggestions:
         mySuggestions = {
             'question': 1,
-            'section': 1,
             'userId': 'userId',
             'suggestions': mySuggestions
         }

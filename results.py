@@ -83,8 +83,8 @@ def generate_results(userId, brandId):
     brand = db.get_brand(brandId)
     answers = db.get_answer(brand["answerId"])
     
-    previous_questions = questions.get_previous_questions(5, 1)
-    previous_answers = db.get_previous_answers(answers["answerId"], 5, 1)
+    previous_questions = questions.get_previous_questions(11)
+    previous_answers = db.get_previous_answers(answers["answerId"], 11)
     question_and_answers = " ".join([f"Question: {q} Answer: {a}." for q, a in zip(previous_questions, previous_answers)])
     
     # print(question_and_answers)
@@ -644,7 +644,7 @@ def generate_results(userId, brandId):
 
 
 
-# print(generate_results("72aa6589-0cdb-4795-acf3-b0db2a8d7fad", "7be4efdc-7d3d-4344-b823-8300f6e81bb0"))
+# print(generate_results("bfa00828-4dee-451f-8cd1-72971ed9d662", "820f14ab-3b09-453a-907f-97d3f67d131a"))
 # print("\n\n\n\n"+str(db.get_brand("7be4efdc-7d3d-4344-b823-8300f6e81bb0")))
 
 # generate_results("72aa6589-0cdb-4795-acf3-b0db2a8d7fad", "7be4efdc-7d3d-4344-b823-8300f6e81bb0")

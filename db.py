@@ -569,48 +569,39 @@ def get_answer_from_number(answer_id, section_number, answer_number):
 
 
 
-def get_previous_answers(answer_id, limit_section_number, limit_answer_number):
+def get_previous_answers(answer_id, limit_question_number):
     """
-    Returns a list of all previous answers, from section 1, answer 1,
-    up to, but not including, the specified answer.
+    Returns a list of all previous answers, from question 1 up to, but not including, the specified question.
     """
     cursor.execute("""
         SELECT aq.answer_text
         FROM answers_questions AS aq
         JOIN answers_sections AS asec ON aq.sectionId_fk = asec.sectionId
-        WHERE asec.answerId_fk = ?
-          AND (
-            asec.section_number < ?
-            OR (asec.section_number = ? AND aq.answer_number < ?)
-          )
-        ORDER BY asec.section_number, aq.answer_number;
-    """, (answer_id, limit_section_number, limit_section_number, limit_answer_number))
-    
-    # Fetch all rows and flatten the list of tuples into a list of strings
+        WHERE asec.answerId_fk = ? AND aq.answer_number < ?
+        ORDER BY aq.answer_number;
+    """, (answer_id, limit_question_number))
     rows = cursor.fetchall()
     return [row[0] for row in rows]
 
 
 
-def update_answer(answer_id, section_number, answer_number, new_text):
-    """Updates the text of a specific answer in a specific section."""
+def update_answer(answer_id, question_number, new_text):
+    """Updates the text of a specific answer."""
     try:
         cursor.execute("""
             UPDATE answers_questions
             SET answer_text = ?
             WHERE answer_number = ? AND sectionId_fk = (
                 SELECT sectionId FROM answers_sections
-                WHERE answerId_fk = ? AND section_number = ?
+                WHERE answerId_fk = ?
             )
-        """, (new_text, answer_number, answer_id, section_number))
-        
+        """, (new_text, question_number, answer_id))
         conn.commit()
-        
         if cursor.rowcount > 0:
             print(f"Answer updated successfully for {answer_id}.")
             return True
         else:
-            print(f"No answer found to update for answerId {answer_id}, section {section_number}, answer {answer_number}.")
+            print(f"No answer found to update for answerId {answer_id}, question {question_number}.")
             return False
     except sqlite3.Error as e:
         print(f"Database error during answer update: {e}")
