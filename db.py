@@ -1,17 +1,49 @@
+# db.py - now uses Neon Postgres (psycopg2) and loads connection string from .env
+import os
+from dotenv import load_dotenv
 import uuid
-import sqlite3
+import psycopg2
+import psycopg2.extras
 
+load_dotenv()  # Load environment variables from .env
 
+DATABASE_URL = os.getenv("DATABASE_URL")
 
+conn = psycopg2.connect(DATABASE_URL)
+cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
+def reset_connection():
+    """Reset the database connection if it's in a failed state"""
+    global conn, cursor
+    try:
+        conn.rollback()
+    except:
+        pass
+    try:
+        conn.close()
+    except:
+        pass
+    
+    # Reconnect
+    conn = psycopg2.connect(DATABASE_URL)
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
+def test_connection():
+    """Test if the database connection is working"""
+    try:
+        cursor.execute("SELECT 1")
+        result = cursor.fetchone()
+        print("Database connection test: SUCCESS")
+        return True
+    except Exception as e:
+        print(f"Database connection test: FAILED - {e}")
+        return False
 
-
-
+# Test the connection on startup
+test_connection()
 
 # ===================== users ===========================================
 
-# Global list of users
 users = [
     {
         "userId": "userId",
@@ -21,13 +53,9 @@ users = [
     }
 ]
 
-
-# SQLite setup
-conn = sqlite3.connect('users.db', check_same_thread=False)
-cursor = conn.cursor()
 cursor.execute('''
     CREATE TABLE IF NOT EXISTS users (
-        userId TEXT PRIMARY KEY,
+        userId UUID PRIMARY KEY,
         username TEXT NOT NULL,
         email TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL
@@ -35,10 +63,6 @@ cursor.execute('''
 ''')
 conn.commit()
 
-
-
-
-# Create: Add a new user
 def create_user(username, email, password):
     if any(user['email'] == email for user in users):
         print(f"User with email {email} already exists.")
@@ -51,84 +75,67 @@ def create_user(username, email, password):
         "password": password,
     }
     users.append(new_user)
-    cursor.execute("INSERT INTO users (userId, username, email, password) VALUES (?, ?, ?, ?)",
+    cursor.execute("INSERT INTO users (userId, username, email, password) VALUES (%s, %s, %s, %s)",
                    (user_id, username, email, password))
     conn.commit()
     print(f"User {user_id} added.")
     return new_user
 
-
-
-
-# Read: Retrieve a user by userId
 def get_user(user_id):
     for user in users:
         if user["userId"] == user_id:
             return user
-    cursor.execute("SELECT * FROM users WHERE userId = ?", (user_id,))
-    row = cursor.fetchone()
-    if row:
-        return dict(zip(["userId", "username", "email", "password"], row))
-    print(f"User {user_id} not found.")
+    
+    # Try up to 2 times with connection reset
+    for attempt in range(2):
+        try:
+            cursor.execute("SELECT * FROM users WHERE userId = %s", (user_id,))
+            row = cursor.fetchone()
+            if row:
+                return dict(row)
+            print(f"User {user_id} not found.")
+            return None
+        except psycopg2.Error as e:
+            print(f"Database error in get_user (attempt {attempt + 1}): {e}")
+            if attempt == 0:  # Only reset on first failure
+                reset_connection()
+            else:
+                return None
+    
     return None
 
-
-
-
-# Read: Retrieve a user by email
 def get_user_from_email(email):
     for user in users:
         if user["email"] == email:
             return user
-    cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
+    cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
     row = cursor.fetchone()
     if row:
-        return dict(zip(["userId", "username", "email", "password"], row))
+        return dict(row)
     print(f"User with email {email} not found.")
     return None
 
-
-
-
-# Update: Modify an existing user's information
 def update_user(user_id, updated_info):
     for user in users:
         if user["userId"] == user_id:
             user.update(updated_info)
             for key in ["username", "email", "password"]:
                 if key in updated_info:
-                    cursor.execute(f"UPDATE users SET {key} = ? WHERE userId = ?", (updated_info[key], user_id))
+                    cursor.execute(f"UPDATE users SET {key} = %s WHERE userId = %s", (updated_info[key], user_id))
             conn.commit()
             print(f"User {user_id} updated.")
             return "Done"
     print(f"User {user_id} not found.")
 
-
-
-
-# Delete: Remove a user by userId
 def delete_user(user_id):
     for i, user in enumerate(users):
         if user["userId"] == user_id:
             del users[i]
-            cursor.execute("DELETE FROM users WHERE userId = ?", (user_id,))
+            cursor.execute("DELETE FROM users WHERE userId = %s", (user_id,))
             conn.commit()
             print(f"User {user_id} deleted.")
             return "Done"
     print(f"User {user_id} not found.")
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 # ===================== Brands ===========================================
 
@@ -144,13 +151,11 @@ brands = [{
     "marketing_and_social_media_strategy": "marketing_and_social_media_strategy_id",
 }]
 
-
-
 cursor.execute('''
     CREATE TABLE IF NOT EXISTS brands (
-        id TEXT PRIMARY KEY,
-        userId TEXT NOT NULL,
-        answerId TEXT,
+        id UUID PRIMARY KEY,
+        userId UUID NOT NULL,
+        answerId UUID,
         name TEXT,
         logo TEXT,
         brand_strategy TEXT,
@@ -162,16 +167,21 @@ cursor.execute('''
 ''')
 conn.commit()
 
-
-
-# CREATE: Create an empty brand for a user
 def create_brand(user_id):
     brand_id = str(uuid.uuid4())
     answers = create_answers(user_id)
+    
+    # Debug: Print the answers object
+    print("Answers object:", answers)
+    
+    if not answers:
+        print(f"Failed to create answers for user {user_id}")
+        return None
+    
     new_brand = {
         "id": brand_id,
         "userId": user_id,
-        "answerId": answers["answerId"],  # Default value as in the original code
+        "answerId": answers["answerId"],
         "name": "",
         "logo": "",
         "brand_strategy": "",
@@ -179,11 +189,10 @@ def create_brand(user_id):
         "brand_identity": "",
         "marketing_and_social_media_strategy": "",
     }
-    
     try:
         cursor.execute("""
             INSERT INTO brands (id, userId, answerId, name, logo, brand_strategy, brand_communication, brand_identity, marketing_and_social_media_strategy)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             new_brand["id"], new_brand["userId"], new_brand["answerId"], new_brand["name"],
             new_brand["logo"], new_brand["brand_strategy"], new_brand["brand_communication"],
@@ -192,87 +201,61 @@ def create_brand(user_id):
         conn.commit()
         print(f"Brand {brand_id} created for user {user_id}.")
         return new_brand
-    except sqlite3.IntegrityError as e:
+    except psycopg2.IntegrityError as e:
         print(f"Error creating brand: {e}")
-        conn.rollback() # Rollback the transaction on error
+        conn.rollback()
         return None
 
-
-
-# READ: Get a brand by ID (previously get_brands)
 def get_brand(brand_id):
-    cursor.execute("SELECT * FROM brands WHERE id = ?", (brand_id,))
-    row = cursor.fetchone()
-    if not row:
-        return None
-    # Dynamically create dictionary from column names and row values
-    columns = [description[0] for description in cursor.description]
-    return dict(zip(columns, row))
+    # Try up to 2 times with connection reset
+    for attempt in range(2):
+        try:
+            cursor.execute("SELECT * FROM brands WHERE id = %s", (brand_id,))
+            row = cursor.fetchone()
+            if not row:
+                return None
+            return dict(row)
+        except psycopg2.Error as e:
+            print(f"Database error in get_brand (attempt {attempt + 1}): {e}")
+            if attempt == 0:  # Only reset on first failure
+                reset_connection()
+            else:
+                return None
+    
+    return None
 
-
-
-# READ: Get all brands for a specific user
 def get_all_user_brands(user_id):
-    cursor.execute("SELECT * FROM brands WHERE userId = ?", (user_id,))
+    cursor.execute("SELECT * FROM brands WHERE userId = %s", (user_id,))
     rows = cursor.fetchall()
     if not rows:
         return []
-    columns = [description[0] for description in cursor.description]
-    return [dict(zip(columns, row)) for row in rows]
+    return [dict(row) for row in rows]
 
-
-
-# UPDATE: Update an existing brand by ID
 def update_brand(brand_id, property_name, new_value):
-    # Whitelist of updatable columns to prevent SQL injection on column names
     allowed_properties = [
         "name", "logo", "answerId", "brand_strategy", "brand_communication",
         "brand_identity", "marketing_and_social_media_strategy"
     ]
     if property_name not in allowed_properties:
         raise ValueError(f"Invalid or non-updatable property: {property_name}")
-
-    # Safely construct the SQL query
-    query = f"UPDATE brands SET {property_name} = ? WHERE id = ?"
+    query = f"UPDATE brands SET {property_name} = %s WHERE id = %s"
     cursor.execute(query, (new_value, brand_id))
     conn.commit()
-
     if cursor.rowcount == 0:
         print(f"Brand {brand_id} not found or value was not changed.")
         return None
-    
     print(f"Brand {brand_id} property '{property_name}' updated.")
-    # Return the fully updated brand object
     return get_brand(brand_id)
 
-
-
-# DELETE: Remove a brand by ID
 def delete_brand(brand_id):
-    cursor.execute("DELETE FROM brands WHERE id = ?", (brand_id,))
+    cursor.execute("DELETE FROM brands WHERE id = %s", (brand_id,))
     conn.commit()
-    # cursor.rowcount will be 1 if a row was deleted, 0 otherwise
     if cursor.rowcount > 0:
         print(f"Brand {brand_id} has been deleted.")
         return True
     else:
         print(f"Brand {brand_id} not found.")
         return False
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 # ===================== answers ===========================================
 
@@ -284,113 +267,43 @@ answers = [{
         "section_number": 1,
         "section_title": "brand_strategy",
         "questions": [
-            {
-            "answer_number": 1,
-            "answer_text": ""
-            },
-            {
-            "answer_number": 2,
-            "answer_text": ""
-            },
-            {
-            "answer_number": 3,
-            "answer_text": ""
-            },
-            {
-            "answer_number": 4,
-            "answer_text": ""
-            },
-            {
-            "answer_number": 5,
-            "answer_text": ""
-            },
-            {
-            "answer_number": 6,
-            "answer_text": ""
-            },
-            {
-            "answer_number": 7,
-            "answer_text": ""
-            }
+            {"answer_number": 1, "answer_text": ""},
+            {"answer_number": 2, "answer_text": ""},
+            {"answer_number": 3, "answer_text": ""},
+            {"answer_number": 4, "answer_text": ""},
+            {"answer_number": 5, "answer_text": ""},
+           
+            
         ]
         },
         {
         "section_number": 2,
         "section_title": "brand_communication",
         "questions": [
-            {
-            "answer_number": 1,
-            "answer_text": ""
-            },
-            {
-            "answer_number": 2,
-            "answer_text": ""
-            },
-            {
-            "answer_number": 3,
-            "answer_text": ""
-            },
-            {
-            "answer_number": 4,
-            "answer_text": ""
-            },
-            {
-            "answer_number": 5,
-            "answer_text": ""
-            },
-            {
-            "answer_number": 6,
-            "answer_text": ""
-            }
+            {"answer_number": 1, "answer_text": ""},
+            {"answer_number": 2, "answer_text": ""},
+          
         ]
         },
         {
         "section_number": 3,
         "section_title": "brand_identity",
         "questions": [
-            {
-            "answer_number": 1,
-            "answer_text": ""
-            },
-            {
-            "answer_number": 2,
-            "answer_text": ""
-            },
-            {
-            "answer_number": 3,
-            "answer_text": ""
-            },
-            {
-            "answer_number": 4,
-            "answer_text": ""
-            }
+            {"answer_number": 1, "answer_text": ""},
+           
         ]
         },
         {
         "section_number": 4,
         "section_title": "marketing_and_social_media_strategy",
         "questions": [
-            {
-            "answer_number": 1,
-            "answer_text": ""
-            },
-            {
-            "answer_number": 2,
-            "answer_text": ""
-            },
-            {
-            "answer_number": 3,
-            "answer_text": ""
-            },
-            {
-            "answer_number": 4,
-            "answer_text": ""
-            }
+            {"answer_number": 1, "answer_text": ""},
+            {"answer_number": 2, "answer_text": ""},
+         
         ]
     }
     ]
 }]
-
 
 answers_template = [
     {
@@ -402,8 +315,7 @@ answers_template = [
         {"answer_number": 3, "answer_text": ""},
         {"answer_number": 4, "answer_text": ""},
         {"answer_number": 5, "answer_text": ""},
-        {"answer_number": 6, "answer_text": ""},
-        {"answer_number": 7, "answer_text": ""},
+       
     ]
     },
     {
@@ -412,10 +324,7 @@ answers_template = [
     "questions": [
         {"answer_number": 1, "answer_text": ""},
         {"answer_number": 2, "answer_text": ""},
-        {"answer_number": 3, "answer_text": ""},
-        {"answer_number": 4, "answer_text": ""},
-        {"answer_number": 5, "answer_text": ""},
-        {"answer_number": 6, "answer_text": ""},
+        
     ]
     },
     {
@@ -423,9 +332,7 @@ answers_template = [
     "section_title": "brand_identity",
     "questions": [
         {"answer_number": 1, "answer_text": ""},
-        {"answer_number": 2, "answer_text": ""},
-        {"answer_number": 3, "answer_text": ""},
-        {"answer_number": 4, "answer_text": ""},
+       
     ]
     },
     {
@@ -434,166 +341,162 @@ answers_template = [
     "questions": [
         {"answer_number": 1, "answer_text": ""},
         {"answer_number": 2, "answer_text": ""},
-        {"answer_number": 3, "answer_text": ""},
-        {"answer_number": 4, "answer_text": ""},
+      
     ]
 }]
 
-
-# Setup for answers tables
 cursor.execute('''
     CREATE TABLE IF NOT EXISTS answers_main (
-        answerId TEXT PRIMARY KEY,
-        userId TEXT NOT NULL,
+        answerId UUID PRIMARY KEY,
+        userId UUID NOT NULL,
         FOREIGN KEY (userId) REFERENCES users(userId) ON DELETE CASCADE
     )
 ''')
-
 cursor.execute('''
     CREATE TABLE IF NOT EXISTS answers_sections (
-        sectionId INTEGER PRIMARY KEY AUTOINCREMENT,
-        answerId_fk TEXT NOT NULL,
-        section_number INTEGER NOT NULL,
+        sectionId SERIAL PRIMARY KEY,
+        answerId_fk UUID NOT NULL,
+        section_number INT NOT NULL,
         section_title TEXT NOT NULL,
         FOREIGN KEY (answerId_fk) REFERENCES answers_main(answerId) ON DELETE CASCADE,
         UNIQUE (answerId_fk, section_number)
     )
 ''')
-
 cursor.execute('''
     CREATE TABLE IF NOT EXISTS answers_questions (
-        questionId INTEGER PRIMARY KEY AUTOINCREMENT,
-        sectionId_fk INTEGER NOT NULL,
-        answer_number INTEGER NOT NULL,
+        questionId SERIAL PRIMARY KEY,
+        sectionId_fk INT NOT NULL,
+        answer_number INT NOT NULL,
         answer_text TEXT,
         FOREIGN KEY (sectionId_fk) REFERENCES answers_sections(sectionId) ON DELETE CASCADE,
         UNIQUE (sectionId_fk, answer_number)
     )
 ''')
+
+# Table to store Cloudinary image URLs
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS answer_images (
+        imageId SERIAL PRIMARY KEY,
+        answerId_fk UUID NOT NULL,
+        section_number INT NOT NULL,
+        question_number INT NOT NULL,
+        cloudinary_url TEXT NOT NULL,
+        cloudinary_public_id TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (answerId_fk) REFERENCES answers_main(answerId) ON DELETE CASCADE,
+        UNIQUE (answerId_fk, section_number, question_number)
+    )
+''')
 conn.commit()
 
-
 def create_answers(user_id):
-    """Creates a new, empty answer object in the database for a given user."""
     answer_id = str(uuid.uuid4())
     try:
-        # Start a transaction
-        cursor.execute("INSERT INTO answers_main (answerId, userId) VALUES (?, ?)", (answer_id, user_id))
-        
+        cursor.execute("INSERT INTO answers_main (answerId, userId) VALUES (%s, %s)", (answer_id, user_id))
         for section_data in answers_template:
-            cursor.execute("""
-                INSERT INTO answers_sections (answerId_fk, section_number, section_title) 
-                VALUES (?, ?, ?)
-            """, (answer_id, section_data['section_number'], section_data['section_title']))
-            
-            section_id = cursor.lastrowid # Get the ID of the section we just inserted
-
+            cursor.execute(
+                "INSERT INTO answers_sections (answerId_fk, section_number, section_title) VALUES (%s, %s, %s) RETURNING sectionId",
+                (answer_id, section_data['section_number'], section_data['section_title'])
+            )
+            section_id = cursor.fetchone()[0]
             for question_data in section_data['questions']:
-                cursor.execute("""
-                    INSERT INTO answers_questions (sectionId_fk, answer_number, answer_text)
-                    VALUES (?, ?, ?)
-                """, (section_id, question_data['answer_number'], question_data['answer_text']))
-
+                cursor.execute(
+                    "INSERT INTO answers_questions (sectionId_fk, answer_number, answer_text) VALUES (%s, %s, %s)",
+                    (section_id, question_data['answer_number'], question_data['answer_text'])
+                )
         conn.commit()
         print(f"Answer object {answer_id} created for user {user_id}.")
-        # Return the fully formed object by fetching it from the DB
         return get_answer(answer_id)
-    except sqlite3.Error as e:
+    except psycopg2.Error as e:
         conn.rollback()
-        print(f"Database error during answer creation: {e}")
+        print(f"Database error during answer creation: {e.pgerror}")
         return None
-
-
 
 def get_answer(answer_id):
-    """
-    Retrieves a fully constructed answer object from the database by its ID.
-    This function reconstructs the nested dictionary structure from the normalized tables.
-    """
-    # First, verify the main answer object exists
-    cursor.execute("SELECT userId FROM answers_main WHERE answerId = ?", (answer_id,))
-    main_row = cursor.fetchone()
-    if not main_row:
+    try:
+        cursor.execute("SELECT userId FROM answers_main WHERE answerId = %s", (answer_id,))
+        main_row = cursor.fetchone()
+        if not main_row:
+            return None
+        result = {"answerId": answer_id, "userId": main_row[0], "sections": []}
+        cursor.execute("""
+            SELECT sectionId, section_number, section_title 
+            FROM answers_sections 
+            WHERE answerId_fk = %s 
+            ORDER BY section_number
+        """, (answer_id,))
+        sections = cursor.fetchall()
+        for sec_id, sec_num, sec_title in sections:
+            section_obj = {
+                "section_number": sec_num,
+                "section_title": sec_title,
+                "questions": []
+            }
+            cursor.execute("""
+                SELECT answer_number, answer_text 
+                FROM answers_questions 
+                WHERE sectionId_fk = %s 
+                ORDER BY answer_number
+            """, (sec_id,))
+            questions = cursor.fetchall()
+            for ans_num, ans_text in questions:
+                section_obj["questions"].append({
+                    "answer_number": ans_num,
+                    "answer_text": ans_text
+                })
+            result["sections"].append(section_obj)
+        return result
+    except psycopg2.Error as e:
+        print(f"Database error in get_answer: {e}")
+        reset_connection()
         return None
 
-    result = {"answerId": answer_id, "userId": main_row[0], "sections": []}
-    
-    # Get all sections for this answerId
-    cursor.execute("""
-        SELECT sectionId, section_number, section_title 
-        FROM answers_sections 
-        WHERE answerId_fk = ? 
-        ORDER BY section_number
-    """, (answer_id,))
-    sections = cursor.fetchall()
-    
-    for sec_id, sec_num, sec_title in sections:
-        section_obj = {
-            "section_number": sec_num,
-            "section_title": sec_title,
-            "questions": []
-        }
-        
-        # Get all questions for this section
-        cursor.execute("""
-            SELECT answer_number, answer_text 
-            FROM answers_questions 
-            WHERE sectionId_fk = ? 
-            ORDER BY answer_number
-        """, (sec_id,))
-        questions = cursor.fetchall()
-        
-        for ans_num, ans_text in questions:
-            section_obj["questions"].append({
-                "answer_number": ans_num,
-                "answer_text": ans_text
-            })
-        
-        result["sections"].append(section_obj)
-        
-    return result
-
-
-
 def get_answer_from_number(answer_id, section_number, answer_number):
-    """Returns the text of a specific answer from a specific section."""
     cursor.execute("""
         SELECT aq.answer_text 
         FROM answers_questions AS aq
         JOIN answers_sections AS asec ON aq.sectionId_fk = asec.sectionId
-        WHERE asec.answerId_fk = ? AND asec.section_number = ? AND aq.answer_number = ?
+        WHERE asec.answerId_fk = %s AND asec.section_number = %s AND aq.answer_number = %s
     """, (answer_id, section_number, answer_number))
-    
     row = cursor.fetchone()
     return row[0] if row else None
 
-
-
 def get_previous_answers(answer_id, limit_question_number):
-    """
-    Returns a list of all previous answers, from question 1 up to, but not including, the specified question.
-    """
-    cursor.execute("""
+    print(f"get_previous_answers debug:")
+    print(f"  answer_id: {answer_id}")
+    print(f"  limit_question_number: {limit_question_number}")
+    
+    query = """
         SELECT aq.answer_text
         FROM answers_questions AS aq
         JOIN answers_sections AS asec ON aq.sectionId_fk = asec.sectionId
-        WHERE asec.answerId_fk = ? AND aq.answer_number < ?
+        WHERE asec.answerId_fk = %s AND aq.answer_number < %s
         ORDER BY aq.answer_number;
-    """, (answer_id, limit_question_number))
-    rows = cursor.fetchall()
-    return [row[0] for row in rows]
-
-
+    """
+    print(f"  SQL query: {query}")
+    print(f"  SQL params: ({answer_id}, {limit_question_number})")
+    
+    try:
+        cursor.execute(query, (answer_id, limit_question_number))
+        rows = cursor.fetchall()
+        print(f"  SQL result rows: {rows}")
+        
+        result = [row[0] for row in rows]
+        print(f"  Final result: {result}")
+        return result
+    except psycopg2.Error as e:
+        print(f"  Database error in get_previous_answers: {e}")
+        reset_connection()
+        return []
 
 def update_answer(answer_id, question_number, new_text):
-    """Updates the text of a specific answer."""
     try:
         cursor.execute("""
             UPDATE answers_questions
-            SET answer_text = ?
-            WHERE answer_number = ? AND sectionId_fk = (
+            SET answer_text = %s
+            WHERE answer_number = %s AND sectionId_fk = (
                 SELECT sectionId FROM answers_sections
-                WHERE answerId_fk = ?
+                WHERE answerId_fk = %s
             )
         """, (new_text, question_number, answer_id))
         conn.commit()
@@ -603,49 +506,139 @@ def update_answer(answer_id, question_number, new_text):
         else:
             print(f"No answer found to update for answerId {answer_id}, question {question_number}.")
             return False
-    except sqlite3.Error as e:
+    except psycopg2.Error as e:
         print(f"Database error during answer update: {e}")
         return False
 
-
-
 def delete_answer(answer_id):
-    """
-    Deletes an entire answer object and all its associated sections and questions
-    from the database using its ID. The `ON DELETE CASCADE` pragma handles the cleanup.
-    """
-    cursor.execute("DELETE FROM answers_main WHERE answerId = ?", (answer_id,))
+    cursor.execute("DELETE FROM answers_main WHERE answerId = %s", (answer_id,))
     conn.commit()
-    
     if cursor.rowcount > 0:
         print(f"Answer object {answer_id} deleted successfully.")
         return True
     else:
         print(f"Answer object {answer_id} not found.")
         return False
+
+# ===================== Cloudinary Image Management ===========================================
+
+def save_image_url(answer_id, section_number, question_number, cloudinary_url, cloudinary_public_id):
+    """
+    Save a Cloudinary image URL to the database
     
+    Args:
+        answer_id (str): The answer ID
+        section_number (int): The section number
+        question_number (int): The question number
+        cloudinary_url (str): The Cloudinary URL
+        cloudinary_public_id (str): The Cloudinary public ID
     
-# print(create_brand("userId"))
-# if __name__ == "__main__":
-    # 1. Create a fresh user
-    # user = create_user("testuser", "test@example.com", "secret")
-    # if not user:
-    #     print("🔴 Failed to create user—maybe the email already exists?")
-    #     exit(1)
-    # print("✅ Created user:", user)
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        cursor.execute("""
+            INSERT INTO answer_images (answerId_fk, section_number, question_number, cloudinary_url, cloudinary_public_id)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (answerId_fk, section_number, question_number)
+            DO UPDATE SET 
+                cloudinary_url = EXCLUDED.cloudinary_url,
+                cloudinary_public_id = EXCLUDED.cloudinary_public_id,
+                created_at = CURRENT_TIMESTAMP
+        """, (answer_id, section_number, question_number, cloudinary_url, cloudinary_public_id))
+        conn.commit()
+        print(f"Image URL saved for answer {answer_id}, section {section_number}, question {question_number}")
+        return True
+    except psycopg2.Error as e:
+        print(f"Database error saving image URL: {e}")
+        conn.rollback()
+        return False
 
-    # # 2. Create a brand for that user
-    # brand = create_brand("e19d521a-38b2-4f97-9d7c-b18da76b4ee8")
-    # if not brand:
-    #     # print("🔴 Failed to create brand for user", user["userId"])
-    #     exit(1)
-    # print("✅ Created brand:", brand)
+def get_image_url(answer_id, section_number, question_number):
+    """
+    Get the Cloudinary image URL for a specific answer/question
+    
+    Args:
+        answer_id (str): The answer ID
+        section_number (int): The section number
+        question_number (int): The question number
+    
+    Returns:
+        dict: Image data with URL and public_id, or None if not found
+    """
+    try:
+        cursor.execute("""
+            SELECT cloudinary_url, cloudinary_public_id, created_at
+            FROM answer_images
+            WHERE answerId_fk = %s AND section_number = %s AND question_number = %s
+        """, (answer_id, section_number, question_number))
+        row = cursor.fetchone()
+        if row:
+            return {
+                "cloudinary_url": row[0],
+                "cloudinary_public_id": row[1],
+                "created_at": row[2]
+            }
+        return None
+    except psycopg2.Error as e:
+        print(f"Database error getting image URL: {e}")
+        return None
 
-    # # 3. Fetch all brands for that user
-    # brands = get_all_user_brands("e19d521a-38b2-4f97-9d7c-b18da76b4ee8")
-    # print("🔎 get_all_user_brands returned:", brands)
+def delete_image_url(answer_id, section_number, question_number):
+    """
+    Delete a Cloudinary image URL from the database
+    
+    Args:
+        answer_id (str): The answer ID
+        section_number (int): The section number
+        question_number (int): The question number
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        cursor.execute("""
+            DELETE FROM answer_images
+            WHERE answerId_fk = %s AND section_number = %s AND question_number = %s
+        """, (answer_id, section_number, question_number))
+        conn.commit()
+        if cursor.rowcount > 0:
+            print(f"Image URL deleted for answer {answer_id}, section {section_number}, question {question_number}")
+            return True
+        return False
+    except psycopg2.Error as e:
+        print(f"Database error deleting image URL: {e}")
+        conn.rollback()
+        return False
 
-    # 4. Simple assertion
-    # assert len(brands) == 1 and brands[0]["id"] == brand["id"], \
-    #     "❌ Expected exactly one brand matching the one we just created!"
-    # print("🎉 Test passed!")
+def get_all_images_for_answer(answer_id):
+    """
+    Get all images for a specific answer
+    
+    Args:
+        answer_id (str): The answer ID
+    
+    Returns:
+        list: List of image data dictionaries
+    """
+    try:
+        cursor.execute("""
+            SELECT section_number, question_number, cloudinary_url, cloudinary_public_id, created_at
+            FROM answer_images
+            WHERE answerId_fk = %s
+            ORDER BY section_number, question_number
+        """, (answer_id,))
+        rows = cursor.fetchall()
+        return [
+            {
+                "section_number": row[0],
+                "question_number": row[1],
+                "cloudinary_url": row[2],
+                "cloudinary_public_id": row[3],
+                "created_at": row[4]
+            }
+            for row in rows
+        ]
+    except psycopg2.Error as e:
+        print(f"Database error getting all images: {e}")
+        return []

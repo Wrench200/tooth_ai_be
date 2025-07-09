@@ -16,6 +16,11 @@ import setup
 
 # Function to check keys
 def check_keys(data, expected_structure):
+    # Handle None data
+    if data is None:
+        print("Error: Received None data instead of JSON object")
+        return False
+    
     all_keys_present = True
     for section, keys in expected_structure.items():
         if section not in data:
@@ -49,18 +54,34 @@ def clean_and_parse_json(raw_response):
     Handles responses that are lists of strings or strings with markdown fences.
     """
     if not raw_response:
+        print("Warning: Received empty or None response")
         return None
+    
+    print(f"Cleaning response of type: {type(raw_response)}")
     full_string = "".join(raw_response) if isinstance(raw_response, list) else str(raw_response)
+    print(f"Full string length: {len(full_string)}")
+    print(f"First 200 chars: {full_string[:200]}")
+    
     start_index = full_string.find('{')
     end_index = full_string.rfind('}')
+    
+    print(f"JSON start index: {start_index}, end index: {end_index}")
+    
     if start_index == -1 or end_index == -1:
         print("Warning: Could not find a JSON object in the response.")
+        print(f"Available content: {full_string}")
         return None
+    
     json_string = full_string[start_index : end_index + 1]
+    print(f"Extracted JSON string: {json_string[:200]}...")
+    
     try:
-        return json.loads(json_string)
+        parsed_json = json.loads(json_string)
+        print(f"Successfully parsed JSON with keys: {list(parsed_json.keys()) if isinstance(parsed_json, dict) else 'Not a dict'}")
+        return parsed_json
     except json.JSONDecodeError as e:
         print(f"Error decoding JSON after cleaning: {e}")
+        print(f"Problematic JSON string: {json_string}")
         return None
 
 
@@ -81,7 +102,7 @@ def generate_results(userId, brandId):
     
     user = db.get_user(userId)
     brand = db.get_brand(brandId)
-    answers = db.get_answer(brand["answerId"])
+    answers = db.get_answer(brand["answerid"])
     
     previous_questions = questions.get_previous_questions(11)
     previous_answers = db.get_previous_answers(answers["answerId"], 11)
@@ -477,56 +498,101 @@ def generate_results(userId, brandId):
     logo_prompt3 = ""
     
     passed = False
-    while passed == False:
-        print("Processing section ...")
-        response = openAI.get_text_prediction(system_prompt, prompt)
-        response = clean_and_parse_json(response)
-        # Define the expected structure
-        expected_structure = {
-            "about_the_brand": [],
-            "logos": ["prompt", "description"],
-            "primary_colors": [],
-            "secondary_colors": [],
-            "typography": [],
-            "applications": []
-        }
-        if check_keys(response, expected_structure):
-            about_the_brand = response["about_the_brand"]
-            # Extract logo descriptions and prompts
-            logo_description_1 = response["logos"][0]["description"]
-            logo_description_2 = response["logos"][1]["description"]
-            logo_description_3 = response["logos"][2]["description"]
+    max_retries = 3
+    retry_count = 0
+    
+    while passed == False and retry_count < max_retries:
+        print(f"Processing section (attempt {retry_count + 1}/{max_retries})...")
+        try:
+            raw_response = openAI.get_text_prediction(system_prompt, prompt)
+            print(f"Raw API response type: {type(raw_response)}")
+            print(f"Raw API response: {raw_response[:200]}..." if raw_response else "Raw API response: None")
             
-            logo_prompt1 = response["logos"][0]["prompt"]
-            logo_prompt2 = response["logos"][1]["prompt"]
-            logo_prompt3 = response["logos"][2]["prompt"]
+            response = clean_and_parse_json(raw_response)
+            print(f"Parsed response: {response}")
             
-            # Optionally, you could use the prompts for logo generation elsewhere
-            primary_colors = response["primary_colors"]
-            secondary_colors = response["secondary_colors"]
-            typography = response["typography"]
-            applications = response["applications"]
-            passed = True
-            print("Section success \n\n")
-        else:
-            print("Error in response format. Retrying...")
+            # Define the expected structure
+            expected_structure = {
+                "about_the_brand": [],
+                "logos": ["prompt", "description"],
+                "primary_colors": [],
+                "secondary_colors": [],
+                "typography": [],
+                "applications": []
+            }
+            
+            if response is None:
+                print("Error: API response could not be parsed as JSON")
+                retry_count += 1
+                continue
+                
+            if check_keys(response, expected_structure):
+                about_the_brand = response["about_the_brand"]
+                # Extract logo descriptions and prompts
+                logo_description_1 = response["logos"][0]["description"]
+                logo_description_2 = response["logos"][1]["description"]
+                logo_description_3 = response["logos"][2]["description"]
+                
+                logo_prompt1 = response["logos"][0]["prompt"]
+                logo_prompt2 = response["logos"][1]["prompt"]
+                logo_prompt3 = response["logos"][2]["prompt"]
+                
+                # Optionally, you could use the prompts for logo generation elsewhere
+                primary_colors = response["primary_colors"]
+                secondary_colors = response["secondary_colors"]
+                typography = response["typography"]
+                applications = response["applications"]
+                passed = True
+                print("Section success \n\n")
+            else:
+                print("Error in response format. Retrying...")
+                retry_count += 1
+        except Exception as e:
+            print(f"Exception during processing: {e}")
+            retry_count += 1
+    
+    if not passed:
+        print(f"Failed to process section after {max_retries} attempts. Using default values.")
+        # Set default values to prevent further errors
+        about_the_brand = "Default brand description"
+        logo_description_1 = "Default logo description 1"
+        logo_description_2 = "Default logo description 2"
+        logo_description_3 = "Default logo description 3"
+        logo_prompt1 = "A simple, professional logo design"
+        logo_prompt2 = "A modern, minimalist logo design"
+        logo_prompt3 = "A creative, distinctive logo design"
+        primary_colors = []
+        secondary_colors = []
+        typography = []
+        applications = []
     # ...existing code...
 
 
-    generated_logo_1 = imagen.generate_replicate_image(logo_prompt1)
-    filename1 = str(uuid.uuid4()) + ".jpg"
-    downloaded_logo_path1 = functions.download_image(generated_logo_1, "images", filename1)
-    logo_url_1 = setup.server_address + "/image/" + filename1
-    
-    generated_logo_2 = imagen.generate_replicate_image(logo_prompt2)
-    filename2 = str(uuid.uuid4()) + ".jpg"
-    downloaded_logo_path2 = functions.download_image(generated_logo_2, "images", filename2)
-    logo_url_2 = setup.server_address + "/image/" + filename2
-    
-    generated_logo_3 = imagen.generate_replicate_image(logo_prompt3)
-    filename3 = str(uuid.uuid4()) + ".jpg"
-    downloaded_logo_path3 = functions.download_image(generated_logo_3, "images", filename3)
-    logo_url_3 = setup.server_address + "/image/" + filename3
+    # Generate logos and upload to Cloudinary
+    try:
+        print("Generating logos and uploading to Cloudinary...")
+        logo_url_1 = imagen.generate_image(logo_prompt1, public_id=f"toothai/{brandId}/logo_1")
+        logo_url_2 = imagen.generate_image(logo_prompt2, public_id=f"toothai/{brandId}/logo_2")
+        logo_url_3 = imagen.generate_image(logo_prompt3, public_id=f"toothai/{brandId}/logo_3")
+        
+        # Check if any logos failed to generate
+        if not logo_url_1:
+            print("Warning: Logo 1 generation failed, using placeholder")
+            logo_url_1 = "https://via.placeholder.com/400x200?text=Logo+1"
+        if not logo_url_2:
+            print("Warning: Logo 2 generation failed, using placeholder")
+            logo_url_2 = "https://via.placeholder.com/400x200?text=Logo+2"
+        if not logo_url_3:
+            print("Warning: Logo 3 generation failed, using placeholder")
+            logo_url_3 = "https://via.placeholder.com/400x200?text=Logo+3"
+            
+        print("Logo generation completed successfully")
+    except Exception as e:
+        print(f"Error during logo generation: {e}")
+        print("Using placeholder logos")
+        logo_url_1 = "https://via.placeholder.com/400x200?text=Logo+1"
+        logo_url_2 = "https://via.placeholder.com/400x200?text=Logo+2"
+        logo_url_3 = "https://via.placeholder.com/400x200?text=Logo+3"
     
 
 

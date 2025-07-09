@@ -1,6 +1,7 @@
 from setup import api_token
 import requests
 import time
+import cloudinary_utils
 
 
 
@@ -40,6 +41,50 @@ def generate_replicate_image(prompt, aspect_ratio="1:1", max_retries=5, backoff_
             return False
     print(f"Failed to generate image after {max_retries} attempts.")
     return False
+
+
+def generate_image(prompt, aspect_ratio="1:1", public_id=None, folder="toothai"):
+    """
+    Generate an image using Replicate API and upload it to Cloudinary
+    
+    Args:
+        prompt (str): The text prompt for image generation
+        aspect_ratio (str): Aspect ratio for the image (default: "1:1")
+        public_id (str): Optional custom public ID for Cloudinary
+        folder (str): Folder to store the image in Cloudinary
+    
+    Returns:
+        str: Cloudinary URL of the uploaded image, or None if failed
+    """
+    try:
+        print(f"Generating image with prompt: {prompt}")
+        
+        # Generate image using Replicate
+        image_url = generate_replicate_image(prompt, aspect_ratio)
+        
+        if not image_url:
+            print("Failed to generate image with Replicate")
+            return None
+        
+        print(f"Image generated successfully: {image_url}")
+        
+        # Upload to Cloudinary
+        upload_result = cloudinary_utils.upload_image_from_url(
+            image_url, 
+            public_id=public_id,
+            folder=folder
+        )
+        
+        if not upload_result:
+            print("Failed to upload image to Cloudinary")
+            return None
+        
+        print(f"Image uploaded to Cloudinary: {upload_result['secure_url']}")
+        return upload_result['secure_url']
+        
+    except Exception as e:
+        print(f"Error in generate_image: {e}")
+        return None
 
 
 

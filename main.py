@@ -7,6 +7,7 @@ import suggestions
 import json
 import os
 import results
+import cloudinary_utils
 
 
 
@@ -16,11 +17,7 @@ import results
 app = Flask(__name__)
 CORS(
     app,
-    origins=[
-        "http://localhost:3000", "http://127.0.0.1:3000",
-        "http://localhost:5173", "http://127.0.0.1:5173",
-        "https://brand-app-psi.vercel.app"
-    ],  # Add your frontend URLs
+    origins="*",  # Add your frontend URLs
     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "Accept"],
     supports_credentials=True)
@@ -39,15 +36,33 @@ def send_answer():
     data = request.get_json()
     # data = {
     #     'question': 1,
+    #     'section': 2,  # Add this field
     #     'answer': 'This is a sample answer.',
     #     'userId': 'userId',
     #     'brandId': 'brandId'
     # }
 
-    questionNumber = data['question']
+    # Map frontend question to backend question number
+    section_number = data.get('section', 1)  # Default to section 1 if not provided
+    frontend_question_number = data['question']
+    backend_question_number = map_frontend_to_backend_question(section_number, frontend_question_number)
+    
+    if backend_question_number is None:
+        return jsonify({'error': f'Invalid section/question combination: section {section_number}, question {frontend_question_number}'}), 400
+
     brand = db.get_brand(data['brandId'])
+    
+    # Debug: Print the brand object to see its structure
+    print("Brand object:", brand)
+    
+    if not brand:
+        return jsonify({'error': 'Brand not found'}), 404
+    
+    if 'answerid' not in brand or not brand['answerid']:
+        return jsonify({'error': 'Brand has no answerId - answers creation failed'}), 500
+    
     answer = data['answer']
-    question = questions.get_question(questionNumber)
+    question = questions.get_question(backend_question_number)
 
     response = openAI.validate_answer(question, answer)
     if isinstance(response, str):
@@ -61,7 +76,7 @@ def send_answer():
             print("No JSON found")
 
     if not response["error"]:
-        db.update_answer(brand['answerId'], questionNumber, answer)
+        db.update_answer(brand['answerid'], backend_question_number, answer)
         return response, 200
     else:
         return response, 400
@@ -71,33 +86,89 @@ def send_answer():
 
 
 
+def map_frontend_to_backend_question(section_number, question_number):
+    """
+    Map frontend section/question numbers to backend question numbers.
+    
+    Frontend structure:
+    - Section 1 (Brand Strategy): Questions 1-5 → Backend: 1-5
+    - Section 2 (Brand Communication): Questions 1-2 → Backend: 6-7
+    - Section 3 (Brand Identity): Questions 1-1 → Backend: 8
+    - Section 4 (Marketing Content): Questions 1-2 → Backend: 9-10
+    """
+    section_mappings = {
+        1: [1, 2, 3, 4, 5],      # Brand Strategy
+        2: [6, 7],               # Brand Communication
+        3: [8],                  # Brand Identity
+        4: [9, 10]               # Marketing Content
+    }
+    
+    if section_number in section_mappings and 1 <= question_number <= len(section_mappings[section_number]):
+        return section_mappings[section_number][question_number - 1]
+    else:
+        return None
+
+
 @app.route('/get_suggestions', methods=['POST'])
 def get_suggestions():
     data = request.get_json()
     # data = {
     #     'question': 1,
+    #     'section': 2,  # Add this field
     #     'brandId': 'brandId',
     #     'userId': 'userId'
     # }
 
     user = db.get_user(data['userId'])
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    
     brand = db.get_brand(data['brandId'])
-    answer = db.get_answer(brand['answerId'])
-    questionNumber = data['question']
+    if not brand:
+        return jsonify({'error': 'Brand not found'}), 404
+    
+    answer = db.get_answer(brand['answerid'])
+    if not answer:
+        return jsonify({'error': 'Answer not found'}), 404
+    
+    # Map frontend question to backend question number
+    section_number = data.get('section', 1)  # Default to section 1 if not provided
+    frontend_question_number = data['question']
+    backend_question_number = map_frontend_to_backend_question(section_number, frontend_question_number)
+    
+    if backend_question_number is None:
+        return jsonify({'error': f'Invalid section/question combination: section {section_number}, question {frontend_question_number}'}), 400
+    
+    # Debug: Print the values being passed
+    print(f"get_suggestions debug:")
+    print(f"  frontend section: {section_number}, question: {frontend_question_number}")
+    print(f"  backend question: {backend_question_number}")
+    print(f"  answer['answerId']: {answer.get('answerId', 'NOT FOUND')}")
+    print(f"  answer keys: {list(answer.keys())}")
 
-    if questionNumber == 1:
+    if backend_question_number == 1:
         return jsonify({'error': 'No suggestions available for this question.'}), 400
 
-    mySuggestions = suggestions.generate_suggestions(questionNumber, answer['answerId'])
-    mySuggestions = json.loads(mySuggestions)
-
-    if not "error" in mySuggestions:
-        mySuggestions = {
-            'question': 1,
-            'userId': 'userId',
-            'suggestions': mySuggestions
-        }
-        return jsonify(mySuggestions)
+    try:
+        mySuggestions = suggestions.generate_suggestions(backend_question_number, answer['answerId'])
+        print(f"  suggestions result: {mySuggestions}")
+        
+        if isinstance(mySuggestions, str):
+            mySuggestions = json.loads(mySuggestions)
+        
+        if not "error" in mySuggestions:
+            mySuggestions = {
+                'question': frontend_question_number,
+                'section': section_number,
+                'userId': data['userId'],
+                'suggestions': mySuggestions
+            }
+            return jsonify(mySuggestions)
+        else:
+            return jsonify(mySuggestions), 400
+    except Exception as e:
+        print(f"Error in get_suggestions: {e}")
+        return jsonify({'error': f'Suggestions generation failed: {str(e)}'}), 500
 
 
 
@@ -143,7 +214,8 @@ def register_user():
             return jsonify({'error': 'Failed to create user'}), 500
 
     except Exception as e:
-        return jsonify({'error': 'Internal server error'}), 500
+        print("REGISTER ERROR:", e)
+        return jsonify({'error': str(e)}), 500
 
 
 
@@ -284,11 +356,189 @@ def get_image(filename):
     image_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'images')
     return send_from_directory(image_folder, filename)
 
+@app.route('/generate_and_upload_image', methods=['POST'])
+def generate_and_upload_image():
+    """
+    Generate an image using Replicate API and upload it to Cloudinary
+    """
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        required_fields = ['prompt', 'answerId', 'section', 'question', 'userId']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'error': f'Missing required field: {field}'}), 400
+        
+        answer_id = data['answerId']
+        section_number = data['section']
+        question_number = data['question']
+        prompt = data['prompt']
+        user_id = data['userId']
+        
+        # Verify the answer belongs to the user
+        answer = db.get_answer(answer_id)
+        if not answer or answer.get('userId') != user_id:
+            return jsonify({'error': 'Answer not found or access denied'}), 404
+        
+        # Generate image using Replicate API and upload to Cloudinary
+        import imagen
+        public_id = f"toothai/{answer_id}/section_{section_number}_question_{question_number}"
+        cloudinary_url = imagen.generate_image(prompt, public_id=public_id)
+        
+        if not cloudinary_url:
+            return jsonify({'error': 'Failed to generate and upload image'}), 500
+        
+        # Save to database
+        success = db.save_image_url(
+            answer_id,
+            section_number,
+            question_number,
+            cloudinary_url,
+            public_id
+        )
+        
+        if not success:
+            return jsonify({'error': 'Failed to save image URL to database'}), 500
+        
+        return jsonify({
+            'success': True,
+            'image_url': cloudinary_url,
+            'public_id': public_id,
+            'message': 'Image generated and uploaded successfully'
+        })
+        
+    except Exception as e:
+        print(f"Error in generate_and_upload_image: {e}")
+        return jsonify({'error': f'Internal server error: {str(e)}'}), 500
 
+@app.route('/get_image', methods=['POST'])
+def get_image_url():
+    """
+    Get the Cloudinary image URL for a specific answer/question
+    """
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        required_fields = ['answerId', 'section', 'question', 'userId']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'error': f'Missing required field: {field}'}), 400
+        
+        answer_id = data['answerId']
+        section_number = data['section']
+        question_number = data['question']
+        user_id = data['userId']
+        
+        # Verify the answer belongs to the user
+        answer = db.get_answer(answer_id)
+        if not answer or answer.get('userId') != user_id:
+            return jsonify({'error': 'Answer not found or access denied'}), 404
+        
+        # Get image from database
+        image_data = db.get_image_url(answer_id, section_number, question_number)
+        
+        if not image_data:
+            return jsonify({'error': 'Image not found'}), 404
+        
+        return jsonify({
+            'success': True,
+            'image_url': image_data['cloudinary_url'],
+            'public_id': image_data['cloudinary_public_id'],
+            'created_at': image_data['created_at'].isoformat() if image_data['created_at'] else None
+        })
+        
+    except Exception as e:
+        print(f"Error in get_image_url: {e}")
+        return jsonify({'error': f'Internal server error: {str(e)}'}), 500
 
+@app.route('/delete_image', methods=['POST'])
+def delete_image():
+    """
+    Delete an image from Cloudinary and database
+    """
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        required_fields = ['answerId', 'section', 'question', 'userId']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'error': f'Missing required field: {field}'}), 400
+        
+        answer_id = data['answerId']
+        section_number = data['section']
+        question_number = data['question']
+        user_id = data['userId']
+        
+        # Verify the answer belongs to the user
+        answer = db.get_answer(answer_id)
+        if not answer or answer.get('userId') != user_id:
+            return jsonify({'error': 'Answer not found or access denied'}), 404
+        
+        # Get image data first
+        image_data = db.get_image_url(answer_id, section_number, question_number)
+        
+        if not image_data:
+            return jsonify({'error': 'Image not found'}), 404
+        
+        # Delete from Cloudinary
+        cloudinary_success = cloudinary_utils.delete_image(image_data['cloudinary_public_id'])
+        
+        # Delete from database
+        db_success = db.delete_image_url(answer_id, section_number, question_number)
+        
+        if cloudinary_success and db_success:
+            return jsonify({
+                'success': True,
+                'message': 'Image deleted successfully'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Image deletion partially failed',
+                'cloudinary_deleted': cloudinary_success,
+                'database_deleted': db_success
+            }), 500
+        
+    except Exception as e:
+        print(f"Error in delete_image: {e}")
+        return jsonify({'error': f'Internal server error: {str(e)}'}), 500
 
-
-
+@app.route('/get_all_images', methods=['POST'])
+def get_all_images():
+    """
+    Get all images for a specific answer
+    """
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        required_fields = ['answerId', 'userId']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'error': f'Missing required field: {field}'}), 400
+        
+        answer_id = data['answerId']
+        user_id = data['userId']
+        
+        # Verify the answer belongs to the user
+        answer = db.get_answer(answer_id)
+        if not answer or answer.get('userId') != user_id:
+            return jsonify({'error': 'Answer not found or access denied'}), 404
+        
+        # Get all images from database
+        images = db.get_all_images_for_answer(answer_id)
+        
+        return jsonify({
+            'success': True,
+            'images': images
+        })
+        
+    except Exception as e:
+        print(f"Error in get_all_images: {e}")
+        return jsonify({'error': f'Internal server error: {str(e)}'}), 500
 
 if __name__ == '__main__':
     # Run on host 0.0.0.0 to be accessible from outside, port 8080
