@@ -367,9 +367,11 @@ cursor.execute('''
         questionId SERIAL PRIMARY KEY,
         sectionId_fk INT NOT NULL,
         answer_number INT NOT NULL,
+        global_question_number INT NOT NULL,
         answer_text TEXT,
         FOREIGN KEY (sectionId_fk) REFERENCES answers_sections(sectionId) ON DELETE CASCADE,
-        UNIQUE (sectionId_fk, answer_number)
+        UNIQUE (sectionId_fk, answer_number),
+        UNIQUE (sectionId_fk, global_question_number)
     )
 ''')
 
@@ -389,10 +391,38 @@ cursor.execute('''
 ''')
 conn.commit()
 
+# Helper: Map (section_number, answer_number) to global_question_number
+from questions import questions as flat_questions
+
+def get_global_question_number(section_number, answer_number):
+    # You may want to keep a mapping for this, but for now, assume flat order
+    # section 1: 1-5, section 2: 6-7, section 3: 8, section 4: 9-10
+    section_map = {
+        1: 0,  # section 1 starts at index 0
+        2: 5,  # section 2 starts at index 5
+        3: 7,  # section 3 starts at index 7
+        4: 8   # section 4 starts at index 8
+    }
+    return section_map[section_number] + answer_number
+
+def get_section_and_answer_number(global_question_number):
+    # Reverse mapping for 10 questions, adjust if you add more
+    if 1 <= global_question_number <= 5:
+        return 1, global_question_number
+    elif 6 <= global_question_number <= 7:
+        return 2, global_question_number - 5
+    elif global_question_number == 8:
+        return 3, 1
+    elif 9 <= global_question_number <= 10:
+        return 4, global_question_number - 8
+    else:
+        raise ValueError('Invalid global_question_number')
+
 def create_answers(user_id):
     answer_id = str(uuid.uuid4())
     try:
         cursor.execute("INSERT INTO answers_main (answerId, userId) VALUES (%s, %s)", (answer_id, user_id))
+        global_qn = 1
         for section_data in answers_template:
             cursor.execute(
                 "INSERT INTO answers_sections (answerId_fk, section_number, section_title) VALUES (%s, %s, %s) RETURNING sectionId",
@@ -401,9 +431,10 @@ def create_answers(user_id):
             section_id = cursor.fetchone()[0]
             for question_data in section_data['questions']:
                 cursor.execute(
-                    "INSERT INTO answers_questions (sectionId_fk, answer_number, answer_text) VALUES (%s, %s, %s)",
-                    (section_id, question_data['answer_number'], question_data['answer_text'])
+                    "INSERT INTO answers_questions (sectionId_fk, answer_number, global_question_number, answer_text) VALUES (%s, %s, %s, %s)",
+                    (section_id, question_data['answer_number'], global_qn, question_data['answer_text'])
                 )
+                global_qn += 1
         conn.commit()
         print(f"Answer object {answer_id} created for user {user_id}.")
         return get_answer(answer_id)
@@ -461,26 +492,23 @@ def get_answer_from_number(answer_id, section_number, answer_number):
     row = cursor.fetchone()
     return row[0] if row else None
 
-def get_previous_answers(answer_id, limit_question_number):
+def get_previous_answers(answer_id, limit_global_question_number):
     print(f"get_previous_answers debug:")
     print(f"  answer_id: {answer_id}")
-    print(f"  limit_question_number: {limit_question_number}")
-    
+    print(f"  limit_global_question_number: {limit_global_question_number}")
     query = """
         SELECT aq.answer_text
         FROM answers_questions AS aq
         JOIN answers_sections AS asec ON aq.sectionId_fk = asec.sectionId
-        WHERE asec.answerId_fk = %s AND aq.answer_number < %s
-        ORDER BY aq.answer_number;
+        WHERE asec.answerId_fk = %s AND aq.global_question_number < %s
+        ORDER BY aq.global_question_number;
     """
     print(f"  SQL query: {query}")
-    print(f"  SQL params: ({answer_id}, {limit_question_number})")
-    
+    print(f"  SQL params: ({answer_id}, {limit_global_question_number})")
     try:
-        cursor.execute(query, (answer_id, limit_question_number))
+        cursor.execute(query, (answer_id, limit_global_question_number))
         rows = cursor.fetchall()
         print(f"  SQL result rows: {rows}")
-        
         result = [row[0] for row in rows]
         print(f"  Final result: {result}")
         return result
@@ -489,26 +517,46 @@ def get_previous_answers(answer_id, limit_question_number):
         reset_connection()
         return []
 
-def update_answer(answer_id, question_number, new_text):
+def update_answer(answer_id, global_question_number, new_text):
     try:
+        print(f"[update_answer] Attempting update: answer_id={answer_id}, global_question_number={global_question_number}, new_text={new_text}")
         cursor.execute("""
             UPDATE answers_questions
             SET answer_text = %s
-            WHERE answer_number = %s AND sectionId_fk = (
-                SELECT sectionId FROM answers_sections
-                WHERE answerId_fk = %s
+            WHERE global_question_number = %s AND sectionId_fk IN (
+                SELECT sectionId FROM answers_sections WHERE answerId_fk = %s
             )
-        """, (new_text, question_number, answer_id))
+        """, (new_text, global_question_number, answer_id))
         conn.commit()
         if cursor.rowcount > 0:
-            print(f"Answer updated successfully for {answer_id}.")
+            print(f"[update_answer] Answer updated successfully for answer_id={answer_id}, global_question_number={global_question_number}.")
             return True
         else:
-            print(f"No answer found to update for answerId {answer_id}, question {question_number}.")
-            return False
+            print(f"[update_answer] No answer found to update for answer_id={answer_id}, global_question_number={global_question_number}. Attempting upsert...")
+            # Find the sectionId
+            section_number, answer_number = get_section_and_answer_number(global_question_number)
+            cursor.execute("SELECT sectionId FROM answers_sections WHERE answerId_fk = %s AND section_number = %s", (answer_id, section_number))
+            section_row = cursor.fetchone()
+            if not section_row:
+                print(f"[update_answer] No section found for answer_id={answer_id}, section_number={section_number}. Cannot upsert.")
+                return {'error': f'No section found for answer_id={answer_id}, section_number={section_number}. Cannot upsert.'}
+            section_id = section_row[0]
+            try:
+                cursor.execute("""
+                    INSERT INTO answers_questions (sectionId_fk, answer_number, global_question_number, answer_text)
+                    VALUES (%s, %s, %s, %s)
+                """, (section_id, answer_number, global_question_number, new_text))
+                conn.commit()
+                print(f"[update_answer] Inserted new answer for answer_id={answer_id}, global_question_number={global_question_number}.")
+                return True
+            except psycopg2.Error as e:
+                print(f"[update_answer] Database error during upsert: {e}")
+                conn.rollback()
+                return {'error': f'Database error during upsert: {e}'}
     except psycopg2.Error as e:
-        print(f"Database error during answer update: {e}")
-        return False
+        print(f"[update_answer] Database error during answer update: {e}")
+        conn.rollback()
+        return {'error': f'Database error during answer update: {e}'}
 
 def delete_answer(answer_id):
     cursor.execute("DELETE FROM answers_main WHERE answerId = %s", (answer_id,))

@@ -8,6 +8,9 @@ import json
 import os
 import results
 import cloudinary_utils
+import time
+import traceback
+from db import get_global_question_number
 
 
 
@@ -26,6 +29,15 @@ CORS(
 @app.route('/', methods=['GET'])
 def home():
     return 'Welcome to the Flask App!'
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint to keep the app awake"""
+    return jsonify({
+        'status': 'healthy',
+        'timestamp': time.time(),
+        'message': 'ToothAI API is running'
+    })
 
 
 
@@ -46,6 +58,7 @@ def send_answer():
     section_number = data.get('section', 1)  # Default to section 1 if not provided
     frontend_question_number = data['question']
     backend_question_number = map_frontend_to_backend_question(section_number, frontend_question_number)
+    global_question_number = get_global_question_number(section_number, frontend_question_number)
     
     if backend_question_number is None:
         return jsonify({'error': f'Invalid section/question combination: section {section_number}, question {frontend_question_number}'}), 400
@@ -76,7 +89,7 @@ def send_answer():
             print("No JSON found")
 
     if not response["error"]:
-        db.update_answer(brand['answerid'], backend_question_number, answer)
+        db.update_answer(brand['answerid'], global_question_number, answer)
         return response, 200
     else:
         return response, 400
@@ -150,7 +163,8 @@ def get_suggestions():
         return jsonify({'error': 'No suggestions available for this question.'}), 400
 
     try:
-        mySuggestions = suggestions.generate_suggestions(backend_question_number, answer['answerId'])
+        # Use new signature for generate_suggestions
+        mySuggestions = suggestions.generate_suggestions(section_number, frontend_question_number, answer['answerId'])
         print(f"  suggestions result: {mySuggestions}")
         
         if isinstance(mySuggestions, str):
@@ -178,89 +192,92 @@ def get_suggestions():
 def register_user():
     try:
         data = request.get_json()
-        
-        # data ={
-        #     "userName": "user4",
-        #     "email": "email4",
-        #     "password": "password4"
-        # }   
-
-        # Check if JSON data is provided
         if not data:
             return jsonify({'error': 'No JSON data provided'}), 400
-
-        # Check for required fields
         required_fields = ['userName', 'email', 'password']
         for field in required_fields:
             if field not in data or not data[field]:
                 return jsonify({'error': f'{field} is required'}), 400
-
-        # Check if user already exists
-        if db.get_user_from_email(data['email']):
-            return jsonify({'error':
-                            'User with this email already exists'}), 400
-
-        # Create user
-        user = db.create_user(data['userName'], data['email'],
-                              data['password'])
-
+        try:
+            if db.get_user_from_email(data['email']):
+                return jsonify({'error': 'User with this email already exists'}), 400
+        except Exception as e:
+            print("REGISTER ERROR (db.get_user_from_email):", e)
+            traceback.print_exc()
+            return jsonify({'error': 'Database error during user lookup', 'details': str(e)}), 500
+        try:
+            user = db.create_user(data['userName'], data['email'], data['password'])
+        except Exception as e:
+            print("REGISTER ERROR (db.create_user):", e)
+            traceback.print_exc()
+            return jsonify({'error': 'Database error during user creation', 'details': str(e)}), 500
         if user:
-            return jsonify({
-                'success': True,
-                'message': 'User registered successfully',
-                'user': user
-            }), 201
+            # Ensure user is serializable and has required keys
+            if not isinstance(user, dict):
+                print("REGISTER ERROR: User object is not a dict", user)
+                return jsonify({'error': 'User object is not a valid dictionary', 'raw': str(user)}), 500
+            for key in ['userId', 'username', 'email']:
+                if key not in user:
+                    print(f"REGISTER ERROR: Missing key in user object: {key}")
+                    return jsonify({'error': f'Missing key in user object: {key}', 'raw': user}), 500
+            try:
+                return jsonify({
+                    'success': True,
+                    'message': 'User registered successfully',
+                    'user': user
+                }), 201
+            except Exception as e:
+                print("REGISTER ERROR (jsonify):", e)
+                traceback.print_exc()
+                return jsonify({'error': 'Failed to serialize user object', 'details': str(e), 'raw': user}), 500
         else:
+            print("REGISTER ERROR: Failed to create user (no user object returned)")
             return jsonify({'error': 'Failed to create user'}), 500
-
     except Exception as e:
-        print("REGISTER ERROR:", e)
-        return jsonify({'error': str(e)}), 500
-
-
-
-
-
-
+        print("REGISTER ERROR (outer):", e)
+        traceback.print_exc()
+        return jsonify({'error': 'Unexpected error during registration', 'details': str(e)}), 500
 
 @app.route('/login', methods=['POST'])
 def login():
     try:
         data = request.get_json()
-        # data = {
-        #     "email": "email4",
-        #     "password": "password4"
-        # }
-
-        # Check if JSON data is provided
         if not data:
             return jsonify({'error': 'No JSON data provided'}), 400
-
-        # Check for required fields
         if 'email' not in data or not data['email']:
             return jsonify({'error': 'Email is required'}), 400
-
         if 'password' not in data or not data['password']:
             return jsonify({'error': 'Password is required'}), 400
-
-        # Check if user exists
-        user = db.get_user_from_email(data['email'])
+        try:
+            user = db.get_user_from_email(data['email'])
+        except Exception as e:
+            print("LOGIN ERROR (db.get_user_from_email):", e)
+            traceback.print_exc()
+            return jsonify({'error': 'Database error during user lookup', 'details': str(e)}), 500
         if not user:
             return jsonify({'error': 'User not found'}), 404
-
-        # Check password
+        if not isinstance(user, dict):
+            print("LOGIN ERROR: User object is not a dict", user)
+            return jsonify({'error': 'User object is not a valid dictionary', 'raw': str(user)}), 500
+        if 'password' not in user:
+            print("LOGIN ERROR: User object missing password key", user)
+            return jsonify({'error': 'User object missing password key', 'raw': user}), 500
         if user['password'] != data['password']:
             return jsonify({'error': 'Incorrect password'}), 401
-
-        # Login successful
-        return jsonify({
-            'success': True,
-            'message': 'Login successful',
-            'user': user
-        }), 200
-
+        try:
+            return jsonify({
+                'success': True,
+                'message': 'Login successful',
+                'user': user
+            }), 200
+        except Exception as e:
+            print("LOGIN ERROR (jsonify):", e)
+            traceback.print_exc()
+            return jsonify({'error': 'Failed to serialize user object', 'details': str(e), 'raw': user}), 500
     except Exception as e:
-        return jsonify({'error': 'Internal server error'}), 500
+        print("LOGIN ERROR (outer):", e)
+        traceback.print_exc()
+        return jsonify({'error': 'Unexpected error during login', 'details': str(e)}), 500
 
 
 
@@ -343,9 +360,16 @@ def get_results():
     brandId = data['brandId']
     userId = data['userId']
     
-    response = results.generate_results(userId, brandId)
-
-    return jsonify(response), 200
+    try:
+        # Set a longer timeout for this operation
+        response = results.generate_results(userId, brandId)
+        return jsonify(response), 200
+    except Exception as e:
+        print(f"Error in get_results: {e}")
+        return jsonify({
+            'error': 'Results generation failed. Please try again.',
+            'details': str(e)
+        }), 500
 
 
 
@@ -539,6 +563,26 @@ def get_all_images():
     except Exception as e:
         print(f"Error in get_all_images: {e}")
         return jsonify({'error': f'Internal server error: {str(e)}'}), 500
+
+@app.route('/status', methods=['GET'])
+def app_status():
+    """Get application status and uptime"""
+    try:
+        # Test database connection
+        db_status = "healthy" if db.test_connection() else "unhealthy"
+        
+        return jsonify({
+            'status': 'running',
+            'database': db_status,
+            'timestamp': time.time(),
+            'uptime': 'active'
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e),
+            'timestamp': time.time()
+        }), 500
 
 if __name__ == '__main__':
     # Run on host 0.0.0.0 to be accessible from outside, port 8080

@@ -71,12 +71,38 @@ def get_text_prediction(system_prompt, prompt, max_retries=5, backoff_factor=1):
 
 
 def validate_answer(question, answer):
-    systemPrompt = 'You are a question and answer validation bot, all you do is validate the answer against the question. You are supposed to check if the answer is relevant for the question. If the answer is relevant even in any way, just respond with a json {"error", false, "message", "passed"}, if the answer is absolutely not relevant to the question, output a json in the format {"error": true, "message": "explanation"} Make sure to add an explanation in the place of explanation. The explanation should be very brief and straigth forward, as to what the issue with the answer is, only add small suggestions when necessary. Make sure to not over write. Make sure to only give simple easy to understand and brief explanations. Your explanation is addressed to the user, so make sure to use a friendly tone. Do not paraphrase the question or the answer in your response. We need the answers to at least answer the question and give us some information. We need the information that we are requesting from the user. Make sure to explain exactly how the answer is not relevant to the question, and provide a small guide when necessary'
+    systemPrompt = 'You are a question and answer validation bot, all you do is validate the answer against the question. You are supposed to check if the answer is relevant for the question. If the answer is relevant even in any way, just respond with a json {"error": false, "message": "passed"}, if the answer is absolutely not relevant to the question, output a json in the format {"error": true, "message": "explanation"} Make sure to add an explanation in the place of explanation. The explanation should be very brief and straigth forward, as to what the issue with the answer is, only add small suggestions when necessary. Make sure to not over write. Make sure to only give simple easy to understand and brief explanations. Your explanation is addressed to the user, so make sure to use a friendly tone. Do not paraphrase the question or the answer in your response. We need the answers to at least answer the question and give us some information. We need the information that we are requesting from the user. Make sure to explain exactly how the answer is not relevant to the question, and provide a small guide when necessary'
     
     prompt = f"Here's the question >>> {question} <<<, and here is the users answer >>> {answer} <<<, validate it"
     print(f"Prompt: {prompt}")
     validation = get_text_prediction(systemPrompt, prompt)
-    return validation
+    
+    # Try to extract JSON from the response
+    if isinstance(validation, str):
+        start = validation.find('{')
+        end = validation.rfind('}') + 1
+        if start != -1 and end != -1:
+            json_str = validation[start:end]
+            try:
+                result = json.loads(json_str)
+                # Ensure required keys
+                if not isinstance(result, dict):
+                    print(f"validate_answer: Parsed JSON is not a dict: {result}")
+                    return {"error": True, "message": "Validation response was not a JSON object.", "raw": validation}
+                if "error" not in result or "message" not in result:
+                    print(f"validate_answer: Missing keys in result: {result}")
+                    return {"error": True, "message": "Validation response missing required keys.", "raw": result}
+                return result
+            except json.JSONDecodeError as e:
+                print(f"validate_answer: JSON decode error: {e}")
+                print(f"validate_answer: String that failed to parse: {json_str}")
+                return {"error": True, "message": "Validation response was not valid JSON.", "raw": json_str}
+        else:
+            print("validate_answer: No JSON found in validation response")
+            return {"error": True, "message": "No JSON found in validation response.", "raw": validation}
+    else:
+        print(f"validate_answer: Unexpected type for validation: {type(validation)}")
+        return {"error": True, "message": "Validation response was not a string.", "raw": str(validation)}
 
 
 
