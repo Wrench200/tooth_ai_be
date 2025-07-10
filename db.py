@@ -64,22 +64,32 @@ cursor.execute('''
 conn.commit()
 
 def create_user(username, email, password):
-    if any(user['email'] == email for user in users):
-        print(f"User with email {email} already exists.")
-        return
-    user_id = str(uuid.uuid4())
-    new_user = {
-        "userId": user_id,
-        "username": username,
-        "email": email,
-        "password": password,
-    }
-    users.append(new_user)
-    cursor.execute("INSERT INTO users (userId, username, email, password) VALUES (%s, %s, %s, %s)",
-                   (user_id, username, email, password))
-    conn.commit()
-    print(f"User {user_id} added.")
-    return new_user
+    for attempt in range(2):
+        try:
+            if any(user['email'] == email for user in users):
+                print(f"User with email {email} already exists.")
+                return
+            user_id = str(uuid.uuid4())
+            new_user = {
+                "userId": user_id,
+                "username": username,
+                "email": email,
+                "password": password,
+            }
+            users.append(new_user)
+            cursor.execute("INSERT INTO users (userId, username, email, password) VALUES (%s, %s, %s, %s)",
+                        (user_id, username, email, password))
+            conn.commit()
+            print(f"User {user_id} added.")
+            return new_user
+        except psycopg2.InterfaceError as e:
+            print(f"[create_user] InterfaceError: {e}. Resetting connection and retrying once.")
+            reset_connection()
+        except psycopg2.Error as e:
+            print(f"Database error in create_user: {e}")
+            conn.rollback()
+            return None
+    return None
 
 def get_user(user_id):
     for user in users:
@@ -108,34 +118,63 @@ def get_user_from_email(email):
     for user in users:
         if user["email"] == email:
             return user
-    cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
-    row = cursor.fetchone()
-    if row:
-        return dict(row)
-    print(f"User with email {email} not found.")
+    for attempt in range(2):
+        try:
+            cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
+            row = cursor.fetchone()
+            if row:
+                return dict(row)
+            print(f"User with email {email} not found.")
+            return None
+        except psycopg2.InterfaceError as e:
+            print(f"[get_user_from_email] InterfaceError: {e}. Resetting connection and retrying once.")
+            reset_connection()
+        except psycopg2.Error as e:
+            print(f"Database error in get_user_from_email: {e}")
+            return None
     return None
 
 def update_user(user_id, updated_info):
     for user in users:
         if user["userId"] == user_id:
             user.update(updated_info)
+    for attempt in range(2):
+        try:
             for key in ["username", "email", "password"]:
                 if key in updated_info:
                     cursor.execute(f"UPDATE users SET {key} = %s WHERE userId = %s", (updated_info[key], user_id))
             conn.commit()
             print(f"User {user_id} updated.")
             return "Done"
+        except psycopg2.InterfaceError as e:
+            print(f"[update_user] InterfaceError: {e}. Resetting connection and retrying once.")
+            reset_connection()
+        except psycopg2.Error as e:
+            print(f"Database error in update_user: {e}")
+            conn.rollback()
+            return None
     print(f"User {user_id} not found.")
+    return None
 
 def delete_user(user_id):
     for i, user in enumerate(users):
         if user["userId"] == user_id:
             del users[i]
+    for attempt in range(2):
+        try:
             cursor.execute("DELETE FROM users WHERE userId = %s", (user_id,))
             conn.commit()
             print(f"User {user_id} deleted.")
             return "Done"
+        except psycopg2.InterfaceError as e:
+            print(f"[delete_user] InterfaceError: {e}. Resetting connection and retrying once.")
+            reset_connection()
+        except psycopg2.Error as e:
+            print(f"Database error in delete_user: {e}")
+            conn.rollback()
+            return None
     print(f"User {user_id} not found.")
+    return None
 
 # ===================== Brands ===========================================
 
@@ -225,11 +264,20 @@ def get_brand(brand_id):
     return None
 
 def get_all_user_brands(user_id):
-    cursor.execute("SELECT * FROM brands WHERE userId = %s", (user_id,))
-    rows = cursor.fetchall()
-    if not rows:
-        return []
-    return [dict(row) for row in rows]
+    for attempt in range(2):
+        try:
+            cursor.execute("SELECT * FROM brands WHERE userId = %s", (user_id,))
+            rows = cursor.fetchall()
+            if not rows:
+                return []
+            return [dict(row) for row in rows]
+        except psycopg2.InterfaceError as e:
+            print(f"[get_all_user_brands] InterfaceError: {e}. Resetting connection and retrying once.")
+            reset_connection()
+        except psycopg2.Error as e:
+            print(f"Database error in get_all_user_brands: {e}")
+            return []
+    return []
 
 def update_brand(brand_id, property_name, new_value):
     allowed_properties = [
@@ -239,23 +287,43 @@ def update_brand(brand_id, property_name, new_value):
     if property_name not in allowed_properties:
         raise ValueError(f"Invalid or non-updatable property: {property_name}")
     query = f"UPDATE brands SET {property_name} = %s WHERE id = %s"
-    cursor.execute(query, (new_value, brand_id))
-    conn.commit()
-    if cursor.rowcount == 0:
-        print(f"Brand {brand_id} not found or value was not changed.")
-        return None
-    print(f"Brand {brand_id} property '{property_name}' updated.")
-    return get_brand(brand_id)
+    for attempt in range(2):
+        try:
+            cursor.execute(query, (new_value, brand_id))
+            conn.commit()
+            if cursor.rowcount == 0:
+                print(f"Brand {brand_id} not found or value was not changed.")
+                return None
+            print(f"Brand {brand_id} property '{property_name}' updated.")
+            return get_brand(brand_id)
+        except psycopg2.InterfaceError as e:
+            print(f"[update_brand] InterfaceError: {e}. Resetting connection and retrying once.")
+            reset_connection()
+        except psycopg2.Error as e:
+            print(f"Database error in update_brand: {e}")
+            conn.rollback()
+            return None
+    return None
 
 def delete_brand(brand_id):
-    cursor.execute("DELETE FROM brands WHERE id = %s", (brand_id,))
-    conn.commit()
-    if cursor.rowcount > 0:
-        print(f"Brand {brand_id} has been deleted.")
-        return True
-    else:
-        print(f"Brand {brand_id} not found.")
-        return False
+    for attempt in range(2):
+        try:
+            cursor.execute("DELETE FROM brands WHERE id = %s", (brand_id,))
+            conn.commit()
+            if cursor.rowcount > 0:
+                print(f"Brand {brand_id} has been deleted.")
+                return True
+            else:
+                print(f"Brand {brand_id} not found.")
+                return False
+        except psycopg2.InterfaceError as e:
+            print(f"[delete_brand] InterfaceError: {e}. Resetting connection and retrying once.")
+            reset_connection()
+        except psycopg2.Error as e:
+            print(f"Database error in delete_brand: {e}")
+            conn.rollback()
+            return False
+    return False
 
 # ===================== answers ===========================================
 
