@@ -438,59 +438,99 @@ def create_answers(user_id):
         conn.commit()
         print(f"Answer object {answer_id} created for user {user_id}.")
         return get_answer(answer_id)
+    except psycopg2.InterfaceError as e:
+        print(f"[create_answers] InterfaceError: {e}. Resetting connection and retrying once.")
+        reset_connection()
+        try:
+            cursor.execute("INSERT INTO answers_main (answerId, userId) VALUES (%s, %s)", (answer_id, user_id))
+            global_qn = 1
+            for section_data in answers_template:
+                cursor.execute(
+                    "INSERT INTO answers_sections (answerId_fk, section_number, section_title) VALUES (%s, %s, %s) RETURNING sectionId",
+                    (answer_id, section_data['section_number'], section_data['section_title'])
+                )
+                section_id = cursor.fetchone()[0]
+                for question_data in section_data['questions']:
+                    cursor.execute(
+                        "INSERT INTO answers_questions (sectionId_fk, answer_number, global_question_number, answer_text) VALUES (%s, %s, %s, %s)",
+                        (section_id, question_data['answer_number'], global_qn, question_data['answer_text'])
+                    )
+                    global_qn += 1
+            conn.commit()
+            print(f"Answer object {answer_id} created for user {user_id} (after reset).")
+            return get_answer(answer_id)
+        except Exception as e2:
+            conn.rollback()
+            print(f"Database error during answer creation after reset: {e2}")
+            return None
     except psycopg2.Error as e:
         conn.rollback()
         print(f"Database error during answer creation: {e.pgerror}")
         return None
 
 def get_answer(answer_id):
-    try:
-        cursor.execute("SELECT userId FROM answers_main WHERE answerId = %s", (answer_id,))
-        main_row = cursor.fetchone()
-        if not main_row:
-            return None
-        result = {"answerId": answer_id, "userId": main_row[0], "sections": []}
-        cursor.execute("""
-            SELECT sectionId, section_number, section_title 
-            FROM answers_sections 
-            WHERE answerId_fk = %s 
-            ORDER BY section_number
-        """, (answer_id,))
-        sections = cursor.fetchall()
-        for sec_id, sec_num, sec_title in sections:
-            section_obj = {
-                "section_number": sec_num,
-                "section_title": sec_title,
-                "questions": []
-            }
+    for attempt in range(2):
+        try:
+            cursor.execute("SELECT userId FROM answers_main WHERE answerId = %s", (answer_id,))
+            main_row = cursor.fetchone()
+            if not main_row:
+                return None
+            result = {"answerId": answer_id, "userId": main_row[0], "sections": []}
             cursor.execute("""
-                SELECT answer_number, answer_text 
-                FROM answers_questions 
-                WHERE sectionId_fk = %s 
-                ORDER BY answer_number
-            """, (sec_id,))
-            questions = cursor.fetchall()
-            for ans_num, ans_text in questions:
-                section_obj["questions"].append({
-                    "answer_number": ans_num,
-                    "answer_text": ans_text
-                })
-            result["sections"].append(section_obj)
-        return result
-    except psycopg2.Error as e:
-        print(f"Database error in get_answer: {e}")
-        reset_connection()
-        return None
+                SELECT sectionId, section_number, section_title 
+                FROM answers_sections 
+                WHERE answerId_fk = %s 
+                ORDER BY section_number
+            """, (answer_id,))
+            sections = cursor.fetchall()
+            for sec_id, sec_num, sec_title in sections:
+                section_obj = {
+                    "section_number": sec_num,
+                    "section_title": sec_title,
+                    "questions": []
+                }
+                cursor.execute("""
+                    SELECT answer_number, answer_text 
+                    FROM answers_questions 
+                    WHERE sectionId_fk = %s 
+                    ORDER BY answer_number
+                """, (sec_id,))
+                questions = cursor.fetchall()
+                for ans_num, ans_text in questions:
+                    section_obj["questions"].append({
+                        "answer_number": ans_num,
+                        "answer_text": ans_text
+                    })
+                result["sections"].append(section_obj)
+            return result
+        except psycopg2.InterfaceError as e:
+            print(f"[get_answer] InterfaceError: {e}. Resetting connection and retrying once.")
+            reset_connection()
+        except psycopg2.Error as e:
+            print(f"Database error in get_answer: {e}")
+            reset_connection()
+            return None
+    return None
 
 def get_answer_from_number(answer_id, section_number, answer_number):
-    cursor.execute("""
-        SELECT aq.answer_text 
-        FROM answers_questions AS aq
-        JOIN answers_sections AS asec ON aq.sectionId_fk = asec.sectionId
-        WHERE asec.answerId_fk = %s AND asec.section_number = %s AND aq.answer_number = %s
-    """, (answer_id, section_number, answer_number))
-    row = cursor.fetchone()
-    return row[0] if row else None
+    for attempt in range(2):
+        try:
+            cursor.execute("""
+                SELECT aq.answer_text 
+                FROM answers_questions AS aq
+                JOIN answers_sections AS asec ON aq.sectionId_fk = asec.sectionId
+                WHERE asec.answerId_fk = %s AND asec.section_number = %s AND aq.answer_number = %s
+            """, (answer_id, section_number, answer_number))
+            row = cursor.fetchone()
+            return row[0] if row else None
+        except psycopg2.InterfaceError as e:
+            print(f"[get_answer_from_number] InterfaceError: {e}. Resetting connection and retrying once.")
+            reset_connection()
+        except psycopg2.Error as e:
+            print(f"Database error in get_answer_from_number: {e}")
+            reset_connection()
+            return None
+    return None
 
 def get_previous_answers(answer_id, limit_global_question_number):
     print(f"get_previous_answers debug:")
@@ -512,6 +552,19 @@ def get_previous_answers(answer_id, limit_global_question_number):
         result = [row[0] for row in rows]
         print(f"  Final result: {result}")
         return result
+    except psycopg2.InterfaceError as e:
+        print(f"[get_previous_answers] InterfaceError: {e}. Resetting connection and retrying once.")
+        reset_connection()
+        try:
+            cursor.execute(query, (answer_id, limit_global_question_number))
+            rows = cursor.fetchall()
+            print(f"  SQL result rows (after reset): {rows}")
+            result = [row[0] for row in rows]
+            print(f"  Final result (after reset): {result}")
+            return result
+        except Exception as e2:
+            print(f"  Database error in get_previous_answers after reset: {e2}")
+            return []
     except psycopg2.Error as e:
         print(f"  Database error in get_previous_answers: {e}")
         reset_connection()
@@ -533,7 +586,6 @@ def update_answer(answer_id, global_question_number, new_text):
             return True
         else:
             print(f"[update_answer] No answer found to update for answer_id={answer_id}, global_question_number={global_question_number}. Attempting upsert...")
-            # Find the sectionId
             section_number, answer_number = get_section_and_answer_number(global_question_number)
             cursor.execute("SELECT sectionId FROM answers_sections WHERE answerId_fk = %s AND section_number = %s", (answer_id, section_number))
             section_row = cursor.fetchone()
@@ -553,140 +605,166 @@ def update_answer(answer_id, global_question_number, new_text):
                 print(f"[update_answer] Database error during upsert: {e}")
                 conn.rollback()
                 return {'error': f'Database error during upsert: {e}'}
+    except psycopg2.InterfaceError as e:
+        print(f"[update_answer] InterfaceError: {e}. Resetting connection and retrying once.")
+        reset_connection()
+        try:
+            cursor.execute("""
+                UPDATE answers_questions
+                SET answer_text = %s
+                WHERE global_question_number = %s AND sectionId_fk IN (
+                    SELECT sectionId FROM answers_sections WHERE answerId_fk = %s
+                )
+            """, (new_text, global_question_number, answer_id))
+            conn.commit()
+            if cursor.rowcount > 0:
+                print(f"[update_answer] Answer updated successfully for answer_id={answer_id}, global_question_number={global_question_number} (after reset).")
+                return True
+            else:
+                print(f"[update_answer] No answer found to update for answer_id={answer_id}, global_question_number={global_question_number} (after reset). Attempting upsert...")
+                section_number, answer_number = get_section_and_answer_number(global_question_number)
+                cursor.execute("SELECT sectionId FROM answers_sections WHERE answerId_fk = %s AND section_number = %s", (answer_id, section_number))
+                section_row = cursor.fetchone()
+                if not section_row:
+                    print(f"[update_answer] No section found for answer_id={answer_id}, section_number={section_number} (after reset). Cannot upsert.")
+                    return {'error': f'No section found for answer_id={answer_id}, section_number={section_number} (after reset). Cannot upsert.'}
+                section_id = section_row[0]
+                try:
+                    cursor.execute("""
+                        INSERT INTO answers_questions (sectionId_fk, answer_number, global_question_number, answer_text)
+                        VALUES (%s, %s, %s, %s)
+                    """, (section_id, answer_number, global_question_number, new_text))
+                    conn.commit()
+                    print(f"[update_answer] Inserted new answer for answer_id={answer_id}, global_question_number={global_question_number} (after reset).")
+                    return True
+                except psycopg2.Error as e2:
+                    print(f"[update_answer] Database error during upsert after reset: {e2}")
+                    conn.rollback()
+                    return {'error': f'Database error during upsert after reset: {e2}'}
+        except Exception as e2:
+            conn.rollback()
+            print(f"[update_answer] Database error during answer update after reset: {e2}")
+            return {'error': f'Database error during answer update after reset: {e2}'}
     except psycopg2.Error as e:
         print(f"[update_answer] Database error during answer update: {e}")
         conn.rollback()
         return {'error': f'Database error during answer update: {e}'}
 
 def delete_answer(answer_id):
-    cursor.execute("DELETE FROM answers_main WHERE answerId = %s", (answer_id,))
-    conn.commit()
-    if cursor.rowcount > 0:
-        print(f"Answer object {answer_id} deleted successfully.")
-        return True
-    else:
-        print(f"Answer object {answer_id} not found.")
-        return False
+    for attempt in range(2):
+        try:
+            cursor.execute("DELETE FROM answers_main WHERE answerId = %s", (answer_id,))
+            conn.commit()
+            if cursor.rowcount > 0:
+                print(f"Answer object {answer_id} deleted successfully.")
+                return True
+            else:
+                print(f"Answer object {answer_id} not found.")
+                return False
+        except psycopg2.InterfaceError as e:
+            print(f"[delete_answer] InterfaceError: {e}. Resetting connection and retrying once.")
+            reset_connection()
+        except psycopg2.Error as e:
+            print(f"Database error in delete_answer: {e}")
+            conn.rollback()
+            return False
+    return False
 
 # ===================== Cloudinary Image Management ===========================================
 
 def save_image_url(answer_id, section_number, question_number, cloudinary_url, cloudinary_public_id):
-    """
-    Save a Cloudinary image URL to the database
-    
-    Args:
-        answer_id (str): The answer ID
-        section_number (int): The section number
-        question_number (int): The question number
-        cloudinary_url (str): The Cloudinary URL
-        cloudinary_public_id (str): The Cloudinary public ID
-    
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    try:
-        cursor.execute("""
-            INSERT INTO answer_images (answerId_fk, section_number, question_number, cloudinary_url, cloudinary_public_id)
-            VALUES (%s, %s, %s, %s, %s)
-            ON CONFLICT (answerId_fk, section_number, question_number)
-            DO UPDATE SET 
-                cloudinary_url = EXCLUDED.cloudinary_url,
-                cloudinary_public_id = EXCLUDED.cloudinary_public_id,
-                created_at = CURRENT_TIMESTAMP
-        """, (answer_id, section_number, question_number, cloudinary_url, cloudinary_public_id))
-        conn.commit()
-        print(f"Image URL saved for answer {answer_id}, section {section_number}, question {question_number}")
-        return True
-    except psycopg2.Error as e:
-        print(f"Database error saving image URL: {e}")
-        conn.rollback()
-        return False
+    for attempt in range(2):
+        try:
+            cursor.execute("""
+                INSERT INTO answer_images (answerId_fk, section_number, question_number, cloudinary_url, cloudinary_public_id)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (answerId_fk, section_number, question_number)
+                DO UPDATE SET 
+                    cloudinary_url = EXCLUDED.cloudinary_url,
+                    cloudinary_public_id = EXCLUDED.cloudinary_public_id,
+                    created_at = CURRENT_TIMESTAMP
+            """, (answer_id, section_number, question_number, cloudinary_url, cloudinary_public_id))
+            conn.commit()
+            print(f"Image URL saved for answer {answer_id}, section {section_number}, question {question_number}")
+            return True
+        except psycopg2.InterfaceError as e:
+            print(f"[save_image_url] InterfaceError: {e}. Resetting connection and retrying once.")
+            reset_connection()
+        except psycopg2.Error as e:
+            print(f"Database error saving image URL: {e}")
+            conn.rollback()
+            return False
+    return False
 
 def get_image_url(answer_id, section_number, question_number):
-    """
-    Get the Cloudinary image URL for a specific answer/question
-    
-    Args:
-        answer_id (str): The answer ID
-        section_number (int): The section number
-        question_number (int): The question number
-    
-    Returns:
-        dict: Image data with URL and public_id, or None if not found
-    """
-    try:
-        cursor.execute("""
-            SELECT cloudinary_url, cloudinary_public_id, created_at
-            FROM answer_images
-            WHERE answerId_fk = %s AND section_number = %s AND question_number = %s
-        """, (answer_id, section_number, question_number))
-        row = cursor.fetchone()
-        if row:
-            return {
-                "cloudinary_url": row[0],
-                "cloudinary_public_id": row[1],
-                "created_at": row[2]
-            }
-        return None
-    except psycopg2.Error as e:
-        print(f"Database error getting image URL: {e}")
-        return None
+    for attempt in range(2):
+        try:
+            cursor.execute("""
+                SELECT cloudinary_url, cloudinary_public_id, created_at
+                FROM answer_images
+                WHERE answerId_fk = %s AND section_number = %s AND question_number = %s
+            """, (answer_id, section_number, question_number))
+            row = cursor.fetchone()
+            if row:
+                return {
+                    "cloudinary_url": row[0],
+                    "cloudinary_public_id": row[1],
+                    "created_at": row[2]
+                }
+            return None
+        except psycopg2.InterfaceError as e:
+            print(f"[get_image_url] InterfaceError: {e}. Resetting connection and retrying once.")
+            reset_connection()
+        except psycopg2.Error as e:
+            print(f"Database error getting image URL: {e}")
+            return None
+    return None
 
 def delete_image_url(answer_id, section_number, question_number):
-    """
-    Delete a Cloudinary image URL from the database
-    
-    Args:
-        answer_id (str): The answer ID
-        section_number (int): The section number
-        question_number (int): The question number
-    
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    try:
-        cursor.execute("""
-            DELETE FROM answer_images
-            WHERE answerId_fk = %s AND section_number = %s AND question_number = %s
-        """, (answer_id, section_number, question_number))
-        conn.commit()
-        if cursor.rowcount > 0:
-            print(f"Image URL deleted for answer {answer_id}, section {section_number}, question {question_number}")
-            return True
-        return False
-    except psycopg2.Error as e:
-        print(f"Database error deleting image URL: {e}")
-        conn.rollback()
-        return False
+    for attempt in range(2):
+        try:
+            cursor.execute("""
+                DELETE FROM answer_images
+                WHERE answerId_fk = %s AND section_number = %s AND question_number = %s
+            """, (answer_id, section_number, question_number))
+            conn.commit()
+            if cursor.rowcount > 0:
+                print(f"Image URL deleted for answer {answer_id}, section {section_number}, question {question_number}")
+                return True
+            return False
+        except psycopg2.InterfaceError as e:
+            print(f"[delete_image_url] InterfaceError: {e}. Resetting connection and retrying once.")
+            reset_connection()
+        except psycopg2.Error as e:
+            print(f"Database error deleting image URL: {e}")
+            conn.rollback()
+            return False
+    return False
 
 def get_all_images_for_answer(answer_id):
-    """
-    Get all images for a specific answer
-    
-    Args:
-        answer_id (str): The answer ID
-    
-    Returns:
-        list: List of image data dictionaries
-    """
-    try:
-        cursor.execute("""
-            SELECT section_number, question_number, cloudinary_url, cloudinary_public_id, created_at
-            FROM answer_images
-            WHERE answerId_fk = %s
-            ORDER BY section_number, question_number
-        """, (answer_id,))
-        rows = cursor.fetchall()
-        return [
-            {
-                "section_number": row[0],
-                "question_number": row[1],
-                "cloudinary_url": row[2],
-                "cloudinary_public_id": row[3],
-                "created_at": row[4]
-            }
-            for row in rows
-        ]
-    except psycopg2.Error as e:
-        print(f"Database error getting all images: {e}")
-        return []
+    for attempt in range(2):
+        try:
+            cursor.execute("""
+                SELECT section_number, question_number, cloudinary_url, cloudinary_public_id, created_at
+                FROM answer_images
+                WHERE answerId_fk = %s
+                ORDER BY section_number, question_number
+            """, (answer_id,))
+            rows = cursor.fetchall()
+            return [
+                {
+                    "section_number": row[0],
+                    "question_number": row[1],
+                    "cloudinary_url": row[2],
+                    "cloudinary_public_id": row[3],
+                    "created_at": row[4]
+                }
+                for row in rows
+            ]
+        except psycopg2.InterfaceError as e:
+            print(f"[get_all_images_for_answer] InterfaceError: {e}. Resetting connection and retrying once.")
+            reset_connection()
+        except psycopg2.Error as e:
+            print(f"Database error getting all images: {e}")
+            return []
+    return []
