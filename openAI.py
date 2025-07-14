@@ -2,7 +2,9 @@ import requests
 import os
 import json
 import time
-from setup import api_token
+from setup import api_token, openai_api_key
+import functions
+import uuid
 
 
 
@@ -13,15 +15,19 @@ headers = {
 }
 
 
-def get_text_prediction(system_prompt, prompt, max_retries=5, backoff_factor=1):
+def get_text_prediction(system_prompt, prompt, max_retries=5, backoff_factor=1, image_input=[]):
     answer = None
     retries = 0
+    
+    if image_input != [] and not isinstance(image_input, str):
+        image_input = [functions.encode_image_to_data_uri(img) for img in image_input]
+    
     while (answer is None or answer == "") and retries < max_retries:
         data = {
             "input": {
                 "top_p": 1,
                 "prompt": prompt,
-                "image_input": [],
+                "image_input": image_input,
                 "temperature": 1,
                 "system_prompt": system_prompt,
                 "presence_penalty": 0,
@@ -110,6 +116,78 @@ def validate_answer(question, answer):
 
 
 
+def generate_image(prompt, images = []):
+    """
+    Generate an edited image using OpenAI's image edits API with multiple input images.
+    Args:
+        prompt (str): The prompt describing the desired edit.
+        images (list): List of file paths to images to upload as references.
+    Returns:
+        str: Path to the saved output image, or error message.
+    """
+    import requests
+    from requests_toolbelt.multipart.encoder import MultipartEncoder
+    import os
+    OPENAI_API_KEY = openai_api_key
+    if not OPENAI_API_KEY:
+        return "OPENAI_API_KEY not set in environment."
+    if not images or not isinstance(images, list):
+        return "No images provided."
+    url = "https://api.openai.com/v1/images/edits"
+    fields = {
+        "model": "gpt-image-1",
+        "prompt": prompt,
+    }
+    # Add each image as image[]
+    
+    
+    image_files = []
+    for img_path in images:
+        if not os.path.isfile(img_path):
+            return f"Image file not found: {img_path}"
+        image_files.append((os.path.basename(img_path), open(img_path, "rb"), "image/png"))
+    if len(image_files) == 1:
+        fields["image[]"] = image_files[0]
+    else:
+        fields["image[]"] = image_files
+        
+        
+    m = MultipartEncoder(fields=fields)
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": m.content_type
+    }
+    try:
+        response = requests.post(url, headers=headers, data=m, timeout=500)
+        response.raise_for_status()
+        result = response.json()
+        # Expecting .data[0].b64_json
+        b64 = result.get("data", [{}])[0].get("b64_json")
+        if not b64:
+            return f"No image data returned: {result}"
+        import base64
+        out_path = f"images/{uuid.uuid4()}.png"
+        with open(out_path, "wb") as f:
+            f.write(base64.b64decode(b64))
+        # Close all opened files
+        for _, file_obj, _ in image_files:
+            file_obj.close()
+        return out_path
+    except Exception as e:
+        return f"Error: {e}"
+
+
+
+
+
+
+# print(generate_image("Use this logo to make a tshirt", ["bfaeac80-2cf5-4f46-b8a5-c2ec8883d5c6.jpg"]))
+
+
+
+
+
+
 system_prompt = "You are a brand identity expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + ''''<<<. You are supposed to generate the communication for the brand as a json of this format >>> 
 {
     "about_the_brand": sss,
@@ -153,41 +231,3 @@ system_prompt = "You are a brand identity expert. here is a list of questions we
 prompt = "Please give me the communication for my brand as json, and make sure to fill the information in the json as pecified"
 # response = get_text_prediction(system_prompt, prompt)
 # print(response)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -46,3 +46,4 @@ def add_text_top_left(image_path: str, text: str) -> str:
 
     return new_path
 
+# print(add_text_top_left("images/bfaeac80-2cf5-4f46-b8a5-c2ec8883d5c6.jpg", "Logo 1"))

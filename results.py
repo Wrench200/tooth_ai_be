@@ -7,6 +7,8 @@ import imagen
 import functions
 import uuid
 import setup
+import textOnImage
+import cloudinary_utils
 
 
 
@@ -484,12 +486,12 @@ def generate_results(userId, brandId):
             "description": "The primary font for body text, ensuring readability and clarity."
         }),
         "applications": lll (list sample: {
-            "application_type": "Website",
+            "application_type": "Tshirt",
             "prompt": sss,
         })
-    } <<< For the logo prompts, make sure to write a detailed description of the logo for the best result, straight forward detailed instructions that will yield the best result for an AI image generation model to use, the logos should be very professional, creative and attrative, no simple logos or empty logos, just logos that are straight up creative and very good, either with an icon, or decorated initials or any other, be creative, specify the brand name, also mention the tagline, if necessary, not all logos should have a tagline under. Brand name: '''+brand_name+''', tagline: '''+brand_tagline+'''. The application prompt is to illustrate a couple items like shirts, mugs or the like, with the logo on them, put between 3 to 5 applications, be very detailed about where to put the logo, size, position and the like, on the object, we are passing the logo along with this prompt so be direct and just tell the ai what to do with the logo, the application prompt is standalone, and carries all details, it is supposed to prompt the model to generate the item, describing the item and its evironment in full detail, as well as where to put the logo, do not use words that other AI's will think are sensitive. Make sure each font object in the list of fonts has just one font. Make sure to generate the values for the different parts. Replace sss with the string values you generate and lll with a list. Make sure you replace sss with strings. Do not use any other format or add any other information. Make sure to generate the values for the different parts, using information from the questions and answers. Make sure to respect the json format and do not add any other information. Be more elaborate with the responses, dont be too brief. Make it sound legit and good. Your resonses should not just be single sentences. Try to write a paragraph of valuable information sometimes. Sound more human as possible. Make it serious and not just rushed'''
+    } <<< For the logo prompts, make sure to write a detailed description of the logo for the best result, straight forward detailed instructions that will yield the best result for an AI image generation model to use, the logos should be very professional, creative and attrative, no simple logos or empty logos, just logos that are straight up creative and very good, either with an icon, or decorated initials or any other, be creative, specify the brand name, also mention the tagline, if necessary, not all logos should have a tagline under. Brand name: '''+brand_name+''', tagline: '''+brand_tagline+'''. The application prompt is to illustrate a couple of items like shirts, mugs or the like, with the logo on them, put between 3 to 5 applications, be very detailed about where to put the logo, size, position and the like, on the object, we are passing the logo along with this prompt so be direct and just tell the ai what to do with the logo, the application prompt is standalone, and carries all details, it is supposed to prompt the model to generate the item, describing the item and its evironment in full detail, as well as where to put the logo, do not use words that other AI's will think are sensitive. Make sure to specify presenation styles for the applications, like cinematic, studio lighting, high quality, professional photography, commercial shot and the like... Add as many as possible to make the applications look visually stunning and well presented. Add a lot of details to the applications prompt. Mak sure to put all extremely detailed explanations and styles in the application prompts. Make sure each font object in the list of fonts has just one font. Make sure to generate the values for the different parts. Replace sss with the string values you generate and lll with a list. Make sure you replace sss with strings. Do not use any other format or add any other information. Make sure to generate the values for the different parts, using information from the questions and answers. Make sure to respect the json format and do not add any other information. Be more elaborate with the responses, dont be too brief. Make it sound legit and good. Your resonses should not just be single sentences. Try to write a paragraph of valuable information sometimes. Sound more human as possible. Make it serious and not just rushed'''
             
-    prompt = "Please give me the communication for my brand as json, and make sure to fill the information in the json as pecified"
+    prompt = "Please give me the identity for my brand as json, and make sure to fill the information in the json as pecified"
     # response = openAI.get_text_prediction(system_prompt, prompt)
     # print(response)
     # raise Exception("Error")
@@ -501,6 +503,7 @@ def generate_results(userId, brandId):
     max_retries = 3
     retry_count = 0
     
+    brand_identity = ""
     while passed == False and retry_count < max_retries:
         print(f"Processing section (attempt {retry_count + 1}/{max_retries})...")
         try:
@@ -510,6 +513,7 @@ def generate_results(userId, brandId):
             
             response = clean_and_parse_json(raw_response)
             print(f"Parsed response: {response}")
+            brand_identity = response
             
             # Define the expected structure
             expected_structure = {
@@ -593,24 +597,121 @@ def generate_results(userId, brandId):
         logo_url_1 = "https://via.placeholder.com/400x200?text=Logo+1"
         logo_url_2 = "https://via.placeholder.com/400x200?text=Logo+2"
         logo_url_3 = "https://via.placeholder.com/400x200?text=Logo+3"
+        
+        
+    # Get logo recommendation
+    if logo_url_1 != "https://via.placeholder.com/400x200?text=Logo+1":
+        logo_file_1 = functions.download_image(logo_url_1)
+        logo_file_2 = functions.download_image(logo_url_2)
+        logo_file_3 = functions.download_image(logo_url_3)
+        
+        logo_with_label_1 = textOnImage.add_text_top_left(logo_file_1, "Logo 1")
+        logo_with_label_2 = textOnImage.add_text_top_left(logo_file_2, "Logo 2")
+        logo_with_label_3 = textOnImage.add_text_top_left(logo_file_3, "Logo 3")
+        
+        logo_options = [logo_with_label_1, logo_with_label_2, logo_with_label_3]
+        
+        system_prompt = "You are a brand identity expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + '<<<. I just attached 3 logo options for the brand. I need you to recommend the best logo for the brand. Just out either "Logo 1", "Logo 2" or "Logo 3" as the best logo for the brand. Do not add any other information, just the name of the logo. Make sure to not say say any other thing, make sure to output just the name of the logo, and do not say anything extra. Make sure to make just one choice'
+        prompt = "Please give me the best logo for the brand"
+        print("Processing section ...")
+        response = openAI.get_text_prediction(system_prompt, prompt, image_input=logo_options)
+        recommended_logo = response.strip()
+        print(recommended_logo)
+        print("Section success \n\n")
+        
+        
     
+    # Design logo variants
+    system_prompt = "You are a brand identity expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + '<<<. Here are the primary and secondary colors for the brand >>> Primary colors: '+str(primary_colors)+'. Secondary colors: '+str(secondary_colors)+'<<<. I need you to design logo variants for the brand, using the attached recommended logo. You have to write a list of 3 prompts prompting an AI image generation model to generate 3 completely different logo varients using the attached logo, in the format: ["prompt 1", "prompt 2", "prompt 3"]. The varients need to be the exact same logo, but with different colors, styles, and designs. Make sure Insist in the prompt that it should be a varient of the same logo. Add every detailed instruction in the prompt. Make sure to use the primary and secondary colors of the brand in the design. Make sure to use words like, clean, high quality and the like in the prompts where needed to make it very good. Make sure to use the attached logo as a base for the design. Make sure to not say any other thing, make sure to output just the list of prompts, and do not say anything extra. Make sure to not style anywhere in the prompts with **, ---, #### or anything similar'
+    prompt = "Please give me the logo variants for the brand as a list of prompts"
+    
+    print("Processing section ...")
+    
+    recommended_logo_url = ""
+    if recommended_logo == "Logo 1":
+        recommended_logo_file = logo_file_1
+        recommended_logo_url = logo_url_1
+    elif recommended_logo == "Logo 2":
+        recommended_logo_file = logo_file_2
+        recommended_logo_url = logo_url_2
+    elif recommended_logo == "Logo 3":
+        recommended_logo_file = logo_file_3
+        recommended_logo_url = logo_url_3
+        
+    recommended_logo = recommended_logo_url
+    print(f"\n\nRecommended logo url: {recommended_logo}")
+
+    response = openAI.get_text_prediction(system_prompt, prompt, image_input=[recommended_logo_file])
+    response = response.strip()
+    logo_variants_prompts = response
+    print(f"\n\nLogo variants prompts: {logo_variants_prompts}")
+    logo_variants_prompts = json.loads(logo_variants_prompts)
+    
+    # print(f"\n\nLogo variants prompts: {logo_variants_prompts}")
+    # print("\n\n")
+    logo_variants = []
+    for prompt in logo_variants_prompts:
+        new_varient = openAI.generate_image(prompt, [recommended_logo_file])
+        print(f"Generated logo variant: {new_varient}")
+        # Upload the variant to Cloudinary if it is a file path
+        variant_url = None
+        if new_varient and os.path.isfile(new_varient):
+            try:
+                upload_result = cloudinary_utils.upload_image_from_file(new_varient, folder=f"toothai/{brandId}/logo_variants")
+                if upload_result and "secure_url" in upload_result:
+                    variant_url = upload_result["secure_url"]
+                else:
+                    print(f"Failed to upload variant to Cloudinary: {upload_result}")
+            except Exception as e:
+                print(f"Error uploading variant to Cloudinary: {e}")
+        else:
+            variant_url = new_varient  # fallback, may be a URL or error string
+        logo_variants.append(variant_url)
+        
+    print("Section success \n\n")
+    
+    
+    # Generate applications
+    new_applications_list = []
+    for application in applications:
+        application_type = application["application_type"]
+        application_prompt = application["prompt"]
+        
+        # Generate the application image
+        new_application_image = openAI.generate_image(application_prompt, [recommended_logo_file])
+        # Upload the application image to Cloudinary if it is a file path
+        application_url = None
+        if new_application_image and os.path.isfile(new_application_image):
+            try:
+                upload_result = cloudinary_utils.upload_image_from_file(new_application_image, folder=f"toothai/{brandId}/applications")
+                if upload_result and "secure_url" in upload_result:
+                    application_url = upload_result["secure_url"]
+                else:
+                    print(f"Failed to upload application image to Cloudinary: {upload_result}")
+            except Exception as e:
+                print(f"Error uploading application image to Cloudinary: {e}")
+        else:
+            application_url = new_application_image  # fallback, may be a URL or error string
+        # Create a new application object
+        new_application = {
+            "application_type": application_type,
+            "image_url": application_url
+        }
+        print(f"Generated application: {new_application}")
+        new_applications_list.append(new_application)
+        
+        
+    applications = new_applications_list
 
 
-
-
-
-
-
-    system_prompt = "You are a brand content calender expert. Here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + "<<<, and here's info about our brand identity >>> "+str(response)+" <<<. I need you to write a content calender for the company for the entire month of june 2025, from the first week to the last. First start by listing all the national and international events that Cameroonians usually celebrate. Create a content calender as a csv of the format >>> Date | Event | Design concept | Caption <<< Make sure to use !@! as csv special characters to seperate columns. Make sure to specify the date, Event, design concept, caption. Make sure tto mention the name of the week in the dates. The design concept is a clearly detailed description of the design, defining the style, colours, Text, and every other detail. The caption should be more fun and engaging. We post on Happy new weaks on mondays, happy weekend on saturdays, and on major events. We also post from time to time to advertise a service, product, offer or a quiz, game, or anything to engage our audience. Make sure to always mix post with some marketing stuff in a smart way to pass message and still communicate about the brand, product or service. Make sure to cover just the specified month and nothing more or less. Be more elaborate with the responses, dont be too brief. Make it sound legit and good. Your resonses should not just be single sentences. Try to write a paragraph of valuable information. Sound more human as possible. Make it serious and not just rushed. Make sure to not say say any other thing, make sure to output just the csv, and do not say anything extra. Do not style anywhere in the csv with **, ---, #### or anything similar"
+    # Generate content calender
+    system_prompt = "You are a brand content calender expert. Here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + "<<<, and here's info about our brand identity >>> "+str(brand_identity)+" <<<. I need you to write a content calender for the company for the entire month of june 2025, from the first week to the last. First start by listing all the national and international events that Cameroonians usually celebrate. Create a content calender as a csv of the format >>> Date | Event | Design concept | Caption <<< Make sure to use !@! as csv special characters to seperate columns. Make sure to specify the date, Event, design concept, caption. Make sure tto mention the name of the week in the dates. The design concept is a clearly detailed description of the design, defining the style, colours, Text, and every other detail. The caption should be more fun and engaging. We post on Happy new weaks on mondays, happy weekend on saturdays, and on major events. We also post from time to time to advertise a service, product, offer or a quiz, game, or anything to engage our audience. Make sure to always mix post with some marketing stuff in a smart way to pass message and still communicate about the brand, product or service. Make sure to cover just the specified month and nothing more or less. Be more elaborate with the responses, dont be too brief. Make it sound legit and good. Your resonses should not just be single sentences. Try to write a paragraph of valuable information. Sound more human as possible. Make it serious and not just rushed. Make sure to not say say any other thing, make sure to output just the csv, and do not say anything extra. Do not style anywhere in the csv with **, ---, #### or anything similar"
                 
     prompt = "Please give me a content calender for the specified month"
     
     print("Processing section ...")
     response = openAI.get_text_prediction(system_prompt, prompt)
     content_calender = response
-    # print("\n\n\n\nContent calender")
-    # print(content_calender.replace('\\n', '\n'))
-    # print("\n\n\n\n")
     print("Section success \n\n")
 
 
@@ -710,7 +811,7 @@ def generate_results(userId, brandId):
 
 
 
-# print(generate_results("bfa00828-4dee-451f-8cd1-72971ed9d662", "820f14ab-3b09-453a-907f-97d3f67d131a"))
+# print(generate_results("51938bbe-05df-4852-a0ee-2b4db2d1c4f2", "470da1fd-8a5c-4fd0-a642-07b32382bcc4"))
 # print("\n\n\n\n"+str(db.get_brand("7be4efdc-7d3d-4344-b823-8300f6e81bb0")))
 
 # generate_results("72aa6589-0cdb-4795-acf3-b0db2a8d7fad", "7be4efdc-7d3d-4344-b823-8300f6e81bb0")

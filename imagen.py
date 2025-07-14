@@ -75,6 +75,7 @@ def generate_image(prompt, aspect_ratio="1:1", public_id=None, folder="toothai")
             folder=folder
         )
         
+        
         if not upload_result:
             print("Failed to upload image to Cloudinary")
             return None

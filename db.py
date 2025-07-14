@@ -134,6 +134,24 @@ def get_user_from_email(email):
             return None
     return None
 
+
+def get_all_users():
+    for attempt in range(2):
+        try:
+            cursor.execute("SELECT * FROM users")
+            rows = cursor.fetchall()
+            if not rows:
+                return []
+            return [dict(row) for row in rows]
+        except psycopg2.InterfaceError as e:
+            print(f"[get_all_users] InterfaceError: {e}. Resetting connection and retrying once.")
+            reset_connection()
+        except psycopg2.Error as e:
+            print(f"Database error in get_all_users: {e}")
+            return []
+    return []
+
+
 def update_user(user_id, updated_info):
     for user in users:
         if user["userId"] == user_id:
