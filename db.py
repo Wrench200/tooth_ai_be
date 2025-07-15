@@ -78,7 +78,7 @@ def create_user(username, email, password):
             }
             users.append(new_user)
             cursor.execute("INSERT INTO users (userId, username, email, password) VALUES (%s, %s, %s, %s)",
-                        (user_id, username, email, password))
+                           (user_id, username, email, password))
             conn.commit()
             print(f"User {user_id} added.")
             return new_user
@@ -754,8 +754,10 @@ def delete_answer(answer_id):
             print(f"Database error in delete_answer: {e}")
             conn.rollback()
             return False
-    return False
-
+        return False
+    
+        return False
+    
 # ===================== Cloudinary Image Management ===========================================
 
 def save_image_url(answer_id, section_number, question_number, cloudinary_url, cloudinary_public_id):

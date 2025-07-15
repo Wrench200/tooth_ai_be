@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, send_file
 from flask_cors import CORS
 import db
 import questions
@@ -11,10 +11,388 @@ import cloudinary_utils
 import time
 import traceback
 from db import get_global_question_number
+from fpdf import FPDF  # Change to fpdf2
+import io, requests, os
+import tempfile
+import re
 
+FONT_DIR = os.path.join(os.path.dirname(__file__), 'fonts')
+UNICODE_FONT_PATH = os.path.join(FONT_DIR, 'DejaVuSans.ttf')
+UNICODE_FONT_BOLD_PATH = os.path.join(FONT_DIR, 'DejaVuSans-Bold.ttf')  # Make sure this file exists
+UNICODE_FONT_ITALIC_PATH = os.path.join(FONT_DIR, 'DejaVuSans-Oblique.ttf')
+UNICODE_FONT_BOLD_ITALIC_PATH = os.path.join(FONT_DIR, 'DejaVuSans-BoldOblique.ttf')
 
+def remove_emojis(text):
+    emoji_pattern = re.compile(
+        "["
+        "\U0001F600-\U0001F64F"  # emoticons
+        "\U0001F300-\U0001F5FF"  # symbols & pictographs
+        "\U0001F680-\U0001F6FF"  # transport & map symbols
+        "\U0001F1E0-\U0001F1FF"  # flags (iOS)
+        "\U00002700-\U000027BF"  # Dingbats
+        "\U0001F900-\U0001F9FF"  # Supplemental Symbols and Pictographs
+        "\U00002600-\U000026FF"  # Misc symbols
+        "\U00002B50-\U00002B55"  # Stars
+        "\U00002300-\U000023FF"  # Misc technical
+        "]+",
+        flags=re.UNICODE
+    )
+    return emoji_pattern.sub(r'', text)
 
+class BrandPDF(FPDF):
+    def header(self):
+        pass
+    def hex_to_rgb(self, hex_color):
+        hex_color = hex_color.lstrip('#')
+        return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    
+    def add_cover(self, brand_name, brand_tagline, primary_colors=None, secondary_colors=None):
+        self.add_page()
+        # Gradient background (vertical from primary to secondary)
+        hex_primary = primary_colors[0].get('hex_value', '#1E90FF') if primary_colors else '#1E90FF'
+        hex_secondary = secondary_colors[0].get('hex_value', '#0099CC') if secondary_colors else '#0099CC'
+        r1, g1, b1 = int(hex_primary[1:3], 16), int(hex_primary[3:5], 16), int(hex_primary[5:7], 16)
+        r2, g2, b2 = int(hex_secondary[1:3], 16), int(hex_secondary[3:5], 16), int(hex_secondary[5:7], 16)
+        steps = 20
+        for i in range(steps):
+            r = int(r1 + (r2 - r1) * i / steps)
+            g = int(g1 + (g2 - g1) * i / steps)
+            b = int(b1 + (b2 - b1) * i / steps)
+            self.set_fill_color(r, g, b)
+            y = i * (self.h / steps)
+            self.rect(0, y, self.w, self.h / steps + 1, style='F')
+        # Fonts
+        self.add_font('DejaVu', '', UNICODE_FONT_PATH, uni=True)
+        self.add_font('DejaVu', 'B', UNICODE_FONT_BOLD_PATH, uni=True)
+        self.add_font('DejaVu', 'I', UNICODE_FONT_ITALIC_PATH, uni=True)
+        self.add_font('DejaVu', 'BI', UNICODE_FONT_BOLD_ITALIC_PATH, uni=True)
+        # Centered 'Brand Blueprint'
+        self.set_text_color(255, 255, 255)
+        self.set_font('DejaVu', '', 20)
+        self.set_y(self.h * 0.25)
+        self.cell(0, 10, 'Brand Blueprint', ln=True, align='C')
+        # White underline
+        y_underline = self.get_y() + 0.4
+        self.set_draw_color(255, 255, 255)
+        self.set_line_width(0.7)
+        self.line(self.w * 0.37, y_underline, self.w * 0.638, y_underline)
+        # 'For: {brand_name}'
+        self.set_y(y_underline + 8)
+        self.set_font('DejaVu', 'B', 28)
+        self.cell(0, 14, f'{brand_name}', ln=True, align='C')
+        # Tagline (italic, smaller, white)
+        self.set_y(self.get_y() + 2)
+        self.set_font('DejaVu', 'I', 14)
+        self.set_text_color(255, 255, 255)
+        self.cell(0, 12, f'"{brand_tagline}"', ln=True, align='C')
+        self.set_text_color(0, 0, 0)
 
+    def add_section_title(self, title, emphasize=False, color=None):
+       self.add_font('DejaVu', 'B', UNICODE_FONT_PATH, uni=True)
+       self.set_font('DejaVu', 'B', 18)
+       if color:
+        self.set_text_color(*color)
+       else:
+        self.set_text_color(40, 40, 120) if emphasize else self.set_text_color(0, 0, 0)
+       self.cell(0, 12, remove_emojis(title), ln=True, align='C')
+       self.set_text_color(0, 0, 0)
+       self.ln(4)
+       self.set_y(self.get_y() + 10)
+
+    def add_sub_section_title(self, title, emphasize=False):
+        self.add_font('DejaVu', 'B', UNICODE_FONT_BOLD_PATH, uni=True)
+        self.set_font('DejaVu', 'B', 18 if emphasize else 14)
+        self.set_text_color(40, 40, 120) if emphasize else self.set_text_color(0, 0, 0)
+        self.cell(0, 12, remove_emojis(title), ln=True, align='L')
+        self.set_text_color(0, 0, 0)
+        self.ln(4)
+        self.set_y(self.get_y() + 4)
+
+    def add_key_value(self, key, value, emphasize=False):
+        self.add_font('DejaVu', '', UNICODE_FONT_PATH, uni=True)
+        self.set_font('DejaVu', 'B', 12 if emphasize else 11)
+        self.set_fill_color(230, 230, 230)  # Light gray
+        import re
+        value_str = str(value).strip()
+        value_str = re.sub(r'\n+', '\n', value_str)
+        self.set_font('DejaVu', 'B', 12)
+        # Estimate lines for value
+        cell_width = self.w - self.l_margin - self.r_margin
+        lines = 0
+        for paragraph in value_str.split('\n'):
+            if not paragraph:
+                lines += 1
+                continue
+            string_width = self.get_string_width(remove_emojis(paragraph))
+            lines += max(1, int(string_width / cell_width) + 1)
+        key_height = 8
+        gap_height = 3
+        value_height = lines * 6  # 6 is the height used in multi_cell
+        total_height = key_height + gap_height + value_height + 6  # 6 for bottom ln
+        if self.get_y() + total_height > self.h - self.b_margin:
+            self.add_page()
+        self.cell(0, 8, remove_emojis(f"{key}"), ln=1, fill=True)
+        self.ln(3)
+        self.set_font('DejaVu', '', 12)
+        self.multi_cell(0, 6, remove_emojis(value_str))
+        self.ln(6)
+
+    def add_color_palette(self, colors, title):
+        self.add_section_title(title)
+        for color in colors:
+            hex_val = color.get('hex_value', '#000000')
+            try:
+                r = int(hex_val[1:3], 16)
+                g = int(hex_val[3:5], 16)
+                b = int(hex_val[5:7], 16)
+            except Exception:
+                r, g, b = 0, 0, 0
+            self.set_fill_color(r, g, b)
+            self.cell(20, 10, '', 0, 0, '', True)
+            self.set_font('DejaVu', '', 12)
+            self.cell(0, 10, remove_emojis(f"{color.get('color_name', '')} ({hex_val}) - {color.get('description', '')}"), ln=1)
+        self.ln(2)
+
+    def add_logo_images(self, logos):
+        self.add_sub_section_title("Logos")
+        for logo in logos:
+            url = logo.get('image_url') or logo.get('url') or logo.get('cloudinary_url')
+            if url:
+                try:
+                    response = requests.get(url)
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp_img:
+                        tmp_img.write(response.content)
+                        tmp_img.flush()
+                        tmp_img_path = tmp_img.name
+                    self.image(tmp_img_path, w=40)
+                    os.remove(tmp_img_path)
+                except Exception as e:
+                    print(f"Error loading image {url}: {e}")
+                    self.set_font('DejaVu', '', 10)
+                    self.cell(0, 8, '[Image could not be loaded]', ln=1)
+            self.ln(2)
+            self.set_font('DejaVu', '', 10)
+            self.multi_cell(0, 8, remove_emojis(logo.get('description', '')))
+            self.ln(4)
+
+    def add_typography(self, typography):
+        self.add_sub_section_title("Typography")
+        import os
+        font_dir = FONT_DIR
+        for font in typography:
+            font_family = font.get('font_family', 'DejaVu')
+            font_weight = font.get('font_weight', '').lower()
+            font_size = font.get('font_size', '16px')
+            font_size_num = 16
+            try:
+                font_size_num = int(''.join([c for c in font_size if c.isdigit()]))
+            except Exception:
+                font_size_num = 16
+            line_height = font.get('line_height', '')
+            description = font.get('description', '')
+            # Try to register the font if available
+            font_file = None
+            font_style = ''
+            if font_weight in ['bold', 'b']:
+                font_style = 'B'
+            elif font_weight in ['italic', 'i']:
+                font_style = 'I'
+            elif font_weight in ['bolditalic', 'bi', 'ib']:
+                font_style = 'BI'
+            # Try to find a matching font file in fonts dir
+            font_file_candidates = [
+                os.path.join(font_dir, f"{font_family.replace(' ', '')}-{font_style}.ttf"),
+                os.path.join(font_dir, f"{font_family.replace(' ', '')}.ttf"),
+                os.path.join(font_dir, f"{font_family}.ttf"),
+            ]
+            for candidate in font_file_candidates:
+                if os.path.exists(candidate):
+                    font_file = candidate
+                    break
+            if font_file:
+                try:
+                    self.add_font(font_family, font_style, font_file, uni=True)
+                except Exception:
+                    pass
+                self.set_font(font_family, font_style, font_size_num)
+            else:
+                # Fallback to DejaVu
+                self.set_font('DejaVu', font_style, font_size_num)
+            # Font name in its style
+            self.cell(0, 10, f"{font_family} {font_weight.title()}", ln=1)
+            # Sample text
+            sample_text = "The quick brown fox jumps over the lazy dog. 1234567890"
+            self.cell(0, 10, sample_text, ln=1)
+            # Font details
+            self.set_font('DejaVu', '', 11)
+            self.cell(0, 8, f"Size: {font_size}   |   Line Height: {line_height}", ln=1)
+            self.multi_cell(0, 8, remove_emojis(description))
+            self.ln(4)
+
+    def add_content_calendar(self, calendar_entries, max_entries=5):
+        self.add_section_title("Content Calendar Sample")
+        if not calendar_entries:
+            self.set_font('DejaVu', '', 11)
+            self.cell(0, 8, "No content calendar entries available.", ln=1)
+            return
+        # Table headers
+        headers = ["Date", "Event", "Design concept", "Caption"]
+        col_widths = [35, 35, 60, 60]
+        self.set_font('DejaVu', 'B', 11)
+        for i, header in enumerate(headers):
+            self.cell(col_widths[i], 8, remove_emojis(header), border=1, align='C')
+        self.ln()
+        self.set_font('DejaVu', '', 10)
+        for entry in calendar_entries[:max_entries]:
+            self.cell(col_widths[0], 8, remove_emojis(str(entry.get('Date', ''))), border=1)
+            self.cell(col_widths[1], 8, remove_emojis(str(entry.get('Event', ''))), border=1)
+            self.cell(col_widths[2], 8, remove_emojis(str(entry.get('Design concept', ''))), border=1)
+            self.cell(col_widths[3], 8, remove_emojis(str(entry.get('Caption', ''))), border=1)
+            self.ln()
+        self.ln(2)
+
+    def add_color_section(self, colors, description=None, circle_diameter=70, section_title="Colour", subtitle="Primary Colour", title_align='L', subtitle_align='C'):
+        # Section title
+        if section_title:
+            self.set_font('DejaVu', 'B', 32)
+            self.set_text_color(40, 40, 40)
+            self.cell(0, 30, section_title, ln=True, align=title_align)
+            self.ln(5)
+        # Subtitle
+        if subtitle:
+            self.set_font('DejaVu', 'B', 18)
+            self.cell(0, 10, subtitle, ln=True, align=subtitle_align)
+            self.ln(10)
+        # Draw circles for each color
+        page_width = self.w - self.l_margin - self.r_margin
+        n = len(colors)
+        # Calculate gap so all circles fit on one row
+        if n > 1:
+            gap = max(20, (page_width - n * circle_diameter) // (n - 1))
+        else:
+            gap = 0
+        total_width = n * circle_diameter + (n - 1) * gap
+        start_x = (self.w - total_width) / 2
+        y = self.get_y()
+        for i, color in enumerate(colors):
+            x = start_x + i * (circle_diameter + gap)
+            hex_val = color.get('hex_value', '#000000')
+            r = int(hex_val[1:3], 16)
+            g = int(hex_val[3:5], 16)
+            b = int(hex_val[5:7], 16)
+            # Draw circle
+            self.set_fill_color(r, g, b)
+            self.ellipse(x, y, circle_diameter, circle_diameter, style='F')
+            # Hex code in center
+            self.set_xy(x, y + circle_diameter / 2 - 6)
+            self.set_text_color(255, 255, 255)
+            self.set_font('DejaVu', 'B', 14)
+            self.cell(circle_diameter, 12, hex_val, align='C', ln=0)
+            # Label below
+            self.set_xy(x, y + circle_diameter + 2)
+            self.set_text_color(40, 40, 40)
+            self.set_font('DejaVu', 'B', 12)
+            self.multi_cell(circle_diameter, 7, color.get('color_name', ''), align='C')
+        # Move below the circles for the description (if any)
+        if description:
+            self.set_y(y + circle_diameter + 30)
+            self.set_font('DejaVu', '', 12)
+            self.set_text_color(40, 40, 40)
+            self.multi_cell(0, 8, description, align='C')
+            self.ln(10)
+        else:
+            self.set_y(y + circle_diameter + 30)
+            self.ln(10)
+
+    def add_recommended_logo(self, logo_url, description=None):
+        self.add_sub_section_title("Recommended Logo")
+        if logo_url and not logo_url.lower().startswith("error"): 
+            try:
+                response = requests.get(logo_url)
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp_img:
+                    tmp_img.write(response.content)
+                    tmp_img.flush()
+                    tmp_img_path = tmp_img.name
+                self.image(tmp_img_path, w=60)
+                os.remove(tmp_img_path)
+            except Exception as e:
+                print(f"Error loading recommended logo {logo_url}: {e}")
+                self.set_font('DejaVu', '', 10)
+                self.cell(0, 8, '[Image could not be loaded]', ln=1)
+        if description:
+            self.set_font('DejaVu', '', 10)
+            self.multi_cell(0, 8, remove_emojis(description))
+        self.ln(4)
+
+    def add_logo_variants(self, variants):
+        self.add_sub_section_title("Logo Variants")
+        if not variants or all(v.lower().startswith("error") for v in variants):
+            self.set_font('DejaVu', '', 10)
+            self.cell(0, 8, "No logo variants available.", ln=1)
+            return
+        for v in variants:
+            if v and not v.lower().startswith("error"):
+                try:
+                    response = requests.get(v)
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp_img:
+                        tmp_img.write(response.content)
+                        tmp_img.flush()
+                        tmp_img_path = tmp_img.name
+                    self.image(tmp_img_path, w=40)
+                    os.remove(tmp_img_path)
+                except Exception as e:
+                    print(f"Error loading logo variant {v}: {e}")
+                    self.set_font('DejaVu', '', 10)
+                    self.cell(0, 8, '[Image could not be loaded]', ln=1)
+                self.ln(2)
+        self.ln(4)
+
+    def add_applications(self, applications):
+        self.add_sub_section_title("Applications")
+        if not applications or all(a.get('image_url', '').lower().startswith("error") for a in applications):
+            self.set_font('DejaVu', '', 10)
+            self.cell(0, 8, "No application images available.", ln=1)
+            return
+        for app in applications:
+            url = app.get('image_url', '')
+            app_type = app.get('application_type', '')
+            if url and not url.lower().startswith("error"):
+                self.add_page()
+                try:
+                    response = requests.get(url)
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp_img:
+                        tmp_img.write(response.content)
+                        tmp_img.flush()
+                        tmp_img_path = tmp_img.name
+                    # Calculate max width/height with margin
+                    margin = 15
+                    max_width = self.w - 2 * margin
+                    max_height = self.h - 2 * margin - 20  # leave space for caption
+                    # Get image size
+                    from PIL import Image
+                    img = Image.open(tmp_img_path)
+                    img_w, img_h = img.size
+                    aspect = img_w / img_h
+                    if max_width / aspect <= max_height:
+                        display_w = max_width
+                        display_h = max_width / aspect
+                    else:
+                        display_h = max_height
+                        display_w = max_height * aspect
+                    x = (self.w - display_w) / 2
+                    y = margin
+                    self.image(tmp_img_path, x=x, y=y, w=display_w, h=display_h)
+                    os.remove(tmp_img_path)
+                except Exception as e:
+                    print(f"Error loading application image {url}: {e}")
+                    self.set_font('DejaVu', '', 10)
+                    self.cell(0, 8, '[Image could not be loaded]', ln=1)
+                # Caption below image
+                if app_type:
+                    self.set_y(y + display_h + 5)
+                    self.set_font('DejaVu', 'B', 14)
+                    self.cell(0, 12, remove_emojis(app_type), ln=1, align='C')
+                self.ln(4)
 
 
 app = Flask(__name__)
@@ -169,7 +547,7 @@ def get_suggestions():
         
         if isinstance(mySuggestions, str):
             mySuggestions = json.loads(mySuggestions)
-        
+
         if not "error" in mySuggestions:
             mySuggestions = {
                 'question': frontend_question_number,
@@ -362,8 +740,8 @@ def get_results():
     
     try:
         # Set a longer timeout for this operation
-        response = results.generate_results(userId, brandId)
-        return jsonify(response), 200
+      response = results.generate_results(userId, brandId)
+      return jsonify(response), 200
     except Exception as e:
         print(f"Error in get_results: {e}")
         return jsonify({
@@ -583,6 +961,200 @@ def app_status():
             'error': str(e),
             'timestamp': time.time()
         }), 500
+
+
+@app.route('/download_brand_pdf/<brandId>', methods=['GET'])
+def download_brand_pdf(brandId):
+    brand = db.get_brand(brandId)
+    if not brand:
+        return jsonify({'error': 'Brand not found'}), 404
+
+    import json
+    def parse_json_field(field):
+        if isinstance(field, str):
+            try:
+                # Try JSON first
+                return json.loads(field)
+            except Exception:
+                # Try CSV for content_calendar
+                if '\\n' in field or '\n' in field or '\r' in field or '\r\n' in field or '\n' in field.replace('\\n', '\n'):
+                    lines = field.splitlines()
+                    if lines:
+                        rows = [line.split('!@!') for line in lines]
+                        if len(rows) > 1:
+                            headers = [h.strip() for h in rows[0]]
+                            return [dict(zip(headers, [cell.strip() for cell in row])) for row in rows[1:] if len(row) == len(headers)]
+                return field
+        return field
+
+    # Extract and parse detailed brand fields
+    brand_strategy = parse_json_field(brand.get('brand_strategy', {}))
+    brand_identity = parse_json_field(brand.get('brand_identity', {}))
+    brand_communication = parse_json_field(brand.get('brand_communication', {}))
+    marketing = parse_json_field(brand.get('marketing_and_social_media_strategy', {}))
+
+
+    # Cover page info
+    brand_name = brand_communication.get('brand_name', brand.get('name', ''))
+    brand_tagline = brand_communication.get('brand_tagline', '')
+
+    primary_colors = brand_identity.get('primary_colors') if brand_identity else None
+    secondary_colors = brand_identity.get('secondary_colors') if brand_identity else None
+    logos = brand_identity.get('logos') if brand_identity else None
+    pdf = BrandPDF()
+    pdf.add_cover(brand_name, brand_tagline, primary_colors, secondary_colors)
+    pdf.add_page()  # Start all other content on a new page after the cover
+    primary_hex = None
+    if primary_colors and isinstance(primary_colors, list) and len(primary_colors) > 0:
+     primary_hex = primary_colors[0].get('hex_value', '#1E90FF')
+    else:
+     primary_hex = '#1E90FF'
+    primary_rgb = pdf.hex_to_rgb(primary_hex)
+    # Brand Communication Section
+    if brand_communication:
+        pdf.add_section_title("Brand Communication", True, primary_rgb)
+        pdf.add_key_value("Brand Name", brand_communication.get('brand_name', ''), True)
+        pdf.add_key_value("Brand Tagline", brand_communication.get('brand_tagline', ''), True)
+        pcm = brand_communication.get('primary_core_message', {})
+        if pcm:
+            pdf.add_sub_section_title("Primary Core Message")
+            pdf.add_key_value("Who We Serve", pcm.get('who_we_serve', ''))
+            pdf.add_key_value("Where They Need Help", pcm.get('where_they_need_help', ''))
+            pdf.add_key_value("Their Market Alternative", pcm.get('their_market_alternative', ''))
+            pdf.add_key_value("Key Benefits They Get", pcm.get('the_key_benefits_they_get', ''))
+            pdf.add_key_value("Our Key Differences", pcm.get('our_key_differences', ''))
+
+    # Brand Strategy Section
+    if brand_strategy:
+        pdf.add_page()
+        pdf.add_section_title("Brand Strategy", True, primary_rgb)
+        bs = brand_strategy.get('brand_substance', {})
+        if bs:
+            pdf.add_sub_section_title("Brand Substance")
+            op = bs.get('our_purpose', {})
+            if op:
+                pdf.add_key_value(op.get('title', 'Our Purpose'), op.get('purpose_statement', ''), True)
+                pdf.add_key_value("What Customers Mean to Us", op.get('what_our_customers_mean_to_us', ''))
+                pdf.add_key_value("We Believe In Something Bigger", op.get('we_believe_in_something_bigger_than_ourselves', ''))
+            ov = bs.get('our_vision', {})
+            if ov:
+                pdf.add_key_value("Our Vision", ov.get('our_vision_is_bright', ''))
+            om = bs.get('our_mission', {})
+            if om:
+                pdf.add_key_value("Our Mission", om.get('we_are_committed_to', ''))
+            ovs = bs.get('our_values', {})
+            if ovs:
+                pdf.add_key_value("Our Values", ', '.join(ovs.get('values', [])))
+                pdf.add_key_value("Values in Action", ovs.get('how_we_do_wellness_business', ''))
+        # Customer Persona
+        opn = brand_strategy.get('our_position', {})
+        if opn:
+            pdf.add_sub_section_title("Customer Persona")
+            for key, label in [
+                ('name', 'Name'),
+                ('demographics', 'Demographics'),
+                ('psychographics', 'Psychographics'),
+                ('personality', 'Personality'),
+                ('fears', 'Fears'),
+                ('desires', 'Desires'),
+                ('challenges_and_pain_points', 'Challenges and Pain Points')
+            ]:
+                value = opn.get(key, '')
+                if value:
+                    pdf.add_key_value(label, value)
+        # Competitive Analysis
+        if brand_strategy.get('top_competitors'):
+            pdf.add_key_value("Competitive Analysis", brand_strategy.get('top_competitors'))
+        # What Makes Us Different
+        wmd = brand_strategy.get('why_we_are_different', {})
+        if wmd:
+            pdf.add_sub_section_title("What Makes Us Different")
+            pdf.add_key_value("Positioning Statement", wmd.get('positioning_statement', ''), True)
+            pdf.add_key_value("The Difference We Provide", wmd.get('the_difference_we_provide', ''))
+
+    # Brand Identity Section
+    if brand_identity:
+        pdf.add_page()
+        pdf.add_section_title("Brand Identity", True, primary_rgb)
+        pdf.add_key_value("About The Brand", brand_identity.get('about_the_brand', ''), True)
+        # If you want to use the new color section for primary colors:
+        pdf.add_page()
+        if brand_identity.get('primary_colors'):
+            # Compose a description from the color objects if available
+            color_descs = []
+            for color in brand_identity['primary_colors']:
+                desc = color.get('description', '')
+                if desc:
+                    color_descs.append(desc)
+            description = '\n'.join(color_descs) if color_descs else ''
+            pdf.add_color_section(brand_identity['primary_colors'], description, circle_diameter=70, section_title="Colors", subtitle="Primary Colors",title_align='L',subtitle_align='L')
+        else:
+            pdf.add_section_title("Brand Identity", True, primary_rgb)
+            pdf.add_key_value("About The Brand", brand_identity.get('about_the_brand', ''), True)
+        # Color Palettes (secondary colors)
+        if brand_identity.get('secondary_colors'):
+            pdf.add_color_section(
+                brand_identity['secondary_colors'],
+                description=None,
+                circle_diameter=50,
+                section_title="",
+                subtitle="Secondary Colors",
+                title_align='L',
+                subtitle_align='L'
+            )
+        # Typography
+        pdf.add_page()
+        if brand_identity.get('typography'):
+            pdf.add_typography(brand_identity['typography'])
+        # Logos
+        pdf.add_page()
+        if brand_identity.get('logos'):
+            pdf.add_logo_images(brand_identity['logos'])
+        # Recommended Logo
+        pdf.add_page()
+        if brand_identity.get('reommended_logo'):
+            pdf.add_recommended_logo(brand_identity['reommended_logo'])
+        # Logo Variants
+        if brand_identity.get('logo_variants'):
+            pdf.add_logo_variants(brand_identity['logo_variants'])
+        # Applications
+        pdf.add_page()
+        if brand_identity.get('applications'):
+            pdf.add_applications(brand_identity['applications'])
+
+    # Marketing & Social Media Section
+    content_calendar = None
+    if marketing:
+        pdf.add_page()
+        print('DEBUG: marketing type:', type(marketing), 'value:', marketing)
+        pdf.add_section_title("Marketing & Social Media Strategy", True, primary_rgb)
+        if isinstance(marketing, dict):
+            print('marketing:', marketing)
+            for key, value in marketing.items():
+                print('DEBUG: marketing key:', key, 'type:', type(value))
+                if key.lower() in ["strategy", "description", "summary"]:
+                    pdf.add_key_value(key.replace('_', ' ').title(), value, True)
+                if key.lower() in ["content_calendar", "content_calender", "contentcalender", "calendar"]:
+                    content_calendar = value
+            print('DEBUG: content_calendar:', content_calendar)
+            if content_calendar:
+                pdf.add_content_calendar(parse_json_field(content_calendar), 5)
+        elif isinstance(marketing, str) and marketing.strip():
+            pdf.add_key_value("Strategy", marketing.strip(), True)
+
+    # Final note
+    pdf.add_page()
+    pdf.add_section_title("Implementation Guide", True, primary_rgb)
+    pdf.add_key_value(
+        "Next Steps",
+        "This brand blueprint provides the foundation for all your marketing materials, website design, and business communications. Use these guidelines consistently across all touchpoints to build a strong, recognizable brand identity.",
+        True
+    )
+
+    pdf_bytes = pdf.output(dest='S').encode('latin1')
+    pdf_output = io.BytesIO(pdf_bytes)
+    pdf_output.seek(0)
+    return send_file(pdf_output, as_attachment=True, download_name=f"brand_{brandId}_blueprint.pdf", mimetype='application/pdf')
 
 if __name__ == '__main__':
     # Run on host 0.0.0.0 to be accessible from outside, port 8080
