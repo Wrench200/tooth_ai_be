@@ -101,150 +101,152 @@ def clean_and_parse_json(raw_response):
 
 
 def generate_results(userId, brandId):
-    
-    user = db.get_user(userId)
-    brand = db.get_brand(brandId)
-    answers = db.get_answer(brand["answerid"])
-    
-    previous_questions = questions.get_previous_questions(11)
-    previous_answers = db.get_previous_answers(answers["answerId"], 11)
-    question_and_answers = " ".join([f"Question: {q} Answer: {a}." for q, a in zip(previous_questions, previous_answers)])
-    
-    # print(question_and_answers)
-    
-    
-    
-    # ================================== Prepare varaiables for results ==================================
-    
-    what_our_customers_mean_to_us = ""
-    we_believe_in_something_bigger_than_ourselves = ""
-    purpose_statement = ""
+    import shutil
+    images_dir = 'images'
+    try:
+        user = db.get_user(userId)
+        brand = db.get_brand(brandId)
+        answers = db.get_answer(brand["answerid"])
+        
+        previous_questions = questions.get_previous_questions(11)
+        previous_answers = db.get_previous_answers(answers["answerId"], 11)
+        question_and_answers = " ".join([f"Question: {q} Answer: {a}." for q, a in zip(previous_questions, previous_answers)])
+        
+        # print(question_and_answers)
+        
+        
+        
+        # ================================== Prepare varaiables for results ==================================
+        
+        what_our_customers_mean_to_us = ""
+        we_believe_in_something_bigger_than_ourselves = ""
+        purpose_statement = ""
 
-    our_vision_is_bright = ""
+        our_vision_is_bright = ""
 
-    we_are_committed_to = ""
+        we_are_committed_to = ""
 
-    how_we_do_wellness_business = ""
-    values = []
+        how_we_do_wellness_business = ""
+        values = []
 
-    position_name = ""
-    demographics = ""
-    psychographics = ""
-    personality = ""
-    fears = ""
-    desires = ""
-    challenges_and_pain_points = ""
+        position_name = ""
+        demographics = ""
+        psychographics = ""
+        personality = ""
+        fears = ""
+        desires = ""
+        challenges_and_pain_points = ""
 
-    top_competitors = [
-        {
-            "name": "Competitor 1",
-            "description": "A leading competitor in the wellness industry, known for its innovative products and strong community engagement.",
-            "website": "https://competitor1.com",
-            "facebook": "https://facebook.com/competitor1",
-            "youTube": "https://youtube.com/competitor1",
-            "instagram": "https://instagram.com/competitor1",
+        top_competitors = [
+            {
+                "name": "Competitor 1",
+                "description": "A leading competitor in the wellness industry, known for its innovative products and strong community engagement.",
+                "website": "https://competitor1.com",
+                "facebook": "https://facebook.com/competitor1",
+                "youTube": "https://youtube.com/competitor1",
+                "instagram": "https://instagram.com/competitor1",
+            }
+        ]
+
+        the_difference_we_provide = ""
+        position_statement = ""
+
+        brand_name = ""
+        brand_tagline = ""
+
+        who_we_serve = ""
+        where_they_need_help = ""
+        the_key_benefits_they_get = ""
+        their_market_alternative = ""
+        our_key_differences = ""
+
+        about_the_brand = ""
+
+
+        logo_url_1 = "https://example.com/primary_logo.png"
+        logo_url_2 = "https://example.com/secondary_logo.png"
+        logo_url_3 = "https://example.com/alternative_logo.png"
+
+        logo_description_1 = ""
+        logo_description_2 = ""
+        logo_description_3 = ""
+
+        recommended_logo = ""
+
+        logo_variants = {
+            "primary_logo": logo_url_1,
+            "secondary_logo": logo_url_2,
+            "alternative_logo": logo_url_3
         }
-    ]
 
-    the_difference_we_provide = ""
-    position_statement = ""
+        primary_colors = [
+            {
+                "color_name": "Primary Blue",
+                "hex_value": "#0033cc",
+                "description": "The primary color representing trust and professionalism."
+            },
+            {
+                "color_name": "Secondary Green",
+                "hex_value": "#66cc66",
+                "description": "A secondary color symbolizing growth and wellness."
+            }
+        ]
 
-    brand_name = ""
-    brand_tagline = ""
-
-    who_we_serve = ""
-    where_they_need_help = ""
-    the_key_benefits_they_get = ""
-    their_market_alternative = ""
-    our_key_differences = ""
-
-    about_the_brand = ""
-
-
-    logo_url_1 = "https://example.com/primary_logo.png"
-    logo_url_2 = "https://example.com/secondary_logo.png"
-    logo_url_3 = "https://example.com/alternative_logo.png"
-
-    logo_description_1 = ""
-    logo_description_2 = ""
-    logo_description_3 = ""
-
-    recommended_logo = ""
-
-    logo_variants = {
-        "primary_logo": logo_url_1,
-        "secondary_logo": logo_url_2,
-        "alternative_logo": logo_url_3
-    }
-
-    primary_colors = [
-        {
-            "color_name": "Primary Blue",
-            "hex_value": "#0033cc",
-            "description": "The primary color representing trust and professionalism."
-        },
-        {
-            "color_name": "Secondary Green",
-            "hex_value": "#66cc66",
-            "description": "A secondary color symbolizing growth and wellness."
-        }
-    ]
-
-    secondary_colors = [
-        {
-            "color_name": "Accent Orange",
-            "hex_value": "#ff6600",
-            "description": "An accent color used for highlights and calls to action."
-        },
-        {
-            "color_name": "Background White",
-            "hex_value": "#ffffff",
-            "description": "A clean background color for a fresh look."
-        },
-        {
-            "color_name": "Text Gray",
-            "hex_value": "#333333",
-            "description": "A neutral text color for readability."
-        }
-    ]
+        secondary_colors = [
+            {
+                "color_name": "Accent Orange",
+                "hex_value": "#ff6600",
+                "description": "An accent color used for highlights and calls to action."
+            },
+            {
+                "color_name": "Background White",
+                "hex_value": "#ffffff",
+                "description": "A clean background color for a fresh look."
+            },
+            {
+                "color_name": "Text Gray",
+                "hex_value": "#333333",
+                "description": "A neutral text color for readability."
+            }
+        ]
 
 
-    typography = [
-        {
-            "font_family": "Open Sans",
-            "font_weight": "Regular",
-            "font_size": "16px",
-            "line_height": "1.5",
-            "description": "The primary font for body text, ensuring readability and clarity."
-        },
-        {
-            "font_family": "Roboto",
-            "font_weight": "Bold",
-            "font_size": "24px",
-            "line_height": "1.2",
-            "description": "A bold font for headings, providing emphasis and impact."
-        }
-    ]
+        typography = [
+            {
+                "font_family": "Open Sans",
+                "font_weight": "Regular",
+                "font_size": "16px",
+                "line_height": "1.5",
+                "description": "The primary font for body text, ensuring readability and clarity."
+            },
+            {
+                "font_family": "Roboto",
+                "font_weight": "Bold",
+                "font_size": "24px",
+                "line_height": "1.2",
+                "description": "A bold font for headings, providing emphasis and impact."
+            }
+        ]
 
-    applications = [
-        {
-            "application_type": "Website",
-            "image_url": "",
-        },{
-            "application_type": "Mug",
-            "image_url": "",
-        }
-    ]
+        applications = [
+            {
+                "application_type": "Website",
+                "image_url": "",
+            },{
+                "application_type": "Mug",
+                "image_url": "",
+            }
+        ]
 
-    content_calender = ""
+        content_calender = ""
 
 
 
 
 
-    # ================================== Generate information for results  ==================================
+        # ================================== Generate information for results  ==================================
 
-    system_prompt = "You are a branding strategy expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + '''<<<. You are supposed to generate the brand strategy  for the user as a json of this format >>> 
+        system_prompt = "You are a branding strategy expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + '''<<<. You are supposed to generate the brand strategy  for the user as a json of this format >>> 
     {
         "our_purpose": {
             "title": "Our Purpose",
@@ -264,43 +266,43 @@ def generate_results(userId, brandId):
         }
     } <<< Make sure to generate the values for the different parts. Replace sss with the values you generate and lll with a list of values. Make sure you replace sss with strings. Do not use any other format or add any other information. Make sure to generate the values for the different parts, using information from the questions and answers. Make sure to respect the json format and do not add any other information. Be more elaborate with the responses, dont be too brief. Make it sound legit and good. Your resonses should not just be single sentences. Try to write a paragraph of valuable information sometimes. Sound more human as possible. Make it serious and not just rushed'''
             
-    prompt = "Please give me my branding strategy as json, and make sure to fill the information in the json as pecified"
+        prompt = "Please give me my branding strategy as json, and make sure to fill the information in the json as pecified"
 
-    passed = False
-    while passed == False:
-        print("Processing section ...")
-        response = openAI.get_text_prediction(system_prompt, prompt)
-        response = clean_and_parse_json(response)
-        # Define the expected structure
-        expected_structure = {
-            "our_purpose": ["title", "what_our_customers_mean_to_us", "purpose_statement"],
-            "our_vision": ["our_vision_is_bright"],
-            "our_mission": ["we_are_committed_to"],
-            "our_values": ["how_we_do_wellness_business", "values"]
-        }
-        
-        if check_keys(response, expected_structure):
-            what_our_customers_mean_to_us = response["our_purpose"]["what_our_customers_mean_to_us"]
-            we_believe_in_something_bigger_than_ourselves = response["our_purpose"]["we_believe_in_something_bigger_than_ourselves"]
-            purpose_statement = response["our_purpose"]["purpose_statement"]
-            our_vision_is_bright = response["our_vision"]["our_vision_is_bright"]
-            we_are_committed_to = response["our_mission"]["we_are_committed_to"]
-            how_we_do_wellness_business = response["our_values"]["how_we_do_wellness_business"]
-            values = response["our_values"]["values"]
-            passed = True
-            print("Section success \n\n")
-        else:
-            print("Error in response format. Retrying...")
+        passed = False
+        while passed == False:
+            print("Processing section ...")
+            response = openAI.get_text_prediction(system_prompt, prompt)
+            response = clean_and_parse_json(response)
+            # Define the expected structure
+            expected_structure = {
+                "our_purpose": ["title", "what_our_customers_mean_to_us", "purpose_statement"],
+                "our_vision": ["our_vision_is_bright"],
+                "our_mission": ["we_are_committed_to"],
+                "our_values": ["how_we_do_wellness_business", "values"]
+            }
             
-            
-            
-            
-            
-            
-            
-            
-            
-    system_prompt = "You are a customer profile expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + '''<<<. You are supposed to generate a sample customer profile for the brand as a json of this format >>> 
+            if check_keys(response, expected_structure):
+                what_our_customers_mean_to_us = response["our_purpose"]["what_our_customers_mean_to_us"]
+                we_believe_in_something_bigger_than_ourselves = response["our_purpose"]["we_believe_in_something_bigger_than_ourselves"]
+                purpose_statement = response["our_purpose"]["purpose_statement"]
+                our_vision_is_bright = response["our_vision"]["our_vision_is_bright"]
+                we_are_committed_to = response["our_mission"]["we_are_committed_to"]
+                how_we_do_wellness_business = response["our_values"]["how_we_do_wellness_business"]
+                values = response["our_values"]["values"]
+                passed = True
+                print("Section success \n\n")
+            else:
+                print("Error in response format. Retrying...")
+                
+                
+                
+                
+                
+                
+                
+                
+                
+        system_prompt = "You are a customer profile expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + '''<<<. You are supposed to generate a sample customer profile for the brand as a json of this format >>> 
     {
         "name": sss,
         "demographics": sss,
@@ -311,99 +313,99 @@ def generate_results(userId, brandId):
         "challenges_and_pain_points": sss,
     } <<< Make sure to generate the values for the different parts. Replace sss with the string values you generate. Make sure you replace sss with strings. Do not use any other format or add any other information. Make sure to generate the values for the different parts, using information from the questions and answers. Make sure to respect the json format and do not add any other information. Be more elaborate with the responses, dont be too brief. Make it sound legit and good. Your resonses should not just be single sentences. Try to write a paragraph of valuable information sometimes. Sound more human as possible. Make it serious and not just rushed'''
             
-    prompt = "Please give me a sample customer profile as json, and make sure to fill the information in the json as pecified"
-    
-    passed = False
-    while passed == False:
-        print("Processing section ...")
-        response = openAI.get_text_prediction(system_prompt, prompt)
-        response = clean_and_parse_json(response)
-        # Define the expected structure
-        expected_structure = {
-            "name": [],
-            "demographics": [],
-            "psychographics": [],
-            "personality": [],
-            "fears": [],
-            "desires": [],
-            "challenges_and_pain_points": []
-        }
+        prompt = "Please give me a sample customer profile as json, and make sure to fill the information in the json as pecified"
         
-        if check_keys(response, expected_structure):
-            position_name = response["name"]
-            demographics = response["demographics"]
-            psychographics = response["psychographics"]
-            personality = response["personality"]
-            fears = response["fears"]
-            desires = response["desires"]
-            challenges_and_pain_points = response["challenges_and_pain_points"]
-            passed = True
+        passed = False
+        while passed == False:
+            print("Processing section ...")
+            response = openAI.get_text_prediction(system_prompt, prompt)
+            response = clean_and_parse_json(response)
+            # Define the expected structure
+            expected_structure = {
+                "name": [],
+                "demographics": [],
+                "psychographics": [],
+                "personality": [],
+                "fears": [],
+                "desires": [],
+                "challenges_and_pain_points": []
+            }
+            
+            if check_keys(response, expected_structure):
+                position_name = response["name"]
+                demographics = response["demographics"]
+                psychographics = response["psychographics"]
+                personality = response["personality"]
+                fears = response["fears"]
+                desires = response["desires"]
+                challenges_and_pain_points = response["challenges_and_pain_points"]
+                passed = True
+                print("Section success \n\n")
+            else:
+                print("Error in response format. Retrying...")
+                    
+                
+                
+                
+                
+                
+                
+                
+                
+            system_prompt = "You are a competitor profile expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + "<<< Be more elaborate with the responses, dont be too brief. Make it sound legit and good. Your resonses should not just be single sentences. Try to write a paragraph of valuable information. Sound more human as possible. Make it serious and not just rushed"
+                    
+            prompt = "Please give me a profile of my top competitors as a string. Do not style it. Do not add any syntax. Just a paragraph of text. No labeling please."
+            
+            print("Processing section ...")
+            response = openAI.get_text_prediction(system_prompt, prompt)
+            top_competitors = response
             print("Section success \n\n")
-        else:
-            print("Error in response format. Retrying...")
+                    
                 
-            
-            
-            
-            
-            
-            
-            
-            
-        system_prompt = "You are a competitor profile expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + "<<< Be more elaborate with the responses, dont be too brief. Make it sound legit and good. Your resonses should not just be single sentences. Try to write a paragraph of valuable information. Sound more human as possible. Make it serious and not just rushed"
                 
-        prompt = "Please give me a profile of my top competitors as a string. Do not style it. Do not add any syntax. Just a paragraph of text. No labeling please."
-        
-        print("Processing section ...")
-        response = openAI.get_text_prediction(system_prompt, prompt)
-        top_competitors = response
-        print("Section success \n\n")
                 
-            
-            
-            
-            
-            
-            
-            
-            
-    system_prompt = "You are a branding expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + '''<<<. You are supposed to generate the reasons that make the brand different as a json of this format >>> 
+                
+                
+                
+                
+                
+        system_prompt = "You are a branding expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + '''<<<. You are supposed to generate the reasons that make the brand different as a json of this format >>> 
     {
         "the_difference_we_provide": the_difference_we_provide,
         "positioning_statement": position_statement,
     }
     <<< Make sure to generate the values for the different parts. Replace sss with the string values you generate. Make sure you replace sss with strings. Do not use any other format or add any other information. Make sure to generate the values for the different parts, using information from the questions and answers. Make sure to respect the json format and do not add any other information. Be more elaborate with the responses, dont be too brief. Make it sound legit and good. Your resonses should not just be single sentences. Try to write a paragraph of valuable information sometimes. Sound more human as possible. Make it serious and not just rushed'''
             
-    prompt = "Please give me a sample what makes us different as json, and make sure to fill the information in the json as specified"
+        prompt = "Please give me a sample what makes us different as json, and make sure to fill the information in the json as specified"
 
-    passed = False
-    while passed == False:
-        print("Processing section ...")
-        response = openAI.get_text_prediction(system_prompt, prompt)
-        response = clean_and_parse_json(response)
-        # Define the expected structure
-        expected_structure = {
-            "the_difference_we_provide": [],
-            "positioning_statement": []
-        }
-        
-        if check_keys(response, expected_structure):
-            the_difference_we_provide = response["the_difference_we_provide"]
-            position_statement = response["positioning_statement"]
-            passed = True
-            print("Section success \n\n")
-        else:
-            print("Error in response format. Retrying...")
+        passed = False
+        while passed == False:
+            print("Processing section ...")
+            response = openAI.get_text_prediction(system_prompt, prompt)
+            response = clean_and_parse_json(response)
+            # Define the expected structure
+            expected_structure = {
+                "the_difference_we_provide": [],
+                "positioning_statement": []
+            }
             
-            
-            
-            
-            
-            
-            
-            
-            
-    system_prompt = "You are a brand communication expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + '''<<<. You are supposed to generate the communication for the brand as a json of this format >>> 
+            if check_keys(response, expected_structure):
+                the_difference_we_provide = response["the_difference_we_provide"]
+                position_statement = response["positioning_statement"]
+                passed = True
+                print("Section success \n\n")
+            else:
+                print("Error in response format. Retrying...")
+                
+                
+                
+                
+                
+                
+                
+                
+                
+        system_prompt = "You are a brand communication expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + '''<<<. You are supposed to generate the communication for the brand as a json of this format >>> 
     {
         "brand_name": sss,
         "brand_tagline": sss,
@@ -416,42 +418,42 @@ def generate_results(userId, brandId):
         },
     } <<< Make sure to generate the values for the different parts. Replace sss with the string values you generate. Make sure you replace sss with strings. Do not use any other format or add any other information. Make sure to generate the values for the different parts, using information from the questions and answers. Make sure to respect the json format and do not add any other information. Be more elaborate with the responses, dont be too brief. Make it sound legit and good. Your resonses should not just be single sentences. Try to write a paragraph of valuable information sometimes. Sound more human as possible. Make it serious and not just rushed'''
             
-    prompt = "Please give me the communication for my brand as json, and make sure to fill the information in the json as pecified"
-    
-    passed = False
-    while passed == False:
-        print("Processing section ...")
-        response = openAI.get_text_prediction(system_prompt, prompt)
-        response = clean_and_parse_json(response)
-        # Define the expected structure
-        expected_structure = {
-            "brand_name": [],
-            "brand_tagline": [],
-            "primary_core_message": ["who_we_serve", "where_they_need_help", "the_key_benefits_they_get", "their_market_alternative", "our_key_differences"]
-        }
+        prompt = "Please give me the communication for my brand as json, and make sure to fill the information in the json as pecified"
         
-        if check_keys(response, expected_structure):
-            brand_name = response["brand_name"]
-            brand_tagline = response["brand_tagline"]
-            who_we_serve = response["primary_core_message"]["who_we_serve"]
-            where_they_need_help = response["primary_core_message"]["where_they_need_help"]
-            the_key_benefits_they_get = response["primary_core_message"]["the_key_benefits_they_get"]
-            their_market_alternative = response["primary_core_message"]["their_market_alternative"]
-            our_key_differences = response["primary_core_message"]["our_key_differences"]
-            passed = True
-            print("Section success \n\n")
-        else:
-            print("Error in response format. Retrying...")
+        passed = False
+        while passed == False:
+            print("Processing section ...")
+            response = openAI.get_text_prediction(system_prompt, prompt)
+            response = clean_and_parse_json(response)
+            # Define the expected structure
+            expected_structure = {
+                "brand_name": [],
+                "brand_tagline": [],
+                "primary_core_message": ["who_we_serve", "where_they_need_help", "the_key_benefits_they_get", "their_market_alternative", "our_key_differences"]
+            }
             
-            
-            
-            
-            
-            
-            
-            
-            
-    system_prompt = "You are a brand identity expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + '''<<<. You are supposed to generate the communication for the brand as a json of this format >>> 
+            if check_keys(response, expected_structure):
+                brand_name = response["brand_name"]
+                brand_tagline = response["brand_tagline"]
+                who_we_serve = response["primary_core_message"]["who_we_serve"]
+                where_they_need_help = response["primary_core_message"]["where_they_need_help"]
+                the_key_benefits_they_get = response["primary_core_message"]["the_key_benefits_they_get"]
+                their_market_alternative = response["primary_core_message"]["their_market_alternative"]
+                our_key_differences = response["primary_core_message"]["our_key_differences"]
+                passed = True
+                print("Section success \n\n")
+            else:
+                print("Error in response format. Retrying...")
+                
+                
+                
+                
+                
+                
+                
+                
+                
+        system_prompt = "You are a brand identity expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + '''<<<. You are supposed to generate the communication for the brand as a json of this format >>> 
     {
         "about_the_brand": sss,
         "logos": [
@@ -491,322 +493,336 @@ def generate_results(userId, brandId):
         })
     } <<< For the logo prompts, make sure to write a detailed description of the logo for the best result, straight forward detailed instructions that will yield the best result for an AI image generation model to use, the logos should be very professional, creative and attrative, no simple logos or empty logos, just logos that are straight up creative and very good, either with an icon, or decorated initials or any other, be creative, specify the brand name, also mention the tagline, if necessary, not all logos should have a tagline under. Brand name: '''+brand_name+''', tagline: '''+brand_tagline+'''. The application prompt is to illustrate a couple of items like shirts, mugs or the like, with the logo on them, put between 3 to 5 applications, be very detailed about where to put the logo, size, position and the like, on the object, we are passing the logo along with this prompt so be direct and just tell the ai what to do with the logo, the application prompt is standalone, and carries all details, it is supposed to prompt the model to generate the item, describing the item and its evironment in full detail, as well as where to put the logo, do not use words that other AI's will think are sensitive. Make sure to specify presenation styles for the applications, like cinematic, studio lighting, high quality, professional photography, commercial shot and the like... Add as many as possible to make the applications look visually stunning and well presented. Add a lot of details to the applications prompt. Mak sure to put all extremely detailed explanations and styles in the application prompts. Make sure each font object in the list of fonts has just one font. Make sure to generate the values for the different parts. Replace sss with the string values you generate and lll with a list. Make sure you replace sss with strings. Do not use any other format or add any other information. Make sure to generate the values for the different parts, using information from the questions and answers. Make sure to respect the json format and do not add any other information. Be more elaborate with the responses, dont be too brief. Make it sound legit and good. Your resonses should not just be single sentences. Try to write a paragraph of valuable information sometimes. Sound more human as possible. Make it serious and not just rushed'''
             
-    prompt = "Please give me the identity for my brand as json, and make sure to fill the information in the json as pecified"
-    # response = openAI.get_text_prediction(system_prompt, prompt)
-    # print(response)
-    # raise Exception("Error")
-    logo_prompt1 = ""
-    logo_prompt2 = ""
-    logo_prompt3 = ""
-    
-    passed = False
-    max_retries = 3
-    retry_count = 0
-    
-    brand_identity = ""
-    while passed == False and retry_count < max_retries:
-        print(f"Processing section (attempt {retry_count + 1}/{max_retries})...")
-        try:
-            raw_response = openAI.get_text_prediction(system_prompt, prompt)
-            print(f"Raw API response type: {type(raw_response)}")
-            print(f"Raw API response: {raw_response[:200]}..." if raw_response else "Raw API response: None")
-            
-            response = clean_and_parse_json(raw_response)
-            print(f"Parsed response: {response}")
-            brand_identity = response
-            
-            # Define the expected structure
-            expected_structure = {
-                "about_the_brand": [],
-                "logos": ["prompt", "description"],
-                "primary_colors": [],
-                "secondary_colors": [],
-                "typography": [],
-                "applications": []
-            }
-            
-            if response is None:
-                print("Error: API response could not be parsed as JSON")
-                retry_count += 1
-                continue
-                
-            if check_keys(response, expected_structure):
-                about_the_brand = response["about_the_brand"]
-                # Extract logo descriptions and prompts
-                logo_description_1 = response["logos"][0]["description"]
-                logo_description_2 = response["logos"][1]["description"]
-                logo_description_3 = response["logos"][2]["description"]
-                
-                logo_prompt1 = response["logos"][0]["prompt"]
-                logo_prompt2 = response["logos"][1]["prompt"]
-                logo_prompt3 = response["logos"][2]["prompt"]
-                
-                # Optionally, you could use the prompts for logo generation elsewhere
-                primary_colors = response["primary_colors"]
-                secondary_colors = response["secondary_colors"]
-                typography = response["typography"]
-                applications = response["applications"]
-                passed = True
-                print("Section success \n\n")
-            else:
-                print("Error in response format. Retrying...")
-                retry_count += 1
-        except Exception as e:
-            print(f"Exception during processing: {e}")
-            retry_count += 1
-    
-    if not passed:
-        print(f"Failed to process section after {max_retries} attempts. Using default values.")
-        # Set default values to prevent further errors
-        about_the_brand = "Default brand description"
-        logo_description_1 = "Default logo description 1"
-        logo_description_2 = "Default logo description 2"
-        logo_description_3 = "Default logo description 3"
-        logo_prompt1 = "A simple, professional logo design"
-        logo_prompt2 = "A modern, minimalist logo design"
-        logo_prompt3 = "A creative, distinctive logo design"
-        primary_colors = []
-        secondary_colors = []
-        typography = []
-        applications = []
-    # ...existing code...
-
-
-    # Generate logos and upload to Cloudinary
-    try:
-        print("Generating logos and uploading to Cloudinary...")
-        logo_url_1 = imagen.generate_image(logo_prompt1, public_id=f"toothai/{brandId}/logo_1")
-        logo_url_2 = imagen.generate_image(logo_prompt2, public_id=f"toothai/{brandId}/logo_2")
-        logo_url_3 = imagen.generate_image(logo_prompt3, public_id=f"toothai/{brandId}/logo_3")
+        prompt = "Please give me the identity for my brand as json, and make sure to fill the information in the json as pecified"
+        # response = openAI.get_text_prediction(system_prompt, prompt)
+        # print(response)
+        # raise Exception("Error")
+        logo_prompt1 = ""
+        logo_prompt2 = ""
+        logo_prompt3 = ""
         
-        # Check if any logos failed to generate
-        if not logo_url_1:
-            print("Warning: Logo 1 generation failed, using placeholder")
+        passed = False
+        max_retries = 3
+        retry_count = 0
+        
+        brand_identity = ""
+        while passed == False and retry_count < max_retries:
+            print(f"Processing section (attempt {retry_count + 1}/{max_retries})...")
+            try:
+                raw_response = openAI.get_text_prediction(system_prompt, prompt)
+                print(f"Raw API response type: {type(raw_response)}")
+                print(f"Raw API response: {raw_response[:200]}..." if raw_response else "Raw API response: None")
+                
+                response = clean_and_parse_json(raw_response)
+                print(f"Parsed response: {response}")
+                brand_identity = response
+                
+                # Define the expected structure
+                expected_structure = {
+                    "about_the_brand": [],
+                    "logos": ["prompt", "description"],
+                    "primary_colors": [],
+                    "secondary_colors": [],
+                    "typography": [],
+                    "applications": []
+                }
+                
+                if response is None:
+                    print("Error: API response could not be parsed as JSON")
+                    retry_count += 1
+                    continue
+                    
+                if check_keys(response, expected_structure):
+                    about_the_brand = response["about_the_brand"]
+                    # Extract logo descriptions and prompts
+                    logo_description_1 = response["logos"][0]["description"]
+                    logo_description_2 = response["logos"][1]["description"]
+                    logo_description_3 = response["logos"][2]["description"]
+                    
+                    logo_prompt1 = response["logos"][0]["prompt"]
+                    logo_prompt2 = response["logos"][1]["prompt"]
+                    logo_prompt3 = response["logos"][2]["prompt"]
+                    
+                    # Optionally, you could use the prompts for logo generation elsewhere
+                    primary_colors = response["primary_colors"]
+                    secondary_colors = response["secondary_colors"]
+                    typography = response["typography"]
+                    applications = response["applications"]
+                    passed = True
+                    print("Section success \n\n")
+                else:
+                    print("Error in response format. Retrying...")
+                    retry_count += 1
+            except Exception as e:
+                print(f"Exception during processing: {e}")
+                retry_count += 1
+        
+        if not passed:
+            print(f"Failed to process section after {max_retries} attempts. Using default values.")
+            # Set default values to prevent further errors
+            about_the_brand = "Default brand description"
+            logo_description_1 = "Default logo description 1"
+            logo_description_2 = "Default logo description 2"
+            logo_description_3 = "Default logo description 3"
+            logo_prompt1 = "A simple, professional logo design"
+            logo_prompt2 = "A modern, minimalist logo design"
+            logo_prompt3 = "A creative, distinctive logo design"
+            primary_colors = []
+            secondary_colors = []
+            typography = []
+            applications = []
+        # ...existing code...
+
+
+        # Generate logos and upload to Cloudinary
+        try:
+            print("Generating logos and uploading to Cloudinary...")
+            logo_url_1 = imagen.generate_image(logo_prompt1, public_id=f"toothai/{brandId}/logo_1")
+            logo_url_2 = imagen.generate_image(logo_prompt2, public_id=f"toothai/{brandId}/logo_2")
+            logo_url_3 = imagen.generate_image(logo_prompt3, public_id=f"toothai/{brandId}/logo_3")
+            
+            # Check if any logos failed to generate
+            if not logo_url_1:
+                print("Warning: Logo 1 generation failed, using placeholder")
+                logo_url_1 = "https://via.placeholder.com/400x200?text=Logo+1"
+            if not logo_url_2:
+                print("Warning: Logo 2 generation failed, using placeholder")
+                logo_url_2 = "https://via.placeholder.com/400x200?text=Logo+2"
+            if not logo_url_3:
+                print("Warning: Logo 3 generation failed, using placeholder")
+                logo_url_3 = "https://via.placeholder.com/400x200?text=Logo+3"
+                
+            print("Logo generation completed successfully")
+        except Exception as e:
+            print(f"Error during logo generation: {e}")
+            print("Using placeholder logos")
             logo_url_1 = "https://via.placeholder.com/400x200?text=Logo+1"
-        if not logo_url_2:
-            print("Warning: Logo 2 generation failed, using placeholder")
             logo_url_2 = "https://via.placeholder.com/400x200?text=Logo+2"
-        if not logo_url_3:
-            print("Warning: Logo 3 generation failed, using placeholder")
             logo_url_3 = "https://via.placeholder.com/400x200?text=Logo+3"
             
-        print("Logo generation completed successfully")
-    except Exception as e:
-        print(f"Error during logo generation: {e}")
-        print("Using placeholder logos")
-        logo_url_1 = "https://via.placeholder.com/400x200?text=Logo+1"
-        logo_url_2 = "https://via.placeholder.com/400x200?text=Logo+2"
-        logo_url_3 = "https://via.placeholder.com/400x200?text=Logo+3"
+            
+        # Get logo recommendation
+        if logo_url_1 != "https://via.placeholder.com/400x200?text=Logo+1":
+            logo_file_1 = functions.download_image(logo_url_1)
+            logo_file_2 = functions.download_image(logo_url_2)
+            logo_file_3 = functions.download_image(logo_url_3)
+            
+            logo_with_label_1 = textOnImage.add_text_top_left(logo_file_1, "Logo 1")
+            logo_with_label_2 = textOnImage.add_text_top_left(logo_file_2, "Logo 2")
+            logo_with_label_3 = textOnImage.add_text_top_left(logo_file_3, "Logo 3")
+            
+            logo_options = [logo_with_label_1, logo_with_label_2, logo_with_label_3]
+            
+            system_prompt = "You are a brand identity expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + '<<<. I just attached 3 logo options for the brand. I need you to recommend the best logo for the brand. Just out either "Logo 1", "Logo 2" or "Logo 3" as the best logo for the brand. Do not add any other information, just the name of the logo. Make sure to not say say any other thing, make sure to output just the name of the logo, and do not say anything extra. Make sure to make just one choice'
+            prompt = "Please give me the best logo for the brand"
+            print("Processing section ...")
+            response = openAI.get_text_prediction(system_prompt, prompt, image_input=logo_options)
+            recommended_logo = response.strip()
+            print(recommended_logo)
+            print("Section success \n\n")
+            
+            
         
+        # Design logo variants
+        system_prompt = "You are a brand identity expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + '<<<. Here are the primary and secondary colors for the brand >>> Primary colors: '+str(primary_colors)+'. Secondary colors: '+str(secondary_colors)+'<<<. I need you to design logo variants for the brand, using the attached recommended logo. You have to write a list of 3 prompts prompting an AI image generation model to generate 3 completely different logo varients using the attached logo, in the format: ["prompt 1", "prompt 2", "prompt 3"]. The varients need to be the exact same logo, but with different colors, styles, and designs. Make sure Insist in the prompt that it should be a varient of the same logo. Add every detailed instruction in the prompt. Make sure to use the primary and secondary colors of the brand in the design. Make sure to use words like, clean, high quality and the like in the prompts where needed to make it very good. Make sure to use the attached logo as a base for the design. Make sure to not say any other thing, make sure to output just the list of prompts, and do not say anything extra. Make sure to not style anywhere in the prompts with **, ---, #### or anything similar'
+        prompt = "Please give me the logo variants for the brand as a list of prompts"
         
-    # Get logo recommendation
-    if logo_url_1 != "https://via.placeholder.com/400x200?text=Logo+1":
-        logo_file_1 = functions.download_image(logo_url_1)
-        logo_file_2 = functions.download_image(logo_url_2)
-        logo_file_3 = functions.download_image(logo_url_3)
-        
-        logo_with_label_1 = textOnImage.add_text_top_left(logo_file_1, "Logo 1")
-        logo_with_label_2 = textOnImage.add_text_top_left(logo_file_2, "Logo 2")
-        logo_with_label_3 = textOnImage.add_text_top_left(logo_file_3, "Logo 3")
-        
-        logo_options = [logo_with_label_1, logo_with_label_2, logo_with_label_3]
-        
-        system_prompt = "You are a brand identity expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + '<<<. I just attached 3 logo options for the brand. I need you to recommend the best logo for the brand. Just out either "Logo 1", "Logo 2" or "Logo 3" as the best logo for the brand. Do not add any other information, just the name of the logo. Make sure to not say say any other thing, make sure to output just the name of the logo, and do not say anything extra. Make sure to make just one choice'
-        prompt = "Please give me the best logo for the brand"
         print("Processing section ...")
-        response = openAI.get_text_prediction(system_prompt, prompt, image_input=logo_options)
-        recommended_logo = response.strip()
-        print(recommended_logo)
-        print("Section success \n\n")
+        
+        recommended_logo_url = ""
+        if recommended_logo == "Logo 1":
+            recommended_logo_file = logo_file_1
+            recommended_logo_url = logo_url_1
+        elif recommended_logo == "Logo 2":
+            recommended_logo_file = logo_file_2
+            recommended_logo_url = logo_url_2
+        elif recommended_logo == "Logo 3":
+            recommended_logo_file = logo_file_3
+            recommended_logo_url = logo_url_3
+            
+        recommended_logo = recommended_logo_url
+        print(f"\n\nRecommended logo url: {recommended_logo}")
+
+        response = openAI.get_text_prediction(system_prompt, prompt, image_input=[recommended_logo_file])
+        response = response.strip()
+        logo_variants_prompts = response
+        print(f"\n\nLogo variants prompts: {logo_variants_prompts}")
+        logo_variants_prompts = json.loads(logo_variants_prompts)
+        
+        # print(f"\n\nLogo variants prompts: {logo_variants_prompts}")
+        # print("\n\n")
+        logo_variants = []
+        for prompt in logo_variants_prompts:
+            new_varient = openAI.generate_image(prompt, [recommended_logo_file])
+            print(f"Generated logo variant: {new_varient}")
+            # Upload the variant to Cloudinary if it is a file path
+            variant_url = None
+            if new_varient and os.path.isfile(new_varient):
+                try:
+                    upload_result = cloudinary_utils.upload_image_from_file(new_varient, folder=f"toothai/{brandId}/logo_variants")
+                    if upload_result and "secure_url" in upload_result:
+                        variant_url = upload_result["secure_url"]
+                    else:
+                        print(f"Failed to upload variant to Cloudinary: {upload_result}")
+                except Exception as e:
+                    print(f"Error uploading variant to Cloudinary: {e}")
+            else:
+                variant_url = new_varient  # fallback, may be a URL or error string
+            logo_variants.append(variant_url)
+            
+        print("Logo Variant section success \n\n")
         
         
-    
-    # Design logo variants
-    system_prompt = "You are a brand identity expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + '<<<. Here are the primary and secondary colors for the brand >>> Primary colors: '+str(primary_colors)+'. Secondary colors: '+str(secondary_colors)+'<<<. I need you to design logo variants for the brand, using the attached recommended logo. You have to write a list of 3 prompts prompting an AI image generation model to generate 3 completely different logo varients using the attached logo, in the format: ["prompt 1", "prompt 2", "prompt 3"]. The varients need to be the exact same logo, but with different colors, styles, and designs. Make sure Insist in the prompt that it should be a varient of the same logo. Add every detailed instruction in the prompt. Make sure to use the primary and secondary colors of the brand in the design. Make sure to use words like, clean, high quality and the like in the prompts where needed to make it very good. Make sure to use the attached logo as a base for the design. Make sure to not say any other thing, make sure to output just the list of prompts, and do not say anything extra. Make sure to not style anywhere in the prompts with **, ---, #### or anything similar'
-    prompt = "Please give me the logo variants for the brand as a list of prompts"
-    
-    print("Processing section ...")
-    
-    recommended_logo_url = ""
-    if recommended_logo == "Logo 1":
-        recommended_logo_file = logo_file_1
-        recommended_logo_url = logo_url_1
-    elif recommended_logo == "Logo 2":
-        recommended_logo_file = logo_file_2
-        recommended_logo_url = logo_url_2
-    elif recommended_logo == "Logo 3":
-        recommended_logo_file = logo_file_3
-        recommended_logo_url = logo_url_3
-        
-    recommended_logo = recommended_logo_url
-    print(f"\n\nRecommended logo url: {recommended_logo}")
-
-    response = openAI.get_text_prediction(system_prompt, prompt, image_input=[recommended_logo_file])
-    response = response.strip()
-    logo_variants_prompts = response
-    print(f"\n\nLogo variants prompts: {logo_variants_prompts}")
-    logo_variants_prompts = json.loads(logo_variants_prompts)
-    
-    # print(f"\n\nLogo variants prompts: {logo_variants_prompts}")
-    # print("\n\n")
-    logo_variants = []
-    for prompt in logo_variants_prompts:
-        new_varient = openAI.generate_image(prompt, [recommended_logo_file])
-        print(f"Generated logo variant: {new_varient}")
-        # Upload the variant to Cloudinary if it is a file path
-        variant_url = None
-        if new_varient and os.path.isfile(new_varient):
-            try:
-                upload_result = cloudinary_utils.upload_image_from_file(new_varient, folder=f"toothai/{brandId}/logo_variants")
-                if upload_result and "secure_url" in upload_result:
-                    variant_url = upload_result["secure_url"]
-                else:
-                    print(f"Failed to upload variant to Cloudinary: {upload_result}")
-            except Exception as e:
-                print(f"Error uploading variant to Cloudinary: {e}")
-        else:
-            variant_url = new_varient  # fallback, may be a URL or error string
-        logo_variants.append(variant_url)
-        
-    print("Section success \n\n")
-    
-    
-    # Generate applications
-    new_applications_list = []
-    for application in applications:
-        application_type = application["application_type"]
-        application_prompt = application["prompt"]
-        
-        # Generate the application image
-        new_application_image = openAI.generate_image(application_prompt, [recommended_logo_file])
-        # Upload the application image to Cloudinary if it is a file path
-        application_url = None
-        if new_application_image and os.path.isfile(new_application_image):
-            try:
-                upload_result = cloudinary_utils.upload_image_from_file(new_application_image, folder=f"toothai/{brandId}/applications")
-                if upload_result and "secure_url" in upload_result:
-                    application_url = upload_result["secure_url"]
-                else:
-                    print(f"Failed to upload application image to Cloudinary: {upload_result}")
-            except Exception as e:
-                print(f"Error uploading application image to Cloudinary: {e}")
-        else:
-            application_url = new_application_image  # fallback, may be a URL or error string
-        # Create a new application object
-        new_application = {
-            "application_type": application_type,
-            "image_url": application_url
-        }
-        print(f"Generated application: {new_application}")
-        new_applications_list.append(new_application)
-        
-        
-    applications = new_applications_list
-
-
-    # Generate content calender
-    system_prompt = "You are a brand content calender expert. Here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + "<<<, and here's info about our brand identity >>> "+str(brand_identity)+" <<<. I need you to write a content calender for the company for the entire month of june 2025, from the first week to the last. First start by listing all the national and international events that Cameroonians usually celebrate. Create a content calender as a csv of the format >>> Date | Event | Design concept | Caption <<< Make sure to use !@! as csv special characters to seperate columns. Make sure to specify the date, Event, design concept, caption. Make sure tto mention the name of the week in the dates. The design concept is a clearly detailed description of the design, defining the style, colours, Text, and every other detail. The caption should be more fun and engaging. We post on Happy new weaks on mondays, happy weekend on saturdays, and on major events. We also post from time to time to advertise a service, product, offer or a quiz, game, or anything to engage our audience. Make sure to always mix post with some marketing stuff in a smart way to pass message and still communicate about the brand, product or service. Make sure to cover just the specified month and nothing more or less. Be more elaborate with the responses, dont be too brief. Make it sound legit and good. Your resonses should not just be single sentences. Try to write a paragraph of valuable information. Sound more human as possible. Make it serious and not just rushed. Make sure to not say say any other thing, make sure to output just the csv, and do not say anything extra. Do not style anywhere in the csv with **, ---, #### or anything similar"
-                
-    prompt = "Please give me a content calender for the specified month"
-    
-    print("Processing section ...")
-    response = openAI.get_text_prediction(system_prompt, prompt)
-    content_calender = response
-    print("Section success \n\n")
-
-
-
-
-
-
-    # ================================== Prepare results object  ==================================
-
-
-    results = {
-        "userId": userId,
-        "brandId": brandId,
-        "brand_strategy": {
-            "brand_substance": {
-                "our_purpose": {
-                    "title": "Our Purpose",
-                    "what_our_customers_mean_to_us": what_our_customers_mean_to_us,
-                    "we_believe_in_something_bigger_than_ourselves": we_believe_in_something_bigger_than_ourselves,
-                    "purpose_statement": purpose_statement,
-                },
-                "our_vision": {
-                    "our_vision_is_bright": our_vision_is_bright,
-                },
-                "our_mission": {
-                    "we_are_committed_to": we_are_committed_to,
-                },
-                "our_values": {
-                    "how_we_do_wellness_business": how_we_do_wellness_business,
-                    "values": values
-                }
-            },
-            "our_position": {
-                "name": position_name,
-                "demographics": demographics,
-                "psychographics": psychographics,
-                "personality": personality,
-                "fears": fears,
-                "desires": desires,
-                "challenges_and_pain_points": challenges_and_pain_points,
-            },
-            "top_competitors": top_competitors,
-            "why_we_are_different": {
-                "the_difference_we_provide": the_difference_we_provide,
-                "positioning_statement": position_statement,
+        # Generate applications
+        new_applications_list = []
+        for application in applications:
+            application_type = application["application_type"]
+            application_prompt = application["prompt"]
+            
+            # Generate the application image
+            new_application_image = openAI.generate_image(application_prompt, [recommended_logo_file])
+            # Upload the application image to Cloudinary if it is a file path
+            application_url = None
+            if new_application_image and os.path.isfile(new_application_image):
+                try:
+                    upload_result = cloudinary_utils.upload_image_from_file(new_application_image, folder=f"toothai/{brandId}/applications")
+                    if upload_result and "secure_url" in upload_result:
+                        application_url = upload_result["secure_url"]
+                    else:
+                        print(f"Failed to upload application image to Cloudinary: {upload_result}")
+                except Exception as e:
+                    print(f"Error uploading application image to Cloudinary: {e}")
+            else:
+                application_url = new_application_image  # fallback, may be a URL or error string
+            # Create a new application object
+            new_application = {
+                "application_type": application_type,
+                "image_url": application_url
             }
-        },
-        "brand_communication": {
-            "brand_name": brand_name,
-            "brand_tagline": brand_tagline,
-            "primary_core_message": {
-                "who_we_serve": who_we_serve,
-                "where_they_need_help": where_they_need_help,
-                "the_key_benefits_they_get": the_key_benefits_they_get,
-                "their_market_alternative": their_market_alternative,
-                "our_key_differences": our_key_differences,
-            },
-        },
-        "brand_identity": {
-            "about_the_brand": about_the_brand,
-            "logos": [
-                {
-                    "image_url": logo_url_1,
-                    "description": logo_description_1
+            print(f"Generated application: {new_application}")
+            new_applications_list.append(new_application)
+            
+            
+        applications = new_applications_list
+
+
+        # Generate content calender
+        system_prompt = "You are a brand content calender expert. Here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + "<<<, and here's info about our brand identity >>> "+str(brand_identity)+" <<<. I need you to write a content calender for the company for the entire month of june 2025, from the first week to the last. First start by listing all the national and international events that Cameroonians usually celebrate. Create a content calender as a csv of the format >>> Date | Event | Design concept | Caption <<< Make sure to use !@! as csv special characters to seperate columns. Make sure to specify the date, Event, design concept, caption. Make sure tto mention the name of the week in the dates. The design concept is a clearly detailed description of the design, defining the style, colours, Text, and every other detail. The caption should be more fun and engaging. We post on Happy new weaks on mondays, happy weekend on saturdays, and on major events. We also post from time to time to advertise a service, product, offer or a quiz, game, or anything to engage our audience. Make sure to always mix post with some marketing stuff in a smart way to pass message and still communicate about the brand, product or service. Make sure to cover just the specified month and nothing more or less. Be more elaborate with the responses, dont be too brief. Make it sound legit and good. Your resonses should not just be single sentences. Try to write a paragraph of valuable information. Sound more human as possible. Make it serious and not just rushed. Make sure to not say say any other thing, make sure to output just the csv, and do not say anything extra. Do not style anywhere in the csv with **, ---, #### or anything similar"
+                
+        prompt = "Please give me a content calender for the specified month"
+        
+        print("Processing section ...")
+        response = openAI.get_text_prediction(system_prompt, prompt)
+        content_calender = response
+        print("Section success \n\n")
+
+
+
+
+
+
+        # ================================== Prepare results object  ==================================
+
+
+        results = {
+            "userId": userId,
+            "brandId": brandId,
+            "brand_strategy": {
+                "brand_substance": {
+                    "our_purpose": {
+                        "title": "Our Purpose",
+                        "what_our_customers_mean_to_us": what_our_customers_mean_to_us,
+                        "we_believe_in_something_bigger_than_ourselves": we_believe_in_something_bigger_than_ourselves,
+                        "purpose_statement": purpose_statement,
+                    },
+                    "our_vision": {
+                        "our_vision_is_bright": our_vision_is_bright,
+                    },
+                    "our_mission": {
+                        "we_are_committed_to": we_are_committed_to,
+                    },
+                    "our_values": {
+                        "how_we_do_wellness_business": how_we_do_wellness_business,
+                        "values": values
+                    }
                 },
-                {
-                    "image_url": logo_url_2,
-                    "description": logo_description_2
+                "our_position": {
+                    "name": position_name,
+                    "demographics": demographics,
+                    "psychographics": psychographics,
+                    "personality": personality,
+                    "fears": fears,
+                    "desires": desires,
+                    "challenges_and_pain_points": challenges_and_pain_points,
                 },
-                {
-                    "image_url": logo_url_3,
-                    "description": logo_description_3
+                "top_competitors": top_competitors,
+                "why_we_are_different": {
+                    "the_difference_we_provide": the_difference_we_provide,
+                    "positioning_statement": position_statement,
                 }
-            ],
-            "reommended_logo": recommended_logo,
-            "logo_variants": logo_variants,
-            "primary_colors": primary_colors,
-            "secondary_colors": secondary_colors,
-            "typography": typography,
-            "applications": applications
-        },
-        "marketing_and_social_media_strategy": {
-            "content_calender": content_calender
+            },
+            "brand_communication": {
+                "brand_name": brand_name,
+                "brand_tagline": brand_tagline,
+                "primary_core_message": {
+                    "who_we_serve": who_we_serve,
+                    "where_they_need_help": where_they_need_help,
+                    "the_key_benefits_they_get": the_key_benefits_they_get,
+                    "their_market_alternative": their_market_alternative,
+                    "our_key_differences": our_key_differences,
+                },
+            },
+            "brand_identity": {
+                "about_the_brand": about_the_brand,
+                "logos": [
+                    {
+                        "image_url": logo_url_1,
+                        "description": logo_description_1
+                    },
+                    {
+                        "image_url": logo_url_2,
+                        "description": logo_description_2
+                    },
+                    {
+                        "image_url": logo_url_3,
+                        "description": logo_description_3
+                    }
+                ],
+                "reommended_logo": recommended_logo,
+                "logo_variants": logo_variants,
+                "primary_colors": primary_colors,
+                "secondary_colors": secondary_colors,
+                "typography": typography,
+                "applications": applications
+            },
+            "marketing_and_social_media_strategy": {
+                "content_calender": content_calender
+            }
         }
-    }
-    
-    
-    db.update_brand(brandId, "brand_strategy", json.dumps(results["brand_strategy"]))
-    db.update_brand(brandId, "brand_communication", json.dumps(results["brand_communication"]))
-    db.update_brand(brandId, "brand_identity", json.dumps(results["brand_identity"]))
-    db.update_brand(brandId, "marketing_and_social_media_strategy", json.dumps(results["marketing_and_social_media_strategy"]))
-    
-    
-    
-    return results
+        
+        db.update_brand(brandId, "name", brand_name)
+        db.update_brand(brandId, "logo", recommended_logo_url)
+        db.update_brand(brandId, "brand_strategy", json.dumps(results["brand_strategy"]))
+        db.update_brand(brandId, "brand_communication", json.dumps(results["brand_communication"]))
+        db.update_brand(brandId, "brand_identity", json.dumps(results["brand_identity"]))
+        db.update_brand(brandId, "marketing_and_social_media_strategy", json.dumps(results["marketing_and_social_media_strategy"]))
+        
+        
+        
+        return results
+    except Exception as e:
+        print(f"Error in generate_results: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"error": True, "message": str(e)}
+    finally:
+        # Cleanup: delete the entire images folder and its contents
+        try:
+            if os.path.exists(images_dir):
+                shutil.rmtree(images_dir)
+                print(f"Deleted images directory: {images_dir}")
+        except Exception as cleanup_error:
+            print(f"Error deleting images directory: {cleanup_error}")
 
 
 
