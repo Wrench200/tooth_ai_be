@@ -264,7 +264,7 @@ def generate_results(userId, brandId):
             "how_we_do_wellness_business": sss,
             "values": lll
         }
-    } <<< Make sure to generate the values for the different parts. Replace sss with the values you generate and lll with a list of values. Make sure you replace sss with strings. Do not use any other format or add any other information. Make sure to generate the values for the different parts, using information from the questions and answers. Make sure to respect the json format and do not add any other information. Be more elaborate with the responses, dont be too brief. Make it sound legit and good. Your resonses should not just be single sentences. Try to write a paragraph of valuable information sometimes. Sound more human as possible. Make it serious and not just rushed'''
+    } <<< Make sure to generate the values for the different parts. Replace sss with the values you generate and lll with a list of values. Make sure you replace sss with strings. Do not use any other format or add any other information. Make sure to generate the values for the different parts, using information from the questions and answers. Make sure to respect the json format and do not add any other information. Be more elaborate with the responses, dont be too brief. Make it sound legit and good. Your resonses should not just be single sentences. Try to write a paragraph of valuable information sometimes. Sound more human as possible. Make it serious and not just rushed. For the mission  and vision, you MUST not write more than a sentence, make the mission and vision straight to the point.'''
             
         prompt = "Please give me my branding strategy as json, and make sure to fill the information in the json as pecified"
 
@@ -299,7 +299,7 @@ def generate_results(userId, brandId):
                 
                 
                 
-                
+        return
                 
                 
         system_prompt = "You are a customer profile expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + '''<<<. You are supposed to generate a sample customer profile for the brand as a json of this format >>> 
@@ -827,7 +827,7 @@ def generate_results(userId, brandId):
 
 
 
-# print(generate_results("51938bbe-05df-4852-a0ee-2b4db2d1c4f2", "470da1fd-8a5c-4fd0-a642-07b32382bcc4"))
+print(generate_results("24d0c547-8685-4ee9-95a4-b362da16da3c", "96266589-80bb-4f14-aff9-6baf8cc4dffd"))
 # print("\n\n\n\n"+str(db.get_brand("7be4efdc-7d3d-4344-b823-8300f6e81bb0")))
 
 # generate_results("72aa6589-0cdb-4795-acf3-b0db2a8d7fad", "7be4efdc-7d3d-4344-b823-8300f6e81bb0")
