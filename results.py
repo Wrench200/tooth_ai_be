@@ -299,8 +299,7 @@ def generate_results(userId, brandId):
                 
                 
                 
-        return
-                
+                        
                 
         system_prompt = "You are a customer profile expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + '''<<<. You are supposed to generate a sample customer profile for the brand as a json of this format >>> 
     {
