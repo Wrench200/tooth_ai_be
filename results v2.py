@@ -708,7 +708,7 @@ def generate_results(userId, brandId):
 
 
 
-def generate_final_results(userId, brandId):
+def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumbers, registrationNumber, website, others = {}):
     import shutil
     images_dir = 'images'
     try:
@@ -726,49 +726,16 @@ def generate_final_results(userId, brandId):
         
         # ================================== Prepare varaiables for results ==================================
         
-        what_our_customers_mean_to_us = ""
-        we_believe_in_something_bigger_than_ourselves = ""
-        purpose_statement = ""
-
-        our_vision_is_bright = ""
-
-        we_are_committed_to = ""
-
-        how_we_do_wellness_business = ""
-        values = []
-
-        position_name = ""
-        demographics = ""
-        psychographics = ""
-        personality = ""
-        fears = ""
-        desires = ""
-        challenges_and_pain_points = ""
-
-        top_competitors = [
-            {
-                "name": "Competitor 1",
-                "description": "A leading competitor in the wellness industry, known for its innovative products and strong community engagement.",
-                "website": "https://competitor1.com",
-                "facebook": "https://facebook.com/competitor1",
-                "youTube": "https://youtube.com/competitor1",
-                "instagram": "https://instagram.com/competitor1",
-            }
-        ]
-
-        the_difference_we_provide = ""
-        position_statement = ""
+        brandPatterns = []
+        business_cards = []
+        letterheads = []
+        tshirt_mockups = []
+        cap_mockups = []
+        signboards = []
 
         brand_name = ""
         brand_tagline = ""
 
-        who_we_serve = ""
-        where_they_need_help = ""
-        the_key_benefits_they_get = ""
-        their_market_alternative = ""
-        our_key_differences = ""
-
-        about_the_brand = ""
 
 
         logo_url_1 = "https://example.com/primary_logo.png"
@@ -1335,76 +1302,18 @@ def generate_final_results(userId, brandId):
         results = {
             "userId": userId,
             "brandId": brandId,
-            "brand_strategy": {
-                "brand_substance": {
-                    "our_purpose": {
-                        "title": "Our Purpose",
-                        "what_our_customers_mean_to_us": what_our_customers_mean_to_us,
-                        "we_believe_in_something_bigger_than_ourselves": we_believe_in_something_bigger_than_ourselves,
-                        "purpose_statement": purpose_statement,
-                    },
-                    "our_vision": {
-                        "our_vision_is_bright": our_vision_is_bright,
-                    },
-                    "our_mission": {
-                        "we_are_committed_to": we_are_committed_to,
-                    },
-                    "our_values": {
-                        "how_we_do_wellness_business": how_we_do_wellness_business,
-                        "values": values
-                    }
-                },
-                "our_position": {
-                    "name": position_name,
-                    "demographics": demographics,
-                    "psychographics": psychographics,
-                    "personality": personality,
-                    "fears": fears,
-                    "desires": desires,
-                    "challenges_and_pain_points": challenges_and_pain_points,
-                },
-                "top_competitors": top_competitors,
-                "why_we_are_different": {
-                    "the_difference_we_provide": the_difference_we_provide,
-                    "positioning_statement": position_statement,
-                }
+            "full_brand_identity": {
+                "brand_patterns": brandPatterns,
+                "business_cards": business_cards,
+                "letterheads": letterheads,
+                "tshirt_mockups": tshirt_mockups,
+                "cap_mockups": cap_mockups,
+                "signboards": signboards,
             },
-            "brand_communication": {
-                "brand_name": brand_name,
-                "brand_tagline": brand_tagline,
-                "primary_core_message": {
-                    "who_we_serve": who_we_serve,
-                    "where_they_need_help": where_they_need_help,
-                    "the_key_benefits_they_get": the_key_benefits_they_get,
-                    "their_market_alternative": their_market_alternative,
-                    "our_key_differences": our_key_differences,
-                },
-            },
-            "brand_identity": {
-                "about_the_brand": about_the_brand,
-                "logos": [
-                    {
-                        "image_url": logo_url_1,
-                        "description": logo_description_1
-                    },
-                    {
-                        "image_url": logo_url_2,
-                        "description": logo_description_2
-                    },
-                    {
-                        "image_url": logo_url_3,
-                        "description": logo_description_3
-                    }
-                ],
-                "reommended_logo": recommended_logo,
-                "logo_variants": logo_variants,
-                "primary_colors": primary_colors,
-                "secondary_colors": secondary_colors,
-                "typography": typography,
-                "applications": applications
-            },
-            "marketing_and_social_media_strategy": {
-                "content_calender": content_calender
+            "social_media_content": {
+                "ready_made_posts": "",
+                "ad_copies": "",
+                "relevant_marketing_strategies": ""
             }
         }
         
