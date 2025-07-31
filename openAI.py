@@ -46,7 +46,7 @@ def get_text_prediction(system_prompt, prompt, max_retries=5, backoff_factor=1, 
             response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
 
             result = response.json()
-            print(result)
+            # print(result)
             
             output = result.get("output")
             if isinstance(output, list):

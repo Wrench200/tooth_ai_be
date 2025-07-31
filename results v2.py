@@ -708,7 +708,7 @@ def generate_results(userId, brandId):
 
 
 
-def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumbers, registrationNumber, website, others = {}):
+def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumbers, registrationNumber, website, brandLogo, others = {}):
     import shutil
     images_dir = 'images'
     try:
@@ -720,6 +720,7 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
         previous_answers = db.get_previous_answers(answers["answerId"], 11)
         question_and_answers = " ".join([f"Question: {q} Answer: {a}." for q, a in zip(previous_questions, previous_answers)])
         previously_generated_brand_identity = brand["brand_identity"]
+        
         
         # print(question_and_answers)
         
@@ -738,6 +739,7 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             userPhoneNumbers=None,
             registrationNumber=None,
             website=None,
+            brandLogo=None,
             others=None
         ):
             # Add user info to the system prompt for more context
@@ -756,6 +758,7 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             ) + user_info
             print("\n\nProcessing section ...")
             response = openAI.get_text_prediction(system_prompt, prompt)
+            print(f"Raw AI response: {response}")
             try:
                 prompts = json.loads(response.strip())
                 if not isinstance(prompts, list):
@@ -765,7 +768,12 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             assets = []
             for idx, item_prompt in enumerate(prompts[:expected_count]):
                 try:
-                    img = openAI.generate_image(item_prompt)
+                    print("Generating image ...")
+                    # Pass brandLogo as a list if provided, else empty list
+                    logo = functions.download_image(brandLogo)
+                    images = [logo] if logo else []
+                    img = openAI.generate_image(item_prompt, images=images)
+                    print(f"Generated image url: {img}")
                     if img and os.path.isfile(img):
                         upload_result = cloudinary_utils.upload_image_from_file(
                             img, folder=f"toothai/{brandId}/{cloudinary_folder}"
@@ -777,22 +785,21 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
                     print(f"Generated: {url}")
                 except Exception as e:
                     print(f"Error generating {cloudinary_folder} {idx+1}: {e}")
-                    
             print("Section success \n\n")
-            return assets
+            return assets["image_url"]
 
-        # Usage for each asset type, now passing user info:
+        # Usage for each asset type, now passing brandLogo:
 
         brandPatterns = generate_identity_assets(
             question_and_answers,
             previously_generated_brand_identity,
             brandId,
             system_prompt_template=(
-                "You are a brand identity expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
+                '''You are a brand identity expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
                 "{question_and_answers}"
                 "<<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>"
                 "{previously_generated_brand_identity}"
-                "<<<. Generate 3 unique, visually appealing brand pattern prompts for an AI image generator. Each pattern should reflect the brand's personality, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a list of 3 detailed prompts. Do not add any extra text or formatting."
+                "<<<. Generate 3 unique, visually appealing brand pattern prompts for an AI image generator. Each pattern should reflect the brand's personality, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a list of 3 detailed prompts. Do not add any extra text or formatting. You MUST respond with a list of strings in angle braces, in this format: ["prompt1", "prompt2"]. '''
             ),
             prompt="Please give me 3 brand pattern prompts as a list.",
             expected_count=3,
@@ -802,6 +809,7 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             userPhoneNumbers=userPhoneNumbers,
             registrationNumber=registrationNumber,
             website=website,
+            brandLogo=brandLogo,
             others=others
         )
 
@@ -810,11 +818,11 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             previously_generated_brand_identity,
             brandId,
             system_prompt_template=(
-                "You are a branding expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
+                '''You are a branding expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
                 "{question_and_answers}"
                 "<<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>"
                 "{previously_generated_brand_identity}"
-                "<<<. Generate 2 highly detailed prompts for an AI image generator to create business card mockups for the brand. Each prompt should specify the brand name, tagline, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a list of 2 prompts. No extra text."
+                "<<<. Generate 2 highly detailed prompts for an AI image generator to create business card mockups for the brand. Each prompt should specify the brand name, tagline, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a list of 2 prompts. No extra text. You MUST respond with a list of strings in angle braces, in this format: ["prompt1", "prompt2"]. '''
             ),
             prompt="Please give me 2 business card prompts as a list.",
             expected_count=2,
@@ -824,6 +832,7 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             userPhoneNumbers=userPhoneNumbers,
             registrationNumber=registrationNumber,
             website=website,
+            brandLogo=brandLogo,
             others=others
         )
 
@@ -832,11 +841,11 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             previously_generated_brand_identity,
             brandId,
             system_prompt_template=(
-                "You are a branding expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
+                '''You are a branding expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
                 "{question_and_answers}"
                 "<<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>"
                 "{previously_generated_brand_identity}"
-                "<<<. Generate 1 detailed prompt for an AI image generator to create a letterhead mockup for the brand. Specify brand name, logo, colors, and layout, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a single prompt string."
+                "<<<. Generate 1 detailed prompt for an AI image generator to create a letterhead mockup for the brand. Specify brand name, logo, colors, and layout, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a single prompt string. You MUST respond with a list of strings in angle braces, in this format: ["prompt1", "prompt2"]. '''
             ),
             prompt="Please give me a letterhead prompt as a string.",
             expected_count=1,
@@ -846,6 +855,7 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             userPhoneNumbers=userPhoneNumbers,
             registrationNumber=registrationNumber,
             website=website,
+            brandLogo=brandLogo,
             others=others
         )
 
@@ -854,11 +864,11 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             previously_generated_brand_identity,
             brandId,
             system_prompt_template=(
-                "You are a branding expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
+                '''You are a branding expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
                 "{question_and_answers}"
                 "<<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>"
                 "{previously_generated_brand_identity}"
-                "<<<. Generate 2 detailed prompts for an AI image generator to create t-shirt mockups for the brand. Specify logo placement, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a list of 2 prompts."
+                "<<<. Generate 2 detailed prompts for an AI image generator to create t-shirt mockups for the brand. Specify logo placement, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a list of 2 prompts. You MUST respond with a list of strings in angle braces, in this format: ["prompt1", "prompt2"]. '''
             ),
             prompt="Please give me 2 t-shirt mockup prompts as a list.",
             expected_count=2,
@@ -868,6 +878,7 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             userPhoneNumbers=userPhoneNumbers,
             registrationNumber=registrationNumber,
             website=website,
+            brandLogo=brandLogo,
             others=others
         )
 
@@ -876,11 +887,11 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             previously_generated_brand_identity,
             brandId,
             system_prompt_template=(
-                "You are a branding expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
+                '''You are a branding expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
                 "{question_and_answers}"
                 "<<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>"
                 "{previously_generated_brand_identity}"
-                "<<<. Generate 1 detailed prompt for an AI image generator to create a cap mockup for the brand. Specify logo placement, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a single prompt string."
+                "<<<. Generate 1 detailed prompt for an AI image generator to create a cap mockup for the brand. Specify logo placement, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a single prompt string. You MUST respond with a list of strings in angle braces, in this format: ["prompt1", "prompt2"]. '''
             ),
             prompt="Please give me a cap mockup prompt as a string.",
             expected_count=1,
@@ -890,6 +901,7 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             userPhoneNumbers=userPhoneNumbers,
             registrationNumber=registrationNumber,
             website=website,
+            brandLogo=brandLogo,
             others=others
         )
 
@@ -898,11 +910,11 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             previously_generated_brand_identity,
             brandId,
             system_prompt_template=(
-                "You are a branding expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
+                '''You are a branding expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
                 "{question_and_answers}"
                 "<<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>"
                 "{previously_generated_brand_identity}"
-                "<<<. Generate 1 detailed prompt for an AI image generator to create a signboard mockup for the brand. Specify logo, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a single prompt string."
+                "<<<. Generate 1 detailed prompt for an AI image generator to create a signboard mockup for the brand. Specify logo, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a single prompt string. You MUST respond with a list of strings in angle braces, in this format: ["prompt1", "prompt2"]. '''
             ),
             prompt="Please give me a signboard mockup prompt as a string.",
             expected_count=1,
@@ -912,6 +924,7 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             userPhoneNumbers=userPhoneNumbers,
             registrationNumber=registrationNumber,
             website=website,
+            brandLogo=brandLogo,
             others=others
         )
 
@@ -975,10 +988,12 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             }
         }
         
-        db.update_brand(brandId, "brand_strategy", json.dumps(results["brand_strategy"]))
-        db.update_brand(brandId, "brand_communication", json.dumps(results["brand_communication"]))
-        db.update_brand(brandId, "brand_identity", json.dumps(results["brand_identity"]))
-        db.update_brand(brandId, "marketing_and_social_media_strategy", json.dumps(results["marketing_and_social_media_strategy"]))
+        
+        
+        # db.update_brand(brandId, "brand_strategy", json.dumps(results["brand_strategy"]))
+        # db.update_brand(brandId, "brand_communication", json.dumps(results["brand_communication"]))
+        # db.update_brand(brandId, "brand_identity", json.dumps(results["brand_identity"]))
+        # db.update_brand(brandId, "marketing_and_social_media_strategy", json.dumps(results["marketing_and_social_media_strategy"]))
         
         
         
@@ -996,3 +1011,9 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
                 print(f"Deleted images directory: {images_dir}")
         except Exception as cleanup_error:
             print(f"Error deleting images directory: {cleanup_error}")
+            
+            
+            
+            
+print("\n\n\n\nFinal result\n\n")
+print(generate_final_results("24d0c547-8685-4ee9-95a4-b362da16da3c", "96266589-80bb-4f14-aff9-6baf8cc4dffd", "Kum Randy", "myemail@gmail.com", "652932842", "", "www.toothai.com", "https://logomoose.com/wp-content/uploads/2016/01/18.jpg"))
