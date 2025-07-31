@@ -719,581 +719,239 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
         previous_questions = questions.get_previous_questions(11)
         previous_answers = db.get_previous_answers(answers["answerId"], 11)
         question_and_answers = " ".join([f"Question: {q} Answer: {a}." for q, a in zip(previous_questions, previous_answers)])
+        previously_generated_brand_identity = brand["brand_identity"]
         
         # print(question_and_answers)
         
         
         
-        # ================================== Prepare varaiables for results ==================================
-        
-        brandPatterns = []
-        business_cards = []
-        letterheads = []
-        tshirt_mockups = []
-        cap_mockups = []
-        signboards = []
-
-        brand_name = ""
-        brand_tagline = ""
-
-
-
-        logo_url_1 = "https://example.com/primary_logo.png"
-        logo_url_2 = "https://example.com/secondary_logo.png"
-        logo_url_3 = "https://example.com/alternative_logo.png"
-
-        logo_description_1 = ""
-        logo_description_2 = ""
-        logo_description_3 = ""
-
-        recommended_logo = ""
-
-        logo_variants = {
-            "primary_logo": logo_url_1,
-            "secondary_logo": logo_url_2,
-            "alternative_logo": logo_url_3
-        }
-
-        primary_colors = [
-            {
-                "color_name": "Primary Blue",
-                "hex_value": "#0033cc",
-                "description": "The primary color representing trust and professionalism."
-            },
-            {
-                "color_name": "Secondary Green",
-                "hex_value": "#66cc66",
-                "description": "A secondary color symbolizing growth and wellness."
-            }
-        ]
-
-        secondary_colors = [
-            {
-                "color_name": "Accent Orange",
-                "hex_value": "#ff6600",
-                "description": "An accent color used for highlights and calls to action."
-            },
-            {
-                "color_name": "Background White",
-                "hex_value": "#ffffff",
-                "description": "A clean background color for a fresh look."
-            },
-            {
-                "color_name": "Text Gray",
-                "hex_value": "#333333",
-                "description": "A neutral text color for readability."
-            }
-        ]
-
-
-        typography = [
-            {
-                "font_family": "Open Sans",
-                "font_weight": "Regular",
-                "font_size": "16px",
-                "line_height": "1.5",
-                "description": "The primary font for body text, ensuring readability and clarity."
-            },
-            {
-                "font_family": "Roboto",
-                "font_weight": "Bold",
-                "font_size": "24px",
-                "line_height": "1.2",
-                "description": "A bold font for headings, providing emphasis and impact."
-            }
-        ]
-
-        applications = [
-            {
-                "application_type": "Website",
-                "image_url": "",
-            },{
-                "application_type": "Mug",
-                "image_url": "",
-            }
-        ]
-
-        content_calender = ""
-
-
-
-
-
-        # ================================== Generate information for results  ==================================
-
-        system_prompt = "You are a branding strategy expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + '''<<<. You are supposed to generate the brand strategy  for the user as a json of this format >>> 
-    {
-        "our_purpose": {
-            "title": "Our Purpose",
-            "what_our_customers_mean_to_us": sss,
-            "we_believe_in_something_bigger_than_ourselves": sss,
-            "purpose_statement": sss,
-        },
-        "our_vision": {
-            "our_vision_is_bright": sss,
-        },
-        "our_mission": {
-            "we_are_committed_to": sss,
-        },
-        "our_values": {
-            "how_we_do_wellness_business": sss,
-            "values": lll
-        }
-    } <<< Make sure to generate the values for the different parts. Replace sss with the values you generate and lll with a list of values. Make sure you replace sss with strings. Do not use any other format or add any other information. Make sure to generate the values for the different parts, using information from the questions and answers. Make sure to respect the json format and do not add any other information. Be more elaborate with the responses, dont be too brief. Make it sound legit and good. Your resonses should not just be single sentences. Try to write a paragraph of valuable information sometimes. Sound more human as possible. Make it serious and not just rushed. For the mission  and vision, you MUST not write more than a sentence, make the mission and vision straight to the point.'''
-            
-        prompt = "Please give me my branding strategy as json, and make sure to fill the information in the json as pecified"
-
-        passed = False
-        while passed == False:
-            print("Processing section ...")
+        def generate_identity_assets(
+            question_and_answers,
+            previously_generated_brand_identity,
+            brandId,
+            system_prompt_template,
+            prompt,
+            expected_count,
+            cloudinary_folder,
+            userName=None,
+            userEmail=None,
+            userPhoneNumbers=None,
+            registrationNumber=None,
+            website=None,
+            others=None
+        ):
+            # Add user info to the system prompt for more context
+            user_info = (
+                f"\nUser Info:\n"
+                f"Name: {userName}\n"
+                f"Email: {userEmail}\n"
+                f"Phone Numbers: {userPhoneNumbers}\n"
+                f"Registration Number: {registrationNumber}\n"
+                f"Website: {website}\n"
+                f"Other Info: {others}\n"
+            )
+            system_prompt = system_prompt_template.format(
+                question_and_answers=question_and_answers,
+                previously_generated_brand_identity=str(previously_generated_brand_identity)
+            ) + user_info
+            print("\n\nProcessing section ...")
             response = openAI.get_text_prediction(system_prompt, prompt)
-            response = clean_and_parse_json(response)
-            # Define the expected structure
-            expected_structure = {
-                "our_purpose": ["title", "what_our_customers_mean_to_us", "purpose_statement"],
-                "our_vision": ["our_vision_is_bright"],
-                "our_mission": ["we_are_committed_to"],
-                "our_values": ["how_we_do_wellness_business", "values"]
-            }
-            
-            if check_keys(response, expected_structure):
-                what_our_customers_mean_to_us = response["our_purpose"]["what_our_customers_mean_to_us"]
-                we_believe_in_something_bigger_than_ourselves = response["our_purpose"]["we_believe_in_something_bigger_than_ourselves"]
-                purpose_statement = response["our_purpose"]["purpose_statement"]
-                our_vision_is_bright = response["our_vision"]["our_vision_is_bright"]
-                we_are_committed_to = response["our_mission"]["we_are_committed_to"]
-                how_we_do_wellness_business = response["our_values"]["how_we_do_wellness_business"]
-                values = response["our_values"]["values"]
-                passed = True
-                print("Section success \n\n")
-            else:
-                print("Error in response format. Retrying...")
-                
-                
-                
-                
-                
-                
-        
-                
-                
-        system_prompt = "You are a customer profile expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + '''<<<. You are supposed to generate a sample customer profile for the brand as a json of this format >>> 
-            {
-                "name": sss,
-                "demographics": sss,
-                "psychographics": sss,
-                "personality": sss,
-                "fears": sss,
-                "desires": sss,
-                "challenges_and_pain_points": sss,
-            } <<< Make sure to generate the values for the different parts. Replace sss with the string values you generate. Make sure you replace sss with strings. Do not use any other format or add any other information. Make sure to generate the values for the different parts, using information from the questions and answers. Make sure to respect the json format and do not add any other information. Be more elaborate with the responses, dont be too brief. Make it sound legit and good. Your resonses should not just be single sentences. Try to write a paragraph of valuable information sometimes. Sound more human as possible. Make it serious and not just rushed'''
-            
-        prompt = "Please give me a sample customer profile as json, and make sure to fill the information in the json as pecified"
-        
-        passed = False
-        while passed == False:
-            print("Processing section ...")
-            response = openAI.get_text_prediction(system_prompt, prompt)
-            response = clean_and_parse_json(response)
-            # Define the expected structure
-            expected_structure = {
-                "name": [],
-                "demographics": [],
-                "psychographics": [],
-                "personality": [],
-                "fears": [],
-                "desires": [],
-                "challenges_and_pain_points": []
-            }
-            
-            if check_keys(response, expected_structure):
-                position_name = response["name"]
-                demographics = response["demographics"]
-                psychographics = response["psychographics"]
-                personality = response["personality"]
-                fears = response["fears"]
-                desires = response["desires"]
-                challenges_and_pain_points = response["challenges_and_pain_points"]
-                passed = True
-                print("Section success \n\n")
-            else:
-                print("Error in response format. Retrying...")
-                    
-                
-                
-                
-                
-                
-                
-                
-                
-            system_prompt = "You are a competitor profile expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + "<<< Be more elaborate with the responses, dont be too brief. Make it sound legit and good. Your resonses should not just be single sentences. Try to write a paragraph of valuable information. Sound more human as possible. Make it serious and not just rushed"
-                    
-            prompt = "Please give me a profile of my top competitors as a string. Do not style it. Do not add any syntax. Just a paragraph of text. No labeling please."
-            
-            print("Processing section ...")
-            response = openAI.get_text_prediction(system_prompt, prompt)
-            top_competitors = response
-            print("Section success \n\n")
-                    
-                
-                
-                 
-                
-                
-                
-                
-                
-        system_prompt = "You are a branding expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + '''<<<. You are supposed to generate the reasons that make the brand different as a json of this format >>> 
-    {
-        "the_difference_we_provide": the_difference_we_provide,
-        "positioning_statement": position_statement,
-    }
-    <<< Make sure to generate the values for the different parts. Replace sss with the string values you generate. Make sure you replace sss with strings. Do not use any other format or add any other information. Make sure to generate the values for the different parts, using information from the questions and answers. Make sure to respect the json format and do not add any other information. Be more elaborate with the responses, dont be too brief. Make it sound legit and good. Your resonses should not just be single sentences. Try to write a paragraph of valuable information sometimes. Sound more human as possible. Make it serious and not just rushed'''
-            
-        prompt = "Please give me a sample what makes us different as json, and make sure to fill the information in the json as specified"
-
-        passed = False
-        while passed == False:
-            print("Processing section ...")
-            response = openAI.get_text_prediction(system_prompt, prompt)
-            response = clean_and_parse_json(response)
-            # Define the expected structure
-            expected_structure = {
-                "the_difference_we_provide": [],
-                "positioning_statement": []
-            }
-            
-            if check_keys(response, expected_structure):
-                the_difference_we_provide = response["the_difference_we_provide"]
-                position_statement = response["positioning_statement"]
-                passed = True
-                print("Section success \n\n")
-            else:
-                print("Error in response format. Retrying...")
-                
-                
-                
-                
-                
-                
-                
-                
-                
-        system_prompt = "You are a brand communication expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + '''<<<. You are supposed to generate the communication for the brand as a json of this format >>> 
-    {
-        "brand_name": sss,
-        "brand_tagline": sss,
-        "primary_core_message": {
-            "who_we_serve": sss,
-            "where_they_need_help": sss,
-            "the_key_benefits_they_get": sss,
-            "their_market_alternative": sss,
-            "our_key_differences": sss,
-        },
-    } <<< Make sure to generate the values for the different parts. Replace sss with the string values you generate. Make sure you replace sss with strings. Do not use any other format or add any other information. Make sure to generate the values for the different parts, using information from the questions and answers. Make sure to respect the json format and do not add any other information. Be more elaborate with the responses, dont be too brief. Make it sound legit and good. Your resonses should not just be single sentences. Try to write a paragraph of valuable information sometimes. Sound more human as possible. Make it serious and not just rushed'''
-            
-        prompt = "Please give me the communication for my brand as json, and make sure to fill the information in the json as pecified"
-        
-        passed = False
-        while passed == False:
-            print("Processing section ...")
-            response = openAI.get_text_prediction(system_prompt, prompt)
-            response = clean_and_parse_json(response)
-            # Define the expected structure
-            expected_structure = {
-                "brand_name": [],
-                "brand_tagline": [],
-                "primary_core_message": ["who_we_serve", "where_they_need_help", "the_key_benefits_they_get", "their_market_alternative", "our_key_differences"]
-            }
-            
-            if check_keys(response, expected_structure):
-                brand_name = response["brand_name"]
-                brand_tagline = response["brand_tagline"]
-                who_we_serve = response["primary_core_message"]["who_we_serve"]
-                where_they_need_help = response["primary_core_message"]["where_they_need_help"]
-                the_key_benefits_they_get = response["primary_core_message"]["the_key_benefits_they_get"]
-                their_market_alternative = response["primary_core_message"]["their_market_alternative"]
-                our_key_differences = response["primary_core_message"]["our_key_differences"]
-                passed = True
-                print("Section success \n\n")
-            else:
-                print("Error in response format. Retrying...")
-                
-                
-                
-                
-                
-                
-                
-                
-                
-        system_prompt = "You are a brand identity expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + '''<<<. You are supposed to generate the communication for the brand as a json of this format >>> 
-    {
-        "about_the_brand": sss,
-        "logos": [
-            {
-                "prompt": sss,
-                "description": sss
-            },
-            {
-                "prompt": sss,
-                "description": sss
-            },
-            {
-                "prompt": sss,
-                "description": sss
-            }
-        ],
-        "primary_colors": lll (list format sample: {
-                "color_name": "Dark Blue",
-                "hex_value": "#0033cc",
-                "description": "The primary color representing trust and professionalism."
-            }), 
-        "secondary_colors": lll (list format sample: {
-                "color_name": "Accent Orange",
-                "hex_value": "#ff6600",
-                "description": "An accent color used for highlights and calls to action."
-            }),
-        "typography": lll (list format sample: {
-            "font_family": "Open Sans",
-            "font_weight": "Regular",
-            "font_size": "16px",
-            "line_height": "1.5",
-            "description": "The primary font for body text, ensuring readability and clarity."
-        }),
-        "applications": lll (list sample: {
-            "application_type": "Tshirt",
-            "prompt": sss,
-        })
-    } <<< For the logo prompts, make sure to write a detailed description of the logo for the best result, straight forward detailed instructions that will yield the best result for an AI image generation model to use, the logos should be very professional, creative and attrative, no simple logos or empty logos, just logos that are straight up creative and very good, either with an icon, or decorated initials or any other, be creative, specify the brand name, also mention the tagline, if necessary, not all logos should have a tagline under. Brand name: '''+brand_name+''', tagline: '''+brand_tagline+'''. The application prompt is to illustrate a couple of items like shirts, mugs or the like, with the logo on them, put between 3 to 5 applications, be very detailed about where to put the logo, size, position and the like, on the object, we are passing the logo along with this prompt so be direct and just tell the ai what to do with the logo, the application prompt is standalone, and carries all details, it is supposed to prompt the model to generate the item, describing the item and its evironment in full detail, as well as where to put the logo, do not use words that other AI's will think are sensitive. Make sure to specify presenation styles for the applications, like cinematic, studio lighting, high quality, professional photography, commercial shot and the like... Add as many as possible to make the applications look visually stunning and well presented. Add a lot of details to the applications prompt. Mak sure to put all extremely detailed explanations and styles in the application prompts. Make sure each font object in the list of fonts has just one font. Make sure to generate the values for the different parts. Replace sss with the string values you generate and lll with a list. Make sure you replace sss with strings. Do not use any other format or add any other information. Make sure to generate the values for the different parts, using information from the questions and answers. Make sure to respect the json format and do not add any other information. Be more elaborate with the responses, dont be too brief. Make it sound legit and good. Your resonses should not just be single sentences. Try to write a paragraph of valuable information sometimes. Sound more human as possible. Make it serious and not just rushed'''
-            
-        prompt = "Please give me the identity for my brand as json, and make sure to fill the information in the json as pecified"
-        # response = openAI.get_text_prediction(system_prompt, prompt)
-        # print(response)
-        # raise Exception("Error")
-        logo_prompt1 = ""
-        logo_prompt2 = ""
-        logo_prompt3 = ""
-        
-        passed = False
-        max_retries = 3
-        retry_count = 0
-        
-        brand_identity = ""
-        while passed == False and retry_count < max_retries:
-            print(f"Processing section (attempt {retry_count + 1}/{max_retries})...")
             try:
-                raw_response = openAI.get_text_prediction(system_prompt, prompt)
-                print(f"Raw API response type: {type(raw_response)}")
-                print(f"Raw API response: {raw_response[:200]}..." if raw_response else "Raw API response: None")
-                
-                response = clean_and_parse_json(raw_response)
-                print(f"Parsed response: {response}")
-                brand_identity = response
-                
-                # Define the expected structure
-                expected_structure = {
-                    "about_the_brand": [],
-                    "logos": ["prompt", "description"],
-                    "primary_colors": [],
-                    "secondary_colors": [],
-                    "typography": [],
-                    "applications": []
-                }
-                
-                if response is None:
-                    print("Error: API response could not be parsed as JSON")
-                    retry_count += 1
-                    continue
+                prompts = json.loads(response.strip())
+                if not isinstance(prompts, list):
+                    prompts = [prompts]
+            except Exception:
+                prompts = [response.strip()]
+            assets = []
+            for idx, item_prompt in enumerate(prompts[:expected_count]):
+                try:
+                    img = openAI.generate_image(item_prompt)
+                    if img and os.path.isfile(img):
+                        upload_result = cloudinary_utils.upload_image_from_file(
+                            img, folder=f"toothai/{brandId}/{cloudinary_folder}"
+                        )
+                        url = upload_result["secure_url"] if upload_result and "secure_url" in upload_result else img
+                    else:
+                        url = img
+                    assets.append({"prompt": item_prompt, "image_url": url})
+                    print(f"Generated: {url}")
+                except Exception as e:
+                    print(f"Error generating {cloudinary_folder} {idx+1}: {e}")
                     
-                if check_keys(response, expected_structure):
-                    about_the_brand = response["about_the_brand"]
-                    # Extract logo descriptions and prompts
-                    logo_description_1 = response["logos"][0]["description"]
-                    logo_description_2 = response["logos"][1]["description"]
-                    logo_description_3 = response["logos"][2]["description"]
-                    
-                    logo_prompt1 = response["logos"][0]["prompt"]
-                    logo_prompt2 = response["logos"][1]["prompt"]
-                    logo_prompt3 = response["logos"][2]["prompt"]
-                    
-                    # Optionally, you could use the prompts for logo generation elsewhere
-                    primary_colors = response["primary_colors"]
-                    secondary_colors = response["secondary_colors"]
-                    typography = response["typography"]
-                    applications = response["applications"]
-                    passed = True
-                    print("Section success \n\n")
-                else:
-                    print("Error in response format. Retrying...")
-                    retry_count += 1
-            except Exception as e:
-                print(f"Exception during processing: {e}")
-                retry_count += 1
-        
-        if not passed:
-            print(f"Failed to process section after {max_retries} attempts. Using default values.")
-            # Set default values to prevent further errors
-            about_the_brand = "Default brand description"
-            logo_description_1 = "Default logo description 1"
-            logo_description_2 = "Default logo description 2"
-            logo_description_3 = "Default logo description 3"
-            logo_prompt1 = "A simple, professional logo design"
-            logo_prompt2 = "A modern, minimalist logo design"
-            logo_prompt3 = "A creative, distinctive logo design"
-            primary_colors = []
-            secondary_colors = []
-            typography = []
-            applications = []
-        # ...existing code...
-
-
-        # Generate logos and upload to Cloudinary
-        try:
-            print("Generating logos and uploading to Cloudinary...")
-            logo_url_1 = imagen.generate_image(logo_prompt1, public_id=f"toothai/{brandId}/logo_1")
-            logo_url_2 = imagen.generate_image(logo_prompt2, public_id=f"toothai/{brandId}/logo_2")
-            logo_url_3 = imagen.generate_image(logo_prompt3, public_id=f"toothai/{brandId}/logo_3")
-            
-            # Check if any logos failed to generate
-            if not logo_url_1:
-                print("Warning: Logo 1 generation failed, using placeholder")
-                logo_url_1 = "https://via.placeholder.com/400x200?text=Logo+1"
-            if not logo_url_2:
-                print("Warning: Logo 2 generation failed, using placeholder")
-                logo_url_2 = "https://via.placeholder.com/400x200?text=Logo+2"
-            if not logo_url_3:
-                print("Warning: Logo 3 generation failed, using placeholder")
-                logo_url_3 = "https://via.placeholder.com/400x200?text=Logo+3"
-                
-            print("Logo generation completed successfully")
-        except Exception as e:
-            print(f"Error during logo generation: {e}")
-            print("Using placeholder logos")
-            logo_url_1 = "https://via.placeholder.com/400x200?text=Logo+1"
-            logo_url_2 = "https://via.placeholder.com/400x200?text=Logo+2"
-            logo_url_3 = "https://via.placeholder.com/400x200?text=Logo+3"
-            
-            
-        # Get logo recommendation
-        if logo_url_1 != "https://via.placeholder.com/400x200?text=Logo+1":
-            logo_file_1 = functions.download_image(logo_url_1)
-            logo_file_2 = functions.download_image(logo_url_2)
-            logo_file_3 = functions.download_image(logo_url_3)
-            
-            logo_with_label_1 = textOnImage.add_text_top_left(logo_file_1, "Logo 1")
-            logo_with_label_2 = textOnImage.add_text_top_left(logo_file_2, "Logo 2")
-            logo_with_label_3 = textOnImage.add_text_top_left(logo_file_3, "Logo 3")
-            
-            logo_options = [logo_with_label_1, logo_with_label_2, logo_with_label_3]
-            
-            system_prompt = "You are a brand identity expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + '<<<. I just attached 3 logo options for the brand. I need you to recommend the best logo for the brand. Just out either "Logo 1", "Logo 2" or "Logo 3" as the best logo for the brand. Do not add any other information, just the name of the logo. Make sure to not say say any other thing, make sure to output just the name of the logo, and do not say anything extra. Make sure to make just one choice'
-            prompt = "Please give me the best logo for the brand"
-            print("Processing section ...")
-            response = openAI.get_text_prediction(system_prompt, prompt, image_input=logo_options)
-            recommended_logo = response.strip()
-            print(recommended_logo)
             print("Section success \n\n")
-            
-            
-        
-        # Design logo variants
-        system_prompt = "You are a brand identity expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + '<<<. Here are the primary and secondary colors for the brand >>> Primary colors: '+str(primary_colors)+'. Secondary colors: '+str(secondary_colors)+'<<<. I need you to design logo variants for the brand, using the attached recommended logo. You have to write a list of 3 prompts prompting an AI image generation model to generate 3 completely different logo varients using the attached logo, in the format: ["prompt 1", "prompt 2", "prompt 3"]. The varients need to be the exact same logo, but with different colors, styles, and designs. Make sure Insist in the prompt that it should be a varient of the same logo. Add every detailed instruction in the prompt. Make sure to use the primary and secondary colors of the brand in the design. Make sure to use words like, clean, high quality and the like in the prompts where needed to make it very good. Make sure to use the attached logo as a base for the design. Make sure to not say any other thing, make sure to output just the list of prompts, and do not say anything extra. Make sure to not style anywhere in the prompts with **, ---, #### or anything similar'
-        prompt = "Please give me the logo variants for the brand as a list of prompts"
-        
-        print("Processing section ...")
-        
-        recommended_logo_url = ""
-        if recommended_logo == "Logo 1":
-            recommended_logo_file = logo_file_1
-            recommended_logo_url = logo_url_1
-        elif recommended_logo == "Logo 2":
-            recommended_logo_file = logo_file_2
-            recommended_logo_url = logo_url_2
-        elif recommended_logo == "Logo 3":
-            recommended_logo_file = logo_file_3
-            recommended_logo_url = logo_url_3
-            
-        recommended_logo = recommended_logo_url
-        print(f"\n\nRecommended logo url: {recommended_logo}")
+            return assets
 
-        response = openAI.get_text_prediction(system_prompt, prompt, image_input=[recommended_logo_file])
-        response = response.strip()
-        logo_variants_prompts = response
-        print(f"\n\nLogo variants prompts: {logo_variants_prompts}")
-        logo_variants_prompts = json.loads(logo_variants_prompts)
-        
-        # print(f"\n\nLogo variants prompts: {logo_variants_prompts}")
-        # print("\n\n")
-        logo_variants = []
-        for prompt in logo_variants_prompts:
-            new_varient = openAI.generate_image(prompt, [recommended_logo_file])
-            print(f"Generated logo variant: {new_varient}")
-            # Upload the variant to Cloudinary if it is a file path
-            variant_url = None
-            if new_varient and os.path.isfile(new_varient):
-                try:
-                    upload_result = cloudinary_utils.upload_image_from_file(new_varient, folder=f"toothai/{brandId}/logo_variants")
-                    if upload_result and "secure_url" in upload_result:
-                        variant_url = upload_result["secure_url"]
-                    else:
-                        print(f"Failed to upload variant to Cloudinary: {upload_result}")
-                except Exception as e:
-                    print(f"Error uploading variant to Cloudinary: {e}")
-            else:
-                variant_url = new_varient  # fallback, may be a URL or error string
-            logo_variants.append(variant_url)
-            
-        print("Logo Variant section success \n\n")
-        
-        
-        # Generate applications
-        new_applications_list = []
-        for application in applications:
-            application_type = application["application_type"]
-            application_prompt = application["prompt"]
-            
-            # Generate the application image
-            new_application_image = openAI.generate_image(application_prompt, [recommended_logo_file])
-            # Upload the application image to Cloudinary if it is a file path
-            application_url = None
-            if new_application_image and os.path.isfile(new_application_image):
-                try:
-                    upload_result = cloudinary_utils.upload_image_from_file(new_application_image, folder=f"toothai/{brandId}/applications")
-                    if upload_result and "secure_url" in upload_result:
-                        application_url = upload_result["secure_url"]
-                    else:
-                        print(f"Failed to upload application image to Cloudinary: {upload_result}")
-                except Exception as e:
-                    print(f"Error uploading application image to Cloudinary: {e}")
-            else:
-                application_url = new_application_image  # fallback, may be a URL or error string
-            # Create a new application object
-            new_application = {
-                "application_type": application_type,
-                "image_url": application_url
-            }
-            print(f"Generated application: {new_application}")
-            new_applications_list.append(new_application)
-            
-            
-        applications = new_applications_list
+        # Usage for each asset type, now passing user info:
 
+        brandPatterns = generate_identity_assets(
+            question_and_answers,
+            previously_generated_brand_identity,
+            brandId,
+            system_prompt_template=(
+                "You are a brand identity expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
+                "{question_and_answers}"
+                "<<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>"
+                "{previously_generated_brand_identity}"
+                "<<<. Generate 3 unique, visually appealing brand pattern prompts for an AI image generator. Each pattern should reflect the brand's personality, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a list of 3 detailed prompts. Do not add any extra text or formatting."
+            ),
+            prompt="Please give me 3 brand pattern prompts as a list.",
+            expected_count=3,
+            cloudinary_folder="brand_patterns",
+            userName=userName,
+            userEmail=userEmail,
+            userPhoneNumbers=userPhoneNumbers,
+            registrationNumber=registrationNumber,
+            website=website,
+            others=others
+        )
 
-        # Generate content calender
-        system_prompt = "You are a brand content calender expert. Here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + "<<<, and here's info about our brand identity >>> "+str(brand_identity)+" <<<. I need you to write a content calender for the company for the entire month of june 2025, from the first week to the last. First start by listing all the national and international events that Cameroonians usually celebrate. Create a content calender as a csv of the format >>> Date | Event | Design concept | Caption <<< Make sure to use !@! as csv special characters to seperate columns. Make sure to specify the date, Event, design concept, caption. Make sure tto mention the name of the week in the dates. The design concept is a clearly detailed description of the design, defining the style, colours, Text, and every other detail. The caption should be more fun and engaging. We post on Happy new weaks on mondays, happy weekend on saturdays, and on major events. We also post from time to time to advertise a service, product, offer or a quiz, game, or anything to engage our audience. Make sure to always mix post with some marketing stuff in a smart way to pass message and still communicate about the brand, product or service. Make sure to cover just the specified month and nothing more or less. Be more elaborate with the responses, dont be too brief. Make it sound legit and good. Your resonses should not just be single sentences. Try to write a paragraph of valuable information. Sound more human as possible. Make it serious and not just rushed. Make sure to not say say any other thing, make sure to output just the csv, and do not say anything extra. Do not style anywhere in the csv with **, ---, #### or anything similar"
-                
-        prompt = "Please give me a content calender for the specified month"
-        
-        print("Processing section ...")
+        business_cards = generate_identity_assets(
+            question_and_answers,
+            previously_generated_brand_identity,
+            brandId,
+            system_prompt_template=(
+                "You are a branding expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
+                "{question_and_answers}"
+                "<<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>"
+                "{previously_generated_brand_identity}"
+                "<<<. Generate 2 highly detailed prompts for an AI image generator to create business card mockups for the brand. Each prompt should specify the brand name, tagline, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a list of 2 prompts. No extra text."
+            ),
+            prompt="Please give me 2 business card prompts as a list.",
+            expected_count=2,
+            cloudinary_folder="business_cards",
+            userName=userName,
+            userEmail=userEmail,
+            userPhoneNumbers=userPhoneNumbers,
+            registrationNumber=registrationNumber,
+            website=website,
+            others=others
+        )
+
+        letterheads = generate_identity_assets(
+            question_and_answers,
+            previously_generated_brand_identity,
+            brandId,
+            system_prompt_template=(
+                "You are a branding expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
+                "{question_and_answers}"
+                "<<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>"
+                "{previously_generated_brand_identity}"
+                "<<<. Generate 1 detailed prompt for an AI image generator to create a letterhead mockup for the brand. Specify brand name, logo, colors, and layout, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a single prompt string."
+            ),
+            prompt="Please give me a letterhead prompt as a string.",
+            expected_count=1,
+            cloudinary_folder="letterheads",
+            userName=userName,
+            userEmail=userEmail,
+            userPhoneNumbers=userPhoneNumbers,
+            registrationNumber=registrationNumber,
+            website=website,
+            others=others
+        )
+
+        tshirt_mockups = generate_identity_assets(
+            question_and_answers,
+            previously_generated_brand_identity,
+            brandId,
+            system_prompt_template=(
+                "You are a branding expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
+                "{question_and_answers}"
+                "<<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>"
+                "{previously_generated_brand_identity}"
+                "<<<. Generate 2 detailed prompts for an AI image generator to create t-shirt mockups for the brand. Specify logo placement, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a list of 2 prompts."
+            ),
+            prompt="Please give me 2 t-shirt mockup prompts as a list.",
+            expected_count=2,
+            cloudinary_folder="tshirt_mockups",
+            userName=userName,
+            userEmail=userEmail,
+            userPhoneNumbers=userPhoneNumbers,
+            registrationNumber=registrationNumber,
+            website=website,
+            others=others
+        )
+
+        cap_mockups = generate_identity_assets(
+            question_and_answers,
+            previously_generated_brand_identity,
+            brandId,
+            system_prompt_template=(
+                "You are a branding expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
+                "{question_and_answers}"
+                "<<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>"
+                "{previously_generated_brand_identity}"
+                "<<<. Generate 1 detailed prompt for an AI image generator to create a cap mockup for the brand. Specify logo placement, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a single prompt string."
+            ),
+            prompt="Please give me a cap mockup prompt as a string.",
+            expected_count=1,
+            cloudinary_folder="cap_mockups",
+            userName=userName,
+            userEmail=userEmail,
+            userPhoneNumbers=userPhoneNumbers,
+            registrationNumber=registrationNumber,
+            website=website,
+            others=others
+        )
+
+        signboards = generate_identity_assets(
+            question_and_answers,
+            previously_generated_brand_identity,
+            brandId,
+            system_prompt_template=(
+                "You are a branding expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
+                "{question_and_answers}"
+                "<<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>"
+                "{previously_generated_brand_identity}"
+                "<<<. Generate 1 detailed prompt for an AI image generator to create a signboard mockup for the brand. Specify logo, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a single prompt string."
+            ),
+            prompt="Please give me a signboard mockup prompt as a string.",
+            expected_count=1,
+            cloudinary_folder="signboards",
+            userName=userName,
+            userEmail=userEmail,
+            userPhoneNumbers=userPhoneNumbers,
+            registrationNumber=registrationNumber,
+            website=website,
+            others=others
+        )
+
+        # ========== Generate Social Media Content ==========
+        social_media_json_structure = {
+            "ready_made_posts": [
+                {
+                    "caption": "string",
+                    "design_concept": "string"
+                }
+            ],
+            "ad_copies": [
+                "string"
+            ],
+            "relevant_marketing_strategies": [
+                "string"
+            ]
+        }
+        system_prompt = (
+            "You are a social media content expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
+            + question_and_answers +
+            "<<<. Generate social media content for the brand in the following JSON structure:\n"
+            + json.dumps(social_media_json_structure, indent=2) +
+            "\n- ready_made_posts: 6 objects, each with a 'caption' and a 'design_concept'.\n"
+            "- ad_copies: 3 creative ad copy strings.\n"
+            "- relevant_marketing_strategies: 3 relevant marketing strategies as strings.\n"
+            "Do not add any extra text or formatting. Only output valid JSON."
+        )
+        prompt = "Please give me the social media content as JSON in the specified structure."
         response = openAI.get_text_prediction(system_prompt, prompt)
-        content_calender = response
-        print("Section success \n\n")
-
-
-
-
+        try:
+            social_media_content = json.loads(response.strip())
+            ready_made_posts = social_media_content.get("ready_made_posts", [])
+            ad_copies = social_media_content.get("ad_copies", [])
+            relevant_marketing_strategies = social_media_content.get("relevant_marketing_strategies", [])
+        except Exception as e:
+            print(f"Error parsing social media content: {e}")
+            ready_made_posts = []
+            ad_copies = []
+            relevant_marketing_strategies = []
 
 
         # ================================== Prepare results object  ==================================
@@ -1311,14 +969,12 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
                 "signboards": signboards,
             },
             "social_media_content": {
-                "ready_made_posts": "",
-                "ad_copies": "",
-                "relevant_marketing_strategies": ""
+                "ready_made_posts": ready_made_posts,
+                "ad_copies": ad_copies,
+                "relevant_marketing_strategies": relevant_marketing_strategies
             }
         }
         
-        db.update_brand(brandId, "name", brand_name)
-        db.update_brand(brandId, "logo", recommended_logo_url)
         db.update_brand(brandId, "brand_strategy", json.dumps(results["brand_strategy"]))
         db.update_brand(brandId, "brand_communication", json.dumps(results["brand_communication"]))
         db.update_brand(brandId, "brand_identity", json.dumps(results["brand_identity"]))
