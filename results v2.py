@@ -931,10 +931,7 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
         # ========== Generate Social Media Content ==========
         social_media_json_structure = {
             "ready_made_posts": [
-                {
-                    "caption": "string",
-                    "design_concept": "string"
-                }
+                "string"
             ],
             "ad_copies": [
                 "string"
@@ -944,14 +941,238 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             ]
         }
         system_prompt = (
-            "You are a social media content expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
-            + question_and_answers +
-            "<<<. Generate social media content for the brand in the following JSON structure:\n"
-            + json.dumps(social_media_json_structure, indent=2) +
-            "\n- ready_made_posts: 6 objects, each with a 'caption' and a 'design_concept'.\n"
+            f'''You are a social media content expert. Here is a list of questions we asked the user and here are the answers they gave: >>>
+            {question_and_answers} 
+            <<<. Generate social media content for the brand in the following JSON structure:
+            {json.dumps(social_media_json_structure, indent=2)}
+            - ready_made_posts: 6 objects, each with a 'caption' and a 'design_concept'.\n"
             "- ad_copies: 3 creative ad copy strings.\n"
             "- relevant_marketing_strategies: 3 relevant marketing strategies as strings.\n"
-            "Do not add any extra text or formatting. Only output valid JSON."
+            "Do not add any extra text or formatting. Only output valid JSON.
+            
+            This is a sample post:
+            1-  Hello World, Meet Lumirural 🌍✨
+            Say hello to Lumirural — a bold new initiative built to light up lives, one village at a time.
+            In many rural communities, nightfall means silence, stillness, and struggle. No lights to read. No safe path to walk. No way to keep going.
+            We created Lumirural to change that.
+            At [Insert Founder's Name]’s core vision was a simple question:
+            👉 What if every household, no matter how remote, had access to affordable, clean, and reliable light?
+            That question sparked a movement — one that’s now empowering families, improving education, and making communities safer through sustainable solar-powered lighting.
+            We’re not just selling torches.
+            We’re giving people the ability to live, learn, work, and thrive after dark.
+            💛 Follow us to join the journey.
+            🌱 Tell a friend in need.
+            🔦 Let's bring light to where it matters most.
+            #Lumirural #LightingUpLives #SolarForAll #CommunityPower
+
+            2- 👥 Meet the Visionaries Behind Lumirural 🔦🌍
+            Behind the scenes of Lumirural is a team passionate about bridging the energy gap in underserved communities across Cameroon and Africa.
+            Led by [Founder Name], [brief title e.g. social entrepreneur, engineer, dreamer], Lumirural was born from a deep desire to make sure that no child studies in darkness, and no family is left behind just because they live off the grid.
+            Alongside [Team Member 1], [Team Member 2], and an ever-growing community of thinkers, doers, and believers, our mission is simple but powerful:
+            Bring light to places the world often overlooks.
+            We believe in sustainable energy.
+            We believe in community power.
+            We believe it’s time for rural Africa to shine — literally.
+            ✨ This is just the beginning.
+            Come along, share our story, and let’s brighten the future together.
+            #MeetTheTeam #Lumirural #SocialEnergy #FoundersWithPurpose #SolarAfrica
+
+            3- 💡 No Power. No Progress.
+            That’s the Problem Lumirural is Solving.
+            Tired of struggling with darkness in rural homes, kids studying under candlelight, and families closing their day at sunset? So were we.
+            That’s why we created Lumirural — to bring affordable, clean, and safe solar-powered light to communities that have been left in the dark for far too long.
+            Every evening, millions of people across Cameroon and Africa are forced to choose between expensive fuel, dangerous kerosene lamps, or complete darkness.
+            We said enough is enough.
+            ✅ With Lumirural, children can study at night
+            ✅ Small shops can stay open after sunset
+            ✅ Women and families can feel safe walking outside
+            ✅ Life doesn’t have to stop just because the sun sets
+            We’re lighting homes — but more than that, we’re lighting hope.
+            Join us as we illuminate the path forward.
+            #TheProblemWeSolve #Lumirural #LightUpAfrica #SolarSolutions #EnergyForAll
+
+
+
+            4- 🔦 A Closer Look at What’s Lighting Up Soon 👀
+            Say hello to the tools of transformation — built by Lumirural to power every home, every family, every dream.
+            🌞 Solar Lighting Kits
+            Affordable, durable, and designed for rural realities — our kits include lights, USB ports, and long-lasting solar panels for families, students, and small businesses.
+            📱 Rechargeable Lamps with USB Ports
+            For households with zero access to electricity. Charge your phone. Light your path. All in one.
+            🔋 Power Stations for Community Use
+            Bigger solutions for schools, churches, and health centers — helping entire communities thrive after dark.
+            💼 Pay-as-You-Go Solar Options
+            Energy shouldn’t be a luxury. Our flexible payment plans make light accessible to all.
+            From farm to classroom, market to maternity ward, Lumirural is bringing light, safety, and possibility to places the grid forgot.
+            This isn’t just electricity —
+            It’s dignity, freedom, and a future that stays on after dark.
+            📸 Swipe to see what’s coming soon and how you can be part of the change.
+            #Lumirural #OurProducts #SolarSolutions #LightChangesEverything #EnergyForDevelopment
+
+
+
+
+
+
+            5- 🛠️ The Work Behind the Light ✨
+            It’s been months of late nights, field visits, dusty roads, power cuts, bold ideas, and real conversations.
+            From sketching designs on scrap paper to testing prototypes in remote villages...
+            From team brainstorms under torchlight to meeting families who inspired everything we’re building...
+            Here’s a sneak peek behind our launch:
+            📸 [Insert photos or videos: packaging, production, team at work, first installations]
+            At Lumirural, we’re not just assembling solar kits —
+            We’re co-creating a future where every child can read at night, where mothers can cook safely, and where families no longer fear the dark.
+            This journey has been real, raw, and full of purpose.
+            And now, we’re ready to shine.
+            Thank you for being part of the story.
+            The lights are coming on — and we’re just getting started.
+            #BehindLumirural #MakingOf #StartupJourney #LightInTheDark #SolarAfrica #BTSLaunch
+
+            6- 💬 Real Stories. Real Impact.
+            Here’s what people are already saying about Lumirural…
+            🗣️ “Before this light, my children couldn’t read after 6pm. Now, they do homework at night — and even help me prepare for market.”
+            — Mama Elise, Small Business Owner, Babadjou
+            🗣️ “I used to charge my phone once a week at a shop far away. Now I charge it at home and even make small money letting others charge theirs.”
+            — Tata Collins, Farmer, Batibo
+            🗣️ “This isn’t just light  it’s freedom. It’s security. It’s dignity.”
+            — Community Health Worker, Ndop
+            🌍 From households to health centers, the difference is already being felt — and we’re only getting started.
+            Because when you give people light, you give them time, safety, and a fighting chance.
+            ➡️ Want to be part of the change?
+            DM us to get Lumirural in your home or community.
+            #TestimonialTuesday #LumiruralVoices #SolarWorks #ImpactInRealLife #LightForChange
+            
+            
+            
+            
+            
+            Here is a sample marketing strategy:
+            
+            ✅ 1. Community-Based Demonstrations (On-Ground Activation)
+            Why it works: Most of your customers may be unfamiliar with solar tech or skeptical of promises. Seeing is believing.
+            What to do:
+            Partner with local chiefs, churches, health centers, and schools to organize “Light Up” demos.
+
+
+            Showcase how the products work (especially at night).
+
+
+            Let a few community members try it out and speak on their experience.
+
+
+            Offer launch-day discounts or giveaways at the event.
+
+
+            🎯 Trust is built faster in familiar spaces. Leverage community leaders and peer influence.
+
+            ✅ 2. Agent & Micro-Influencer Network in Rural Zones
+            Why it works: Word-of-mouth is gold in rural communities. People trust people they know.
+            What to do:
+            Recruit local sales agents and train them as Lumirural ambassadors. Give them a small commission on each sale.
+
+
+            Encourage satisfied customers to refer others through referral rewards.
+
+
+            Identify local role models (teachers, nurses, pastors) to be informal brand advocates.
+
+
+            🎯 You’re not just selling lights, you’re selling empowerment — make people part of the mission.
+
+            ✅ 3. WhatsApp-Based Marketing and Ordering
+            Why it works: WhatsApp is the most used digital tool among your target audience — even more than websites or social media.
+            What to do:
+            Create clear, image-rich status flyers with product info and prices.
+
+
+            Allow people to order and ask questions via WhatsApp with automated or human responses.
+
+
+            Use voice notes or short videos (local dialect if possible) to explain product benefits.
+
+
+            🎯 Make it easy to buy, ask, share — all from one app they already use every day.
+
+            ✅ 4. Radio Campaigns + Call-to-Action
+            Why it works: Radio is still the most powerful and accessible form of mass communication in rural Africa.
+            What to do:
+            Run ads on local-language radio stations, especially during evening news or farming programs.
+
+
+            Use testimonials from real users, jingle-style intros, or storytelling formats.
+
+
+            Include a phone number/WhatsApp link for direct purchase or agent sign-up.
+
+
+            🎯 Target the ears that matter most — and give them an action to take.
+
+            ✅ 5. Flexible Payment Plans + Bundle Promotions
+            Why it works: Many potential buyers can afford the product, but not in one go.
+            What to do:
+            Introduce Pay-As-You-Go (PAYG) or small weekly installment models.
+
+
+            Bundle offers: e.g., “Buy 3 lights, get 1 for your neighbor free” or “Mother’s Pack: Light + Phone Charger for 5,000 off”
+
+
+            Allow school-based packages for students, supported by PTAs or community sponsors.
+
+
+            🎯 Lower the barrier to entry, especially in price-sensitive zones.
+            
+            
+            
+            
+            
+            
+            Here's a sample Ad:
+            
+            🔋 AD COPY 1: "Let There Be Light — Even Without ENEO"
+            🌞 Tired of being in the dark?
+            Talk to us now:
+            📲 https://wa.me/237XXXXXXXXX
+            Introducing the LUMIrural Home Solar Lighting Kit
+            ✅ Lights up to 3 rooms
+            ✅ USB ports for phone charging
+            ✅ Long-lasting battery
+            ✅ No fuel, no noise, no bills
+            Perfect for homes, kiosks, and village shops.
+            💡 All this for just 25,000 FCFA
+            One-time purchase. Lifetime of peace and Free Delivery
+
+            💡 AD COPY 2: "Own the Sun — We’ll Package It for You"
+            Imagine having light every night without paying monthly bills.
+            Let’s make it happen:
+            📲 https://wa.me/237XXXXXXXXX
+            The LUMIrural Solar Kit is:
+            ✔️ Rechargeable
+            ✔️ Portable and safe for indoor use
+            ✔️ Includes solar panel + cables + 3 LED bulbs
+            ✔️ Charges your phone and radio too
+            Clean, reliable energy that fits your pocket.
+            🎁 Get yours now at only 22,500 FCFA
+            Limited stock — let’s light you up.
+
+            💡 Ad Copy 3:
+            "Your Neighbor Has Light. Why Are You Still in the Dark?"
+            📲 Order yours now: https://wa.me/237XXXXXXXXX
+            The street is talking and it’s saying...
+            “Lumirural don land!”
+            ✅ Clean solar energy
+            ✅ Long-lasting bulbs
+            ✅ Phone charging that doesn’t depend on “Eneo mood”
+            ✅ No noise, no smoke, just vibes
+            All this brightness for just 15,000 FRS.
+            Even your generator is sweating right now. 😅
+            Don’t let darkness shame your compound.
+            We’re just one WhatsApp message away.
+            
+            
+            
+            Use these samples as inspiration for the content of the brand.
+
+            '''
         )
         prompt = "Please give me the social media content as JSON in the specified structure."
         response = openAI.get_text_prediction(system_prompt, prompt)
