@@ -6,7 +6,7 @@ import openAI
 import suggestions
 import json
 import os
-import results
+import results2
 import cloudinary_utils
 import time
 import traceback
@@ -568,94 +568,261 @@ def get_suggestions():
 
 @app.route('/register_user', methods=['POST'])
 def register_user():
+    """
+    Register a new user with comprehensive validation and error handling
+    """
     try:
+        # Validate request format
+        if not request.is_json:
+            return jsonify({
+                'success': False,
+                'error': 'Content-Type must be application/json'
+            }), 400
+        
         data = request.get_json()
         if not data:
-            return jsonify({'error': 'No JSON data provided'}), 400
+            return jsonify({
+                'success': False,
+                'error': 'No JSON data provided'
+            }), 400
+        
+        # Validate required fields
         required_fields = ['userName', 'email', 'password']
+        missing_fields = []
         for field in required_fields:
             if field not in data or not data[field]:
-                return jsonify({'error': f'{field} is required'}), 400
+                missing_fields.append(field)
+        
+        if missing_fields:
+            return jsonify({
+                'success': False,
+                'error': f'Missing required fields: {", ".join(missing_fields)}'
+            }), 400
+        
+        # Extract and sanitize input
+        username = str(data['userName']).strip()
+        email = str(data['email']).strip().lower()
+        password = str(data['password'])
+        
+        # Validate username
+        if len(username) < 2:
+            return jsonify({
+                'success': False,
+                'error': 'Username must be at least 2 characters long'
+            }), 400
+        
+        if len(username) > 50:
+            return jsonify({
+                'success': False,
+                'error': 'Username must be less than 50 characters'
+            }), 400
+        
+        # Validate email format
+        import re
+        email_pattern = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+        if not email_pattern.match(email):
+            return jsonify({
+                'success': False,
+                'error': 'Invalid email format'
+            }), 400
+        
+        # Validate password strength
+        if len(password) < 6:
+            return jsonify({
+                'success': False,
+                'error': 'Password must be at least 6 characters long'
+            }), 400
+        
+        if len(password) > 128:
+            return jsonify({
+                'success': False,
+                'error': 'Password must be less than 128 characters'
+            }), 400
+        
+        # Check if user already exists
         try:
-            if db.get_user_from_email(data['email']):
-                return jsonify({'error': 'User with this email already exists'}), 400
-        except Exception as e:
-            print("REGISTER ERROR (db.get_user_from_email):", e)
-            traceback.print_exc()
-            return jsonify({'error': 'Database error during user lookup', 'details': str(e)}), 500
-        try:
-            user = db.create_user(data['userName'], data['email'], data['password'])
-        except Exception as e:
-            print("REGISTER ERROR (db.create_user):", e)
-            traceback.print_exc()
-            return jsonify({'error': 'Database error during user creation', 'details': str(e)}), 500
-        if user:
-            # Ensure user is serializable and has required keys
-            if not isinstance(user, dict):
-                print("REGISTER ERROR: User object is not a dict", user)
-                return jsonify({'error': 'User object is not a valid dictionary', 'raw': str(user)}), 500
-            for key in ['userId', 'username', 'email']:
-                if key not in user:
-                    print(f"REGISTER ERROR: Missing key in user object: {key}")
-                    return jsonify({'error': f'Missing key in user object: {key}', 'raw': user}), 500
-            try:
+            existing_user = db.get_user_from_email(email)
+            if existing_user:
                 return jsonify({
-                    'success': True,
-                    'message': 'User registered successfully',
-                    'user': user
-                }), 201
-            except Exception as e:
-                print("REGISTER ERROR (jsonify):", e)
-                traceback.print_exc()
-                return jsonify({'error': 'Failed to serialize user object', 'details': str(e), 'raw': user}), 500
-        else:
-            print("REGISTER ERROR: Failed to create user (no user object returned)")
-            return jsonify({'error': 'Failed to create user'}), 500
+                    'success': False,
+                    'error': 'User with this email already exists'
+                }), 409
+        except Exception as e:
+            print(f"REGISTER ERROR (db.get_user_from_email): {e}")
+            traceback.print_exc()
+            return jsonify({
+                'success': False,
+                'error': 'Database error during user lookup'
+            }), 500
+        
+        # Create user
+        try:
+            user = db.create_user(username, email, password)
+        except Exception as e:
+            print(f"REGISTER ERROR (db.create_user): {e}")
+            traceback.print_exc()
+            return jsonify({
+                'success': False,
+                'error': 'Database error during user creation'
+            }), 500
+        
+        if not user:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to create user'
+            }), 500
+        
+        # Validate user object structure
+        if not isinstance(user, dict):
+            print(f"REGISTER ERROR: User object is not a dict: {user}")
+            return jsonify({
+                'success': False,
+                'error': 'Invalid user object returned from database'
+            }), 500
+        
+        required_user_keys = ['userId', 'username', 'email']
+        missing_keys = [key for key in required_user_keys if key not in user]
+        if missing_keys:
+            print(f"REGISTER ERROR: Missing keys in user object: {missing_keys}")
+            return jsonify({
+                'success': False,
+                'error': f'Invalid user object structure: missing {", ".join(missing_keys)}'
+            }), 500
+        
+        # Remove password from response for security
+        user_response = {
+            'userId': user['userId'],
+            'username': user['username'],
+            'email': user['email']
+        }
+        
+        return jsonify({
+            'success': True,
+            'message': 'User registered successfully',
+            'user': user_response
+        }), 201
+        
     except Exception as e:
-        print("REGISTER ERROR (outer):", e)
+        print(f"REGISTER ERROR (unexpected): {e}")
         traceback.print_exc()
-        return jsonify({'error': 'Unexpected error during registration', 'details': str(e)}), 500
+        return jsonify({
+            'success': False,
+            'error': 'Unexpected error during registration'
+        }), 500
 
 @app.route('/login', methods=['POST'])
 def login():
+    """
+    Authenticate user with comprehensive validation and error handling
+    """
     try:
+        # Validate request format
+        if not request.is_json:
+            return jsonify({
+                'success': False,
+                'error': 'Content-Type must be application/json'
+            }), 400
+        
         data = request.get_json()
         if not data:
-            return jsonify({'error': 'No JSON data provided'}), 400
-        if 'email' not in data or not data['email']:
-            return jsonify({'error': 'Email is required'}), 400
-        if 'password' not in data or not data['password']:
-            return jsonify({'error': 'Password is required'}), 400
-        try:
-            user = db.get_user_from_email(data['email'])
-        except Exception as e:
-            print("LOGIN ERROR (db.get_user_from_email):", e)
-            traceback.print_exc()
-            return jsonify({'error': 'Database error during user lookup', 'details': str(e)}), 500
-        if not user:
-            return jsonify({'error': 'User not found'}), 404
-        if not isinstance(user, dict):
-            print("LOGIN ERROR: User object is not a dict", user)
-            return jsonify({'error': 'User object is not a valid dictionary', 'raw': str(user)}), 500
-        if 'password' not in user:
-            print("LOGIN ERROR: User object missing password key", user)
-            return jsonify({'error': 'User object missing password key', 'raw': user}), 500
-        if user['password'] != data['password']:
-            return jsonify({'error': 'Incorrect password'}), 401
-        try:
             return jsonify({
-                'success': True,
-                'message': 'Login successful',
-                'user': user
-            }), 200
+                'success': False,
+                'error': 'No JSON data provided'
+            }), 400
+        
+        # Validate required fields
+        if 'email' not in data or not data['email']:
+            return jsonify({
+                'success': False,
+                'error': 'Email is required'
+            }), 400
+        
+        if 'password' not in data or not data['password']:
+            return jsonify({
+                'success': False,
+                'error': 'Password is required'
+            }), 400
+        
+        # Extract and sanitize input
+        email = str(data['email']).strip().lower()
+        password = str(data['password'])
+        
+        # Validate email format
+        import re
+        email_pattern = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+        if not email_pattern.match(email):
+            return jsonify({
+                'success': False,
+                'error': 'Invalid email format'
+            }), 400
+        
+        # Validate password is not empty
+        if not password:
+            return jsonify({
+                'success': False,
+                'error': 'Password cannot be empty'
+            }), 400
+        
+        # Get user from database
+        try:
+            user = db.get_user_from_email(email)
         except Exception as e:
-            print("LOGIN ERROR (jsonify):", e)
+            print(f"LOGIN ERROR (db.get_user_from_email): {e}")
             traceback.print_exc()
-            return jsonify({'error': 'Failed to serialize user object', 'details': str(e), 'raw': user}), 500
+            return jsonify({
+                'success': False,
+                'error': 'Database error during user lookup'
+            }), 500
+        
+        # Check if user exists
+        if not user:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid email or password'
+            }), 401
+        
+        # Validate user object structure
+        if not isinstance(user, dict):
+            print(f"LOGIN ERROR: User object is not a dict: {user}")
+            return jsonify({
+                'success': False,
+                'error': 'Invalid user object returned from database'
+            }), 500
+        
+        if 'password' not in user:
+            print(f"LOGIN ERROR: User object missing password key: {user}")
+            return jsonify({
+                'success': False,
+                'error': 'Invalid user object structure'
+            }), 500
+        
+        # Verify password
+        if user['password'] != password:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid email or password'
+            }), 401
+        
+        # Remove password from response for security
+        user_response = {
+            'userId': user['userId'],
+            'username': user['username'],
+            'email': user['email']
+        }
+        
+        return jsonify({
+            'success': True,
+            'message': 'Login successful',
+            'user': user_response
+        }), 200
+        
     except Exception as e:
-        print("LOGIN ERROR (outer):", e)
+        print(f"LOGIN ERROR (unexpected): {e}")
         traceback.print_exc()
-        return jsonify({'error': 'Unexpected error during login', 'details': str(e)}), 500
+        return jsonify({
+            'success': False,
+            'error': 'Unexpected error during login'
+        }), 500
 
 
 
@@ -740,7 +907,7 @@ def get_results():
     
     try:
         # Set a longer timeout for this operation
-      response = results.generate_results(userId, brandId)
+      response = results2.generate_results(userId, brandId)
       return jsonify(response), 200
     except Exception as e:
         print(f"Error in get_results: {e}")
@@ -749,10 +916,83 @@ def get_results():
             'details': str(e)
         }), 500
 
-
-
-
-
+@app.route('/get_final_results', methods=['POST'])
+def get_final_results():
+    """
+    Generate comprehensive brand assets for paid users (full brand identity + social media content)
+    """
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        required_fields = ['userId', 'brandId', 'userName', 'userEmail']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({
+                    'success': False,
+                    'message': f'Missing required field: {field}',
+                    'results': None
+                }), 400
+        
+        # Extract parameters
+        user_id = data['userId']
+        brand_id = data['brandId']
+        user_name = data['userName']
+        user_email = data['userEmail']
+        print(data)
+        # Optional parameters with defaults
+        user_phone_numbers = data.get('userPhoneNumbers', '')
+        registration_number = data.get('registrationNumber', '')
+        website = data.get('website', '')
+        brand_logo = data.get('brandLogo', '')
+        others = data.get('others', {})
+        
+        # Verify the brand belongs to the user
+        brand = db.get_brand(brand_id)
+        print("brand", brand)
+        if not brand:
+            return jsonify({
+                'success': False,
+                'message': 'Brand not found or access denied',
+                'results': None
+            }), 404
+        
+        # Import and call the generate_final_results function
+        from results2 import generate_final_results
+        response = generate_final_results(
+            user_id, 
+            brand_id, 
+            user_name, 
+            user_email, 
+            user_phone_numbers, 
+            registration_number, 
+            website, 
+            brand_logo, 
+            others
+        )
+        
+        if response and 'error' in response:
+            return jsonify({
+                'success': False,
+                'message': response.get('message', 'Final results generation failed'),
+                'results': None
+            }), 500
+        
+        return jsonify({
+            'success': True,
+            'message': 'Final results generated successfully',
+            'results': response
+        }), 200
+        
+    except Exception as e:
+        print(f"Error in get_final_results: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'message': f'Final results generation failed: {str(e)}',
+            'results': None
+        }), 500
 @app.route('/image/<filename>', methods=['GET'])
 def get_image(filename):
     image_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'images')
@@ -1155,6 +1395,109 @@ def download_brand_pdf(brandId):
     pdf_output = io.BytesIO(pdf_bytes)
     pdf_output.seek(0)
     return send_file(pdf_output, as_attachment=True, download_name=f"brand_{brandId}_blueprint.pdf", mimetype='application/pdf')
+
+# ===================== Brand Assets Endpoints ===========================================
+
+@app.route('/brand_assets', methods=['POST'])
+def get_brand_assets():
+    """Get brand assets for a specific brand"""
+    try:
+        data = request.get_json()
+        if not data or 'brandId' not in data:
+            return jsonify({
+                'success': False,
+                'message': 'brandId is required',
+                'brand_assets': None
+            }), 400
+        
+        brand_id = data['brandId']
+        brand_assets = db.get_brand_assets(brand_id)
+        
+        if brand_assets:
+            return jsonify({
+                'success': True,
+                'message': 'Brand assets retrieved successfully',
+                'brand_assets': brand_assets
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Brand assets not found',
+                'brand_assets': None
+            }), 404
+            
+    except Exception as e:
+        print(f"Error getting brand assets: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Error retrieving brand assets: {str(e)}',
+            'brand_assets': None
+        }), 500
+
+@app.route('/user_brand_assets', methods=['POST'])
+def get_user_brand_assets():
+    """Get all brand assets for a specific user"""
+    try:
+        data = request.get_json()
+        if not data or 'userId' not in data:
+            return jsonify({
+                'success': False,
+                'message': 'userId is required',
+                'brand_assets': []
+            }), 400
+        
+        user_id = data['userId']
+        brand_assets = db.get_brand_assets_by_user(user_id)
+        
+        return jsonify({
+            'success': True,
+            'message': 'User brand assets retrieved successfully',
+            'brand_assets': brand_assets
+        }), 200
+            
+    except Exception as e:
+        print(f"Error getting user brand assets: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Error retrieving user brand assets: {str(e)}',
+            'brand_assets': []
+        }), 500
+
+@app.route('/delete_brand_assets', methods=['POST'])
+def delete_brand_assets():
+    """Delete brand assets for a specific brand"""
+    try:
+        data = request.get_json()
+        if not data or 'brandId' not in data:
+            return jsonify({
+                'success': False,
+                'message': 'brandId is required',
+                'deleted': False
+            }), 400
+        
+        brand_id = data['brandId']
+        deleted = db.delete_brand_assets(brand_id)
+        
+        if deleted:
+            return jsonify({
+                'success': True,
+                'message': 'Brand assets deleted successfully',
+                'deleted': True
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Brand assets not found or could not be deleted',
+                'deleted': False
+            }), 404
+            
+    except Exception as e:
+        print(f"Error deleting brand assets: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Error deleting brand assets: {str(e)}',
+            'deleted': False
+        }), 500
 
 if __name__ == '__main__':
     # Run on host 0.0.0.0 to be accessible from outside, port 8080

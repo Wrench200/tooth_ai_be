@@ -826,7 +826,7 @@ def generate_results(userId, brandId):
 
 
 
-print(generate_results("24d0c547-8685-4ee9-95a4-b362da16da3c", "96266589-80bb-4f14-aff9-6baf8cc4dffd"))
+# print(generate_results("24d0c547-8685-4ee9-95a4-b362da16da3c", "96266589-80bb-4f14-aff9-6baf8cc4dffd"))
 # print("\n\n\n\n"+str(db.get_brand("7be4efdc-7d3d-4344-b823-8300f6e81bb0")))
 
 # generate_results("72aa6589-0cdb-4795-acf3-b0db2a8d7fad", "7be4efdc-7d3d-4344-b823-8300f6e81bb0")

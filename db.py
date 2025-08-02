@@ -1,5 +1,6 @@
 # db.py - now uses Neon Postgres (psycopg2) and loads connection string from .env
 import os
+import json
 from dotenv import load_dotenv
 import uuid
 import psycopg2
@@ -475,6 +476,21 @@ cursor.execute('''
         UNIQUE (answerId_fk, section_number, question_number)
     )
 ''')
+
+# Table to store paid brand assets
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS brand_assets (
+        id UUID PRIMARY KEY,
+        brandId UUID NOT NULL,
+        userId UUID NOT NULL,
+        full_brand_identity JSONB,
+        social_media_content JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (brandId) REFERENCES brands(id) ON DELETE CASCADE,
+        FOREIGN KEY (userId) REFERENCES users(userId) ON DELETE CASCADE
+    )
+''')
 conn.commit()
 
 # Helper: Map (section_number, answer_number) to global_question_number
@@ -856,3 +872,106 @@ def get_all_images_for_answer(answer_id):
             print(f"Database error getting all images: {e}")
             return []
     return []
+
+# ===================== Brand Assets Management ===========================================
+
+def create_brand_assets(brand_id, user_id, full_brand_identity, social_media_content):
+    """Create or update brand assets for paid users"""
+    asset_id = str(uuid.uuid4())
+    try:
+        cursor.execute("""
+            INSERT INTO brand_assets (id, brandId, userId, full_brand_identity, social_media_content)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (brandId) 
+            DO UPDATE SET 
+                userId = EXCLUDED.userId,
+                full_brand_identity = EXCLUDED.full_brand_identity,
+                social_media_content = EXCLUDED.social_media_content,
+                updated_at = CURRENT_TIMESTAMP
+        """, (asset_id, brand_id, user_id, json.dumps(full_brand_identity), json.dumps(social_media_content)))
+        conn.commit()
+        print(f"Brand assets created/updated for brand {brand_id} and user {user_id}")
+        return asset_id
+    except psycopg2.Error as e:
+        print(f"Database error creating brand assets: {e}")
+        conn.rollback()
+        return None
+
+def get_brand_assets(brand_id):
+    """Get brand assets for a specific brand"""
+    for attempt in range(2):
+        try:
+            cursor.execute("""
+                SELECT id, brandId, userId, full_brand_identity, social_media_content, created_at, updated_at
+                FROM brand_assets 
+                WHERE brandId = %s
+            """, (brand_id,))
+            row = cursor.fetchone()
+            if row:
+                return {
+                    "id": row[0],
+                    "brandId": row[1],
+                    "userId": row[2],
+                    "full_brand_identity": json.loads(row[3]) if row[3] else None,
+                    "social_media_content": json.loads(row[4]) if row[4] else None,
+                    "created_at": row[5],
+                    "updated_at": row[6]
+                }
+            return None
+        except psycopg2.InterfaceError as e:
+            print(f"[get_brand_assets] InterfaceError: {e}. Resetting connection and retrying once.")
+            reset_connection()
+        except psycopg2.Error as e:
+            print(f"Database error getting brand assets: {e}")
+            return None
+    return None
+
+def get_brand_assets_by_user(user_id):
+    """Get all brand assets for a specific user"""
+    for attempt in range(2):
+        try:
+            cursor.execute("""
+                SELECT id, brandId, userId, full_brand_identity, social_media_content, created_at, updated_at
+                FROM brand_assets 
+                WHERE userId = %s
+                ORDER BY created_at DESC
+            """, (user_id,))
+            rows = cursor.fetchall()
+            return [
+                {
+                    "id": row[0],
+                    "brandId": row[1],
+                    "userId": row[2],
+                    "full_brand_identity": json.loads(row[3]) if row[3] else None,
+                    "social_media_content": json.loads(row[4]) if row[4] else None,
+                    "created_at": row[5],
+                    "updated_at": row[6]
+                }
+                for row in rows
+            ]
+        except psycopg2.InterfaceError as e:
+            print(f"[get_brand_assets_by_user] InterfaceError: {e}. Resetting connection and retrying once.")
+            reset_connection()
+        except psycopg2.Error as e:
+            print(f"Database error getting brand assets by user: {e}")
+            return []
+    return []
+
+def delete_brand_assets(brand_id):
+    """Delete brand assets for a specific brand"""
+    for attempt in range(2):
+        try:
+            cursor.execute("DELETE FROM brand_assets WHERE brandId = %s", (brand_id,))
+            conn.commit()
+            if cursor.rowcount > 0:
+                print(f"Brand assets deleted for brand {brand_id}")
+                return True
+            return False
+        except psycopg2.InterfaceError as e:
+            print(f"[delete_brand_assets] InterfaceError: {e}. Resetting connection and retrying once.")
+            reset_connection()
+        except psycopg2.Error as e:
+            print(f"Database error deleting brand assets: {e}")
+            conn.rollback()
+            return False
+    return False
