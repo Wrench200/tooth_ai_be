@@ -59,7 +59,11 @@ cursor.execute('''
         userId UUID PRIMARY KEY,
         username TEXT NOT NULL,
         email TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL
+        password TEXT,
+        google_id TEXT UNIQUE,
+        profile_picture TEXT,
+        auth_provider TEXT DEFAULT 'email',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
 ''')
 conn.commit()
@@ -132,6 +136,67 @@ def get_user_from_email(email):
             reset_connection()
         except psycopg2.Error as e:
             print(f"Database error in get_user_from_email: {e}")
+            return None
+    return None
+
+def get_user_by_google_id(google_id):
+    """Get user by Google ID"""
+    for attempt in range(2):
+        try:
+            cursor.execute("SELECT * FROM users WHERE google_id = %s", (google_id,))
+            row = cursor.fetchone()
+            if row:
+                return dict(row)
+            print(f"User with Google ID {google_id} not found.")
+            return None
+        except psycopg2.InterfaceError as e:
+            print(f"[get_user_by_google_id] InterfaceError: {e}. Resetting connection and retrying once.")
+            reset_connection()
+        except psycopg2.Error as e:
+            print(f"Database error in get_user_by_google_id: {e}")
+            return None
+    return None
+
+def create_google_user(google_id, email, name, profile_picture):
+    """Create a new user with Google authentication"""
+    for attempt in range(2):
+        try:
+            # Check if user already exists
+            existing_user = get_user_by_google_id(google_id)
+            if existing_user:
+                print(f"User with Google ID {google_id} already exists.")
+                return existing_user
+            
+            # Check if email already exists
+            existing_user = get_user_from_email(email)
+            if existing_user:
+                print(f"User with email {email} already exists.")
+                return existing_user
+            
+            user_id = str(uuid.uuid4())
+            new_user = {
+                "userId": user_id,
+                "username": name,
+                "email": email,
+                "password": None,
+                "google_id": google_id,
+                "profile_picture": profile_picture,
+                "auth_provider": "google"
+            }
+            
+            cursor.execute("""
+                INSERT INTO users (userId, username, email, password, google_id, profile_picture, auth_provider)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (user_id, name, email, None, google_id, profile_picture, "google"))
+            conn.commit()
+            print(f"Google user {user_id} added.")
+            return new_user
+        except psycopg2.InterfaceError as e:
+            print(f"[create_google_user] InterfaceError: {e}. Resetting connection and retrying once.")
+            reset_connection()
+        except psycopg2.Error as e:
+            print(f"Database error in create_google_user: {e}")
+            conn.rollback()
             return None
     return None
 

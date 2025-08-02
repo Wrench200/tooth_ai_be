@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory, send_file
+from flask import Flask, request, jsonify, send_from_directory, send_file, redirect, url_for, session
 from flask_cors import CORS
 import db
 import questions
@@ -15,6 +15,7 @@ from fpdf import FPDF  # Change to fpdf2
 import io, requests, os
 import tempfile
 import re
+from google_oauth import get_google_auth_url, verify_google_token, create_flow
 
 FONT_DIR = os.path.join(os.path.dirname(__file__), 'fonts')
 UNICODE_FONT_PATH = os.path.join(FONT_DIR, 'DejaVuSans.ttf')
@@ -805,7 +806,7 @@ def login():
         
         # Remove password from response for security
         user_response = {
-            'userId': user['userId'],
+            'userId': user['userid'],
             'username': user['username'],
             'email': user['email']
         }
@@ -1497,6 +1498,257 @@ def delete_brand_assets():
             'success': False,
             'message': f'Error deleting brand assets: {str(e)}',
             'deleted': False
+        }), 500
+
+@app.route('/get_brand_results/<brand_id>', methods=['GET'])
+def get_brand_results(brand_id):
+    """
+    Fetch complete brand results including all JSON fields from the brand table
+    """
+    try:
+        if not brand_id:
+            return jsonify({
+                'success': False,
+                'message': 'brandId is required',
+                'brand_results': None
+            }), 400
+        brand = db.get_brand(brand_id)
+        
+        if not brand:
+            return jsonify({
+                'success': False,
+                'message': 'Brand not found',
+                'brand_results': None
+            }), 404
+        
+        # Debug: Print available keys
+        print(f"Available brand keys: {list(brand.keys())}")
+        
+        # Parse JSON fields if they exist
+        brand_results = {
+            'id': brand.get('id'),
+            'userId': brand.get('userid') or brand.get('userId'),  # Try both cases
+            'answerId': brand.get('answerid') or brand.get('answerId'),  # Try both cases
+            'name': brand.get('name'),
+            'logo': brand.get('logo')
+        }
+        
+        # Parse JSON fields if they exist and are not empty
+        brand_strategy = brand.get('brand_strategy')
+        if brand_strategy:
+            try:
+                brand_results['brand_strategy'] = json.loads(brand_strategy)
+            except (json.JSONDecodeError, TypeError):
+                brand_results['brand_strategy'] = brand_strategy
+        else:
+            brand_results['brand_strategy'] = None
+            
+        brand_communication = brand.get('brand_communication')
+        if brand_communication:
+            try:
+                brand_results['brand_communication'] = json.loads(brand_communication)
+            except (json.JSONDecodeError, TypeError):
+                brand_results['brand_communication'] = brand_communication
+        else:
+            brand_results['brand_communication'] = None
+            
+        brand_identity = brand.get('brand_identity')
+        if brand_identity:
+            try:
+                brand_results['brand_identity'] = json.loads(brand_identity)
+            except (json.JSONDecodeError, TypeError):
+                brand_results['brand_identity'] = brand_identity
+        else:
+            brand_results['brand_identity'] = None
+            
+        marketing_strategy = brand.get('marketing_and_social_media_strategy')
+        if marketing_strategy:
+            try:
+                brand_results['marketing_and_social_media_strategy'] = json.loads(marketing_strategy)
+            except (json.JSONDecodeError, TypeError):
+                brand_results['marketing_and_social_media_strategy'] = marketing_strategy
+        else:
+            brand_results['marketing_and_social_media_strategy'] = None
+        
+        return jsonify({
+            'success': True,
+            'message': 'Brand results retrieved successfully',
+            'brand_results': brand_results
+        }), 200
+            
+    except Exception as e:
+        print(f"Error getting brand results: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'message': f'Error retrieving brand results: {str(e)}',
+            'brand_results': None
+        }), 500
+
+# ===================== Google OAuth Endpoints ===========================================
+
+@app.route('/auth/google', methods=['GET'])
+def google_auth():
+    """Initiate Google OAuth flow"""
+    try:
+        authorization_url, state = get_google_auth_url()
+        return jsonify({
+            'success': True,
+            'auth_url': authorization_url,
+            'state': state
+        }), 200
+    except Exception as e:
+        print(f"Error initiating Google auth: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Error initiating Google authentication: {str(e)}'
+        }), 500
+
+@app.route('/auth/google/callback', methods=['GET'])
+def google_auth_callback():
+    """Handle Google OAuth callback"""
+    try:
+        # Get authorization code from callback
+        code = request.args.get('code')
+        state = request.args.get('state')
+        
+        if not code:
+            return jsonify({
+                'success': False,
+                'message': 'Authorization code not received'
+            }), 400
+        
+        # Exchange code for tokens
+        flow = create_flow()
+        flow.fetch_token(code=code)
+        
+        # Get user info from Google
+        session = flow.authorized_session()
+        user_info = session.get('https://www.googleapis.com/oauth2/v2/userinfo').json()
+        
+        # Extract user data
+        google_id = user_info['id']
+        email = user_info['email']
+        name = user_info.get('name', '')
+        profile_picture = user_info.get('picture', '')
+        
+        # Check if user exists
+        existing_user = db.get_user_by_google_id(google_id)
+        if existing_user:
+            # User exists, log them in
+            user_response = {
+                'userId': existing_user.get('userid') or existing_user.get('userId'),
+                'username': existing_user['username'],
+                'email': existing_user['email'],
+                'profile_picture': existing_user.get('profile_picture'),
+                'auth_provider': existing_user.get('auth_provider', 'google')
+            }
+            return jsonify({
+                'success': True,
+                'message': 'Login successful',
+                'user': user_response
+            }), 200
+        else:
+            # Create new user
+            new_user = db.create_google_user(google_id, email, name, profile_picture)
+            if new_user:
+                user_response = {
+                    'userId': new_user['userId'],
+                    'username': new_user['username'],
+                    'email': new_user['email'],
+                    'profile_picture': new_user.get('profile_picture'),
+                    'auth_provider': 'google'
+                }
+                return jsonify({
+                    'success': True,
+                    'message': 'Registration successful',
+                    'user': user_response
+                }), 200
+            else:
+                return jsonify({
+                    'success': False,
+                    'message': 'Failed to create user'
+                }), 500
+                
+    except Exception as e:
+        print(f"Error in Google auth callback: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'message': f'Error during Google authentication: {str(e)}'
+        }), 500
+
+@app.route('/auth/google/token', methods=['POST'])
+def google_token_auth():
+    """Authenticate with Google ID token (for mobile apps)"""
+    try:
+        data = request.get_json()
+        if not data or 'id_token' not in data:
+            return jsonify({
+                'success': False,
+                'message': 'ID token is required'
+            }), 400
+        
+        # Verify the Google ID token
+        user_info = verify_google_token(data['id_token'])
+        if not user_info:
+            return jsonify({
+                'success': False,
+                'message': 'Invalid Google token'
+            }), 401
+        
+        # Check if user exists
+        existing_user = db.get_user_by_google_id(user_info['google_id'])
+        if existing_user:
+            # User exists, log them in
+            user_response = {
+                'userId': existing_user.get('userid') or existing_user.get('userId'),
+                'username': existing_user['username'],
+                'email': existing_user['email'],
+                'profile_picture': existing_user.get('profile_picture'),
+                'auth_provider': existing_user.get('auth_provider', 'google')
+            }
+            return jsonify({
+                'success': True,
+                'message': 'Login successful',
+                'user': user_response
+            }), 200
+        else:
+            # Create new user
+            new_user = db.create_google_user(
+                user_info['google_id'],
+                user_info['email'],
+                user_info['name'],
+                user_info['picture']
+            )
+            if new_user:
+                user_response = {
+                    'userId': new_user['userId'],
+                    'username': new_user['username'],
+                    'email': new_user['email'],
+                    'profile_picture': new_user.get('profile_picture'),
+                    'auth_provider': 'google'
+                }
+                return jsonify({
+                    'success': True,
+                    'message': 'Registration successful',
+                    'user': user_response
+                }), 200
+            else:
+                return jsonify({
+                    'success': False,
+                    'message': 'Failed to create user'
+                }), 500
+                
+    except Exception as e:
+        print(f"Error in Google token auth: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'message': f'Error during Google token authentication: {str(e)}'
         }), 500
 
 if __name__ == '__main__':
