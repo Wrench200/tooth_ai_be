@@ -5,7 +5,11 @@
 ✅ **Database Connection**: Fixed malformed `sslmode` parameter in DATABASE_URL  
 ✅ **Missing Dependencies**: Added all required packages to requirements.txt and pyproject.toml  
 ✅ **SSL Connection Issues**: Implemented robust connection pooling and SSL handling
-✅ **Context Manager Bug**: Fixed nested yield issue in database context manager that was causing hanging
+✅ **Context Manager Bug**: Fixed nested yield issue in database context manager that was causing hanging  
+✅ **Dictionary Update Sequence Error**: Fixed parse_json_field function to handle malformed CSV data properly
+✅ **Database Row Conversion Error**: Fixed dict(row) conversion in database functions to properly handle tuple rows
+✅ **Module Import Blocking**: Fixed module-level database connection that was blocking imports
+✅ **Database Connection Scope Error**: Fixed NameError in brand assets functions by removing manual conn.commit/rollback calls
 
 ## Updated Dependencies
 
@@ -40,6 +44,9 @@ Updated with all necessary dependencies for modern Python packaging.
 - **SSL Parameters**: Configured proper SSL settings for production environments
 - **Error Recovery**: Added automatic retry logic for failed connections
 - **Context Manager Bug**: Fixed critical nested yield issue that was causing all database operations to hang
+- **Dictionary Update Sequence Error**: Fixed parse_json_field function to properly handle CSV data with mismatched header/row lengths
+- **Database Row Conversion Error**: Fixed dict(row) conversion in database functions to properly handle tuple rows from regular cursors
+- **Module Import Blocking**: Moved table creation from module-level to function-level to prevent import blocking
 
 ### Key Features
 - **Connection Pooling**: Reuses connections efficiently to reduce SSL handshake overhead
@@ -153,7 +160,40 @@ The SSL connection test now passes all 5 tests:
 - ✅ SSL parameters
 - ✅ Error handling and recovery
 
+### Additional Fixes Applied
+- ✅ **Dictionary Update Sequence Error**: Fixed in `main.py` parse_json_field function
+- ✅ **Database Row Conversion Error**: Fixed in `db.py` by properly converting tuple rows to dictionaries
+- ✅ **Module Import Blocking**: Fixed in `db.py` by moving table creation to function level
+- ✅ **All Database Connection Issues**: Resolved SSL, concurrency, and hanging problems
+
 ## Troubleshooting
+
+### Common Issues and Solutions
+
+1. **"dictionary update sequence element #0 has length 36; 2 is required"**
+   - **Cause**: Malformed CSV data in the parse_json_field function where headers and row data don't match
+   - **Solution**: Fixed by adding proper validation and error handling in the parse_json_field function
+   - **Location**: `main.py` line 1226
+
+2. **"dictionary update sequence element #0 has length X; 2 is required" (in database functions)**
+   - **Cause**: Using `dict(row)` on tuple rows from regular database cursors instead of DictCursor
+   - **Solution**: Fixed by using `dict(zip(column_names, row))` to properly convert tuple rows to dictionaries
+   - **Location**: `db.py` functions: get_brand, get_user, get_user_from_email, get_user_by_google_id, get_all_users, get_all_user_brands
+
+3. **Module import hanging during startup**
+   - **Cause**: Database connection being established at module level during import
+   - **Solution**: Moved table creation to function level with proper error handling
+   - **Location**: `db.py` line 409
+
+4. **SSL connection drops and "cursor already closed" errors**
+   - **Cause**: Single global connection not suitable for concurrent requests
+   - **Solution**: Implemented ThreadLocalConnection with proper connection management
+   - **Location**: `db.py` ThreadLocalConnection class
+
+5. **NameError: name 'conn' is not defined in brand assets functions**
+   - **Cause**: Manual `conn.commit()` and `conn.rollback()` calls in functions using the context manager
+   - **Solution**: Removed manual connection operations since the context manager handles them automatically
+   - **Location**: `db.py` create_brand_assets and delete_brand_assets functions
 
 ### Common Issues
 

@@ -236,7 +236,10 @@ def get_user(user_id):
                 cursor.execute("SELECT * FROM users WHERE userId = %s", (user_id,))
                 row = cursor.fetchone()
                 if row:
-                    return dict(row)
+                    # Get column names from cursor description
+                    column_names = [desc[0] for desc in cursor.description]
+                    # Create dictionary from row and column names
+                    return dict(zip(column_names, row))
                 print(f"User {user_id} not found.")
                 return None
         except psycopg2.Error as e:
@@ -258,7 +261,10 @@ def get_user_from_email(email):
                 cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
                 row = cursor.fetchone()
                 if row:
-                    return dict(row)
+                    # Get column names from cursor description
+                    column_names = [desc[0] for desc in cursor.description]
+                    # Create dictionary from row and column names
+                    return dict(zip(column_names, row))
                 print(f"User with email {email} not found.")
                 return None
         except psycopg2.InterfaceError as e:
@@ -277,7 +283,10 @@ def get_user_by_google_id(google_id):
                 cursor.execute("SELECT * FROM users WHERE google_id = %s", (google_id,))
                 row = cursor.fetchone()
                 if row:
-                    return dict(row)
+                    # Get column names from cursor description
+                    column_names = [desc[0] for desc in cursor.description]
+                    # Create dictionary from row and column names
+                    return dict(zip(column_names, row))
                 print(f"User with Google ID {google_id} not found.")
                 return None
         except psycopg2.InterfaceError as e:
@@ -340,7 +349,12 @@ def get_all_users():
                 rows = cursor.fetchall()
                 if not rows:
                     return []
-                return [dict(row) for row in rows]
+                
+                # Get column names from cursor description
+                column_names = [desc[0] for desc in cursor.description]
+                
+                # Create dictionaries from rows and column names
+                return [dict(zip(column_names, row)) for row in rows]
         except psycopg2.InterfaceError as e:
             print(f"[get_all_users] InterfaceError: {e}. Resetting connection and retrying once.")
             reset_connection()
@@ -406,21 +420,33 @@ brands = [{
     "marketing_and_social_media_strategy": "marketing_and_social_media_strategy_id",
 }]
 
-with get_db_connection() as cursor:
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS brands (
-        id UUID PRIMARY KEY,
-        userId UUID NOT NULL,
-        answerId UUID,
-        name TEXT,
-        logo TEXT,
-        brand_strategy TEXT,
-        brand_communication TEXT,
-        brand_identity TEXT,
-        marketing_and_social_media_strategy TEXT,
-        FOREIGN KEY (userId) REFERENCES users(userId) ON DELETE CASCADE
-    )
-''')
+def ensure_tables_exist():
+    """Ensure all required tables exist in the database"""
+    try:
+        with get_db_connection() as cursor:
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS brands (
+                id UUID PRIMARY KEY,
+                userId UUID NOT NULL,
+                answerId UUID,
+                name TEXT,
+                logo TEXT,
+                brand_strategy TEXT,
+                brand_communication TEXT,
+                brand_identity TEXT,
+                marketing_and_social_media_strategy TEXT,
+                FOREIGN KEY (userId) REFERENCES users(userId) ON DELETE CASCADE
+            )
+            ''')
+            print("Tables ensured successfully")
+    except Exception as e:
+        print(f"Error ensuring tables exist: {e}")
+
+# Initialize tables when module is imported (but don't block import)
+try:
+    ensure_tables_exist()
+except Exception as e:
+    print(f"Warning: Could not initialize tables during import: {e}")
 
 def create_brand(user_id):
     brand_id = str(uuid.uuid4())
@@ -471,7 +497,12 @@ def get_brand(brand_id):
                 row = cursor.fetchone()
                 if not row:
                     return None
-                return dict(row)
+                
+                # Get column names from cursor description
+                column_names = [desc[0] for desc in cursor.description]
+                
+                # Create dictionary from row and column names
+                return dict(zip(column_names, row))
         except psycopg2.Error as e:
             print(f"Database error in get_brand (attempt {attempt + 1}): {e}")
             if attempt == 0:  # Only reset on first failure
@@ -489,7 +520,12 @@ def get_all_user_brands(user_id):
                 rows = cursor.fetchall()
                 if not rows:
                     return []
-                return [dict(row) for row in rows]
+                
+                # Get column names from cursor description
+                column_names = [desc[0] for desc in cursor.description]
+                
+                # Create dictionaries from rows and column names
+                return [dict(zip(column_names, row)) for row in rows]
         except psycopg2.InterfaceError as e:
             print(f"[get_all_user_brands] InterfaceError: {e}. Resetting connection and retrying once.")
             reset_connection()
@@ -1094,12 +1130,10 @@ def create_brand_assets(brand_id, user_id, full_brand_identity, social_media_con
                     social_media_content = EXCLUDED.social_media_content,
                     updated_at = CURRENT_TIMESTAMP
             """, (asset_id, brand_id, user_id, json.dumps(full_brand_identity), json.dumps(social_media_content)))
-            conn.commit()
             print(f"Brand assets created/updated for brand {brand_id} and user {user_id}")
             return asset_id
     except psycopg2.Error as e:
         print(f"Database error creating brand assets: {e}")
-        conn.rollback()
         return None
 
 def get_brand_assets(brand_id):
@@ -1170,7 +1204,6 @@ def delete_brand_assets(brand_id):
         try:
             with get_db_connection() as cursor:
                 cursor.execute("DELETE FROM brand_assets WHERE brandId = %s", (brand_id,))
-                conn.commit()
                 if cursor.rowcount > 0:
                     print(f"Brand assets deleted for brand {brand_id}")
                     return True
@@ -1180,6 +1213,5 @@ def delete_brand_assets(brand_id):
             reset_connection()
         except psycopg2.Error as e:
             print(f"Database error deleting brand assets: {e}")
-            conn.rollback()
             return False
     return False

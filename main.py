@@ -1224,7 +1224,21 @@ def download_brand_pdf(brandId):
                         rows = [line.split('!@!') for line in lines]
                         if len(rows) > 1:
                             headers = [h.strip() for h in rows[0]]
-                            return [dict(zip(headers, [cell.strip() for cell in row])) for row in rows[1:] if len(row) == len(headers)]
+                            # Validate that headers are not empty and have unique names
+                            if headers and len(set(headers)) == len(headers):
+                                result = []
+                                for row in rows[1:]:
+                                    # Ensure row has the same number of elements as headers
+                                    if len(row) == len(headers):
+                                        try:
+                                            row_dict = dict(zip(headers, [cell.strip() for cell in row]))
+                                            result.append(row_dict)
+                                        except Exception as e:
+                                            print(f"Error creating dict from row: {e}")
+                                            print(f"Headers: {headers}")
+                                            print(f"Row: {row}")
+                                            continue
+                                return result if result else field
                 return field
         return field
 
