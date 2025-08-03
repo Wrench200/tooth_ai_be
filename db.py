@@ -6,6 +6,9 @@ import uuid
 import psycopg2
 import psycopg2.extras
 import urllib.parse
+import threading
+import time
+from contextlib import contextmanager
 
 load_dotenv()  # Load environment variables from .env
 
@@ -37,62 +40,131 @@ def fix_database_url(url):
 # Fix the DATABASE_URL if needed
 DATABASE_URL = fix_database_url(DATABASE_URL)
 
-def create_connection():
-    """Create a database connection with proper error handling"""
-    try:
-        conn = psycopg2.connect(DATABASE_URL)
-        return conn
-    except psycopg2.ProgrammingError as e:
-        print(f"Database URL format error: {e}")
-        print(f"Current DATABASE_URL: {DATABASE_URL}")
-        # Try to create a minimal connection for debugging
+class ThreadLocalConnection:
+    """Thread-local database connection manager with SSL support"""
+    
+    def __init__(self, database_url):
+        self.database_url = database_url
+        self._thread_local = threading.local()
+    
+    def _create_connection(self):
+        """Create a new database connection with proper SSL settings"""
         try:
-            # Parse the URL manually
-            parsed = urllib.parse.urlparse(DATABASE_URL)
-            conn_params = {
-                'host': parsed.hostname,
-                'port': parsed.port or 5432,
-                'database': parsed.path.lstrip('/'),
-                'user': parsed.username,
-                'password': parsed.password,
-                'sslmode': 'require'
-            }
-            conn = psycopg2.connect(**conn_params)
+            conn = psycopg2.connect(self.database_url)
+            
+            # Set basic session parameters
+            conn.autocommit = False
+            
             return conn
-        except Exception as e2:
-            print(f"Failed to create connection with parsed parameters: {e2}")
-            raise e
-    except Exception as e:
-        print(f"Database connection error: {e}")
-        raise e
+            
+        except Exception as e:
+            print(f"Error creating database connection: {e}")
+            raise
+    
+    def _is_connection_valid(self, conn):
+        """Check if a connection is still valid"""
+        if conn is None:
+            return False
+        
+        try:
+            # Check if connection is still alive
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1")
+            cursor.close()
+            return True
+        except (psycopg2.OperationalError, psycopg2.InterfaceError, AttributeError):
+            return False
+    
+    def get_connection(self):
+        """Get a valid database connection for the current thread"""
+        # For now, always create a new connection to avoid issues
+        conn = self._create_connection()
+        return conn
+    
+    def close_connection(self):
+        """Close the current thread's database connection"""
+        if hasattr(self._thread_local, 'connection'):
+            try:
+                self._thread_local.connection.close()
+            except:
+                pass
+            delattr(self._thread_local, 'connection')
 
-# Create initial connection
-conn = create_connection()
-cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+# Create global thread-local connection manager
+db_manager = ThreadLocalConnection(DATABASE_URL)
+
+@contextmanager
+def get_db_connection():
+    """Context manager for database connections with automatic error handling"""
+    conn = None
+    cursor = None
+    
+    # First attempt
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        yield cursor
+        conn.commit()
+        return  # Success, exit early
+    except psycopg2.OperationalError as e:
+        print(f"Database operational error: {e}")
+        if conn:
+            try:
+                conn.rollback()
+            except:
+                pass
+        # Don't yield here - this was causing the nested yield issue
+    except Exception as e:
+        print(f"Database error: {e}")
+        if conn:
+            try:
+                conn.rollback()
+            except:
+                pass
+        raise
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except:
+                pass
+    
+    # Second attempt (only if first attempt failed with OperationalError)
+    conn = None
+    cursor = None
+    try:
+        db_manager.close_connection()
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        yield cursor
+        conn.commit()
+    except Exception as e:
+        print(f"Database retry failed: {e}")
+        if conn:
+            try:
+                conn.rollback()
+            except:
+                pass
+        raise
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except:
+                pass
 
 def reset_connection():
-    """Reset the database connection if it's in a failed state"""
-    global conn, cursor
-    try:
-        conn.rollback()
-    except:
-        pass
-    try:
-        conn.close()
-    except:
-        pass
-    
-    # Reconnect
-    conn = create_connection()
-    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    """Reset the current thread's database connection"""
+    db_manager.close_connection()
 
 def test_connection():
     """Test if the database connection is working"""
     try:
-        cursor.execute("SELECT 1")
-        result = cursor.fetchone()
-        print("Database connection test: SUCCESS")
-        return True
+        with get_db_connection() as cursor:
+            cursor.execute("SELECT 1")
+            result = cursor.fetchone()
+            print("Database connection test: SUCCESS")
+            return True
     except Exception as e:
         print(f"Database connection test: FAILED - {e}")
         return False
@@ -111,7 +183,8 @@ users = [
     }
 ]
 
-cursor.execute('''
+with get_db_connection() as cursor:
+    cursor.execute('''
     CREATE TABLE IF NOT EXISTS users (
         userId UUID PRIMARY KEY,
         username TEXT NOT NULL,
@@ -123,7 +196,6 @@ cursor.execute('''
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
 ''')
-conn.commit()
 
 def create_user(username, email, password):
     for attempt in range(2):
@@ -139,9 +211,9 @@ def create_user(username, email, password):
                 "password": password,
             }
             users.append(new_user)
-            cursor.execute("INSERT INTO users (userId, username, email, password) VALUES (%s, %s, %s, %s)",
+            with get_db_connection() as cursor:
+                cursor.execute("INSERT INTO users (userId, username, email, password) VALUES (%s, %s, %s, %s)",
                            (user_id, username, email, password))
-            conn.commit()
             print(f"User {user_id} added.")
             return new_user
         except psycopg2.InterfaceError as e:
@@ -149,7 +221,6 @@ def create_user(username, email, password):
             reset_connection()
         except psycopg2.Error as e:
             print(f"Database error in create_user: {e}")
-            conn.rollback()
             return None
     return None
 
@@ -161,12 +232,13 @@ def get_user(user_id):
     # Try up to 2 times with connection reset
     for attempt in range(2):
         try:
-            cursor.execute("SELECT * FROM users WHERE userId = %s", (user_id,))
-            row = cursor.fetchone()
-            if row:
-                return dict(row)
-            print(f"User {user_id} not found.")
-            return None
+            with get_db_connection() as cursor:
+                cursor.execute("SELECT * FROM users WHERE userId = %s", (user_id,))
+                row = cursor.fetchone()
+                if row:
+                    return dict(row)
+                print(f"User {user_id} not found.")
+                return None
         except psycopg2.Error as e:
             print(f"Database error in get_user (attempt {attempt + 1}): {e}")
             if attempt == 0:  # Only reset on first failure
@@ -182,12 +254,13 @@ def get_user_from_email(email):
             return user
     for attempt in range(2):
         try:
-            cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
-            row = cursor.fetchone()
-            if row:
-                return dict(row)
-            print(f"User with email {email} not found.")
-            return None
+            with get_db_connection() as cursor:
+                cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
+                row = cursor.fetchone()
+                if row:
+                    return dict(row)
+                print(f"User with email {email} not found.")
+                return None
         except psycopg2.InterfaceError as e:
             print(f"[get_user_from_email] InterfaceError: {e}. Resetting connection and retrying once.")
             reset_connection()
@@ -200,12 +273,13 @@ def get_user_by_google_id(google_id):
     """Get user by Google ID"""
     for attempt in range(2):
         try:
-            cursor.execute("SELECT * FROM users WHERE google_id = %s", (google_id,))
-            row = cursor.fetchone()
-            if row:
-                return dict(row)
-            print(f"User with Google ID {google_id} not found.")
-            return None
+            with get_db_connection() as cursor:
+                cursor.execute("SELECT * FROM users WHERE google_id = %s", (google_id,))
+                row = cursor.fetchone()
+                if row:
+                    return dict(row)
+                print(f"User with Google ID {google_id} not found.")
+                return None
         except psycopg2.InterfaceError as e:
             print(f"[get_user_by_google_id] InterfaceError: {e}. Resetting connection and retrying once.")
             reset_connection()
@@ -241,7 +315,8 @@ def create_google_user(google_id, email, name, profile_picture):
                 "auth_provider": "google"
             }
             
-            cursor.execute("""
+            with get_db_connection() as cursor:
+                cursor.execute("""
                 INSERT INTO users (userId, username, email, password, google_id, profile_picture, auth_provider)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
             """, (user_id, name, email, None, google_id, profile_picture, "google"))
@@ -253,7 +328,6 @@ def create_google_user(google_id, email, name, profile_picture):
             reset_connection()
         except psycopg2.Error as e:
             print(f"Database error in create_google_user: {e}")
-            conn.rollback()
             return None
     return None
 
@@ -261,11 +335,12 @@ def create_google_user(google_id, email, name, profile_picture):
 def get_all_users():
     for attempt in range(2):
         try:
-            cursor.execute("SELECT * FROM users")
-            rows = cursor.fetchall()
-            if not rows:
-                return []
-            return [dict(row) for row in rows]
+            with get_db_connection() as cursor:
+                cursor.execute("SELECT * FROM users")
+                rows = cursor.fetchall()
+                if not rows:
+                    return []
+                return [dict(row) for row in rows]
         except psycopg2.InterfaceError as e:
             print(f"[get_all_users] InterfaceError: {e}. Resetting connection and retrying once.")
             reset_connection()
@@ -281,18 +356,18 @@ def update_user(user_id, updated_info):
             user.update(updated_info)
     for attempt in range(2):
         try:
-            for key in ["username", "email", "password"]:
-                if key in updated_info:
-                    cursor.execute(f"UPDATE users SET {key} = %s WHERE userId = %s", (updated_info[key], user_id))
-            conn.commit()
-            print(f"User {user_id} updated.")
-            return "Done"
+            with get_db_connection() as cursor:
+                for key in ["username", "email", "password"]:
+                    if key in updated_info:
+                        cursor.execute(f"UPDATE users SET {key} = %s WHERE userId = %s", (updated_info[key], user_id))
+                conn.commit()
+                print(f"User {user_id} updated.")
+                return "Done"
         except psycopg2.InterfaceError as e:
             print(f"[update_user] InterfaceError: {e}. Resetting connection and retrying once.")
             reset_connection()
         except psycopg2.Error as e:
             print(f"Database error in update_user: {e}")
-            conn.rollback()
             return None
     print(f"User {user_id} not found.")
     return None
@@ -303,16 +378,16 @@ def delete_user(user_id):
             del users[i]
     for attempt in range(2):
         try:
-            cursor.execute("DELETE FROM users WHERE userId = %s", (user_id,))
-            conn.commit()
-            print(f"User {user_id} deleted.")
-            return "Done"
+            with get_db_connection() as cursor:
+                cursor.execute("DELETE FROM users WHERE userId = %s", (user_id,))
+                conn.commit()
+                print(f"User {user_id} deleted.")
+                return "Done"
         except psycopg2.InterfaceError as e:
             print(f"[delete_user] InterfaceError: {e}. Resetting connection and retrying once.")
             reset_connection()
         except psycopg2.Error as e:
             print(f"Database error in delete_user: {e}")
-            conn.rollback()
             return None
     print(f"User {user_id} not found.")
     return None
@@ -331,7 +406,8 @@ brands = [{
     "marketing_and_social_media_strategy": "marketing_and_social_media_strategy_id",
 }]
 
-cursor.execute('''
+with get_db_connection() as cursor:
+    cursor.execute('''
     CREATE TABLE IF NOT EXISTS brands (
         id UUID PRIMARY KEY,
         userId UUID NOT NULL,
@@ -345,7 +421,6 @@ cursor.execute('''
         FOREIGN KEY (userId) REFERENCES users(userId) ON DELETE CASCADE
     )
 ''')
-conn.commit()
 
 def create_brand(user_id):
     brand_id = str(uuid.uuid4())
@@ -370,7 +445,8 @@ def create_brand(user_id):
         "marketing_and_social_media_strategy": "",
     }
     try:
-        cursor.execute("""
+        with get_db_connection() as cursor:
+            cursor.execute("""
             INSERT INTO brands (id, userId, answerId, name, logo, brand_strategy, brand_communication, brand_identity, marketing_and_social_media_strategy)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
@@ -390,11 +466,12 @@ def get_brand(brand_id):
     # Try up to 2 times with connection reset
     for attempt in range(2):
         try:
-            cursor.execute("SELECT * FROM brands WHERE id = %s", (brand_id,))
-            row = cursor.fetchone()
-            if not row:
-                return None
-            return dict(row)
+            with get_db_connection() as cursor:
+                cursor.execute("SELECT * FROM brands WHERE id = %s", (brand_id,))
+                row = cursor.fetchone()
+                if not row:
+                    return None
+                return dict(row)
         except psycopg2.Error as e:
             print(f"Database error in get_brand (attempt {attempt + 1}): {e}")
             if attempt == 0:  # Only reset on first failure
@@ -407,11 +484,12 @@ def get_brand(brand_id):
 def get_all_user_brands(user_id):
     for attempt in range(2):
         try:
-            cursor.execute("SELECT * FROM brands WHERE userId = %s", (user_id,))
-            rows = cursor.fetchall()
-            if not rows:
-                return []
-            return [dict(row) for row in rows]
+            with get_db_connection() as cursor:
+                cursor.execute("SELECT * FROM brands WHERE userId = %s", (user_id,))
+                rows = cursor.fetchall()
+                if not rows:
+                    return []
+                return [dict(row) for row in rows]
         except psycopg2.InterfaceError as e:
             print(f"[get_all_user_brands] InterfaceError: {e}. Resetting connection and retrying once.")
             reset_connection()
@@ -430,39 +508,39 @@ def update_brand(brand_id, property_name, new_value):
     query = f"UPDATE brands SET {property_name} = %s WHERE id = %s"
     for attempt in range(2):
         try:
-            cursor.execute(query, (new_value, brand_id))
-            conn.commit()
-            if cursor.rowcount == 0:
-                print(f"Brand {brand_id} not found or value was not changed.")
-                return None
-            print(f"Brand {brand_id} property '{property_name}' updated.")
-            return get_brand(brand_id)
+            with get_db_connection() as cursor:
+                cursor.execute(query, (new_value, brand_id))
+                conn.commit()
+                if cursor.rowcount == 0:
+                    print(f"Brand {brand_id} not found or value was not changed.")
+                    return None
+                print(f"Brand {brand_id} property '{property_name}' updated.")
+                return get_brand(brand_id)
         except psycopg2.InterfaceError as e:
             print(f"[update_brand] InterfaceError: {e}. Resetting connection and retrying once.")
             reset_connection()
         except psycopg2.Error as e:
             print(f"Database error in update_brand: {e}")
-            conn.rollback()
             return None
     return None
 
 def delete_brand(brand_id):
     for attempt in range(2):
         try:
-            cursor.execute("DELETE FROM brands WHERE id = %s", (brand_id,))
-            conn.commit()
-            if cursor.rowcount > 0:
-                print(f"Brand {brand_id} has been deleted.")
-                return True
-            else:
-                print(f"Brand {brand_id} not found.")
-                return False
+            with get_db_connection() as cursor:
+                cursor.execute("DELETE FROM brands WHERE id = %s", (brand_id,))
+                conn.commit()
+                if cursor.rowcount > 0:
+                    print(f"Brand {brand_id} has been deleted.")
+                    return True
+                else:
+                    print(f"Brand {brand_id} not found.")
+                    return False
         except psycopg2.InterfaceError as e:
             print(f"[delete_brand] InterfaceError: {e}. Resetting connection and retrying once.")
             reset_connection()
         except psycopg2.Error as e:
             print(f"Database error in delete_brand: {e}")
-            conn.rollback()
             return False
     return False
 
@@ -554,14 +632,15 @@ answers_template = [
     ]
 }]
 
-cursor.execute('''
+with get_db_connection() as cursor:
+    cursor.execute('''
     CREATE TABLE IF NOT EXISTS answers_main (
         answerId UUID PRIMARY KEY,
         userId UUID NOT NULL,
         FOREIGN KEY (userId) REFERENCES users(userId) ON DELETE CASCADE
     )
 ''')
-cursor.execute('''
+    cursor.execute('''
     CREATE TABLE IF NOT EXISTS answers_sections (
         sectionId SERIAL PRIMARY KEY,
         answerId_fk UUID NOT NULL,
@@ -571,7 +650,7 @@ cursor.execute('''
         UNIQUE (answerId_fk, section_number)
     )
 ''')
-cursor.execute('''
+    cursor.execute('''
     CREATE TABLE IF NOT EXISTS answers_questions (
         questionId SERIAL PRIMARY KEY,
         sectionId_fk INT NOT NULL,
@@ -585,35 +664,35 @@ cursor.execute('''
 ''')
 
 # Table to store Cloudinary image URLs
-cursor.execute('''
-    CREATE TABLE IF NOT EXISTS answer_images (
-        imageId SERIAL PRIMARY KEY,
-        answerId_fk UUID NOT NULL,
-        section_number INT NOT NULL,
-        question_number INT NOT NULL,
-        cloudinary_url TEXT NOT NULL,
-        cloudinary_public_id TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (answerId_fk) REFERENCES answers_main(answerId) ON DELETE CASCADE,
-        UNIQUE (answerId_fk, section_number, question_number)
-    )
-''')
+with get_db_connection() as cursor:
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS answer_images (
+            imageId SERIAL PRIMARY KEY,
+            answerId_fk UUID NOT NULL,
+            section_number INT NOT NULL,
+            question_number INT NOT NULL,
+            cloudinary_url TEXT NOT NULL,
+            cloudinary_public_id TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (answerId_fk) REFERENCES answers_main(answerId) ON DELETE CASCADE,
+            UNIQUE (answerId_fk, section_number, question_number)
+        )
+    ''')
 
-# Table to store paid brand assets
-cursor.execute('''
-    CREATE TABLE IF NOT EXISTS brand_assets (
-        id UUID PRIMARY KEY,
-        brandId UUID NOT NULL,
-        userId UUID NOT NULL,
-        full_brand_identity JSONB,
-        social_media_content JSONB,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (brandId) REFERENCES brands(id) ON DELETE CASCADE,
-        FOREIGN KEY (userId) REFERENCES users(userId) ON DELETE CASCADE
-    )
-''')
-conn.commit()
+    # Table to store paid brand assets
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS brand_assets (
+            id UUID PRIMARY KEY,
+            brandId UUID NOT NULL,
+            userId UUID NOT NULL,
+            full_brand_identity JSONB,
+            social_media_content JSONB,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (brandId) REFERENCES brands(id) ON DELETE CASCADE,
+            FOREIGN KEY (userId) REFERENCES users(userId) ON DELETE CASCADE
+        )
+    ''')
 
 # Helper: Map (section_number, answer_number) to global_question_number
 from questions import questions as flat_questions
@@ -645,27 +724,7 @@ def get_section_and_answer_number(global_question_number):
 def create_answers(user_id):
     answer_id = str(uuid.uuid4())
     try:
-        cursor.execute("INSERT INTO answers_main (answerId, userId) VALUES (%s, %s)", (answer_id, user_id))
-        global_qn = 1
-        for section_data in answers_template:
-            cursor.execute(
-                "INSERT INTO answers_sections (answerId_fk, section_number, section_title) VALUES (%s, %s, %s) RETURNING sectionId",
-                (answer_id, section_data['section_number'], section_data['section_title'])
-            )
-            section_id = cursor.fetchone()[0]
-            for question_data in section_data['questions']:
-                cursor.execute(
-                    "INSERT INTO answers_questions (sectionId_fk, answer_number, global_question_number, answer_text) VALUES (%s, %s, %s, %s)",
-                    (section_id, question_data['answer_number'], global_qn, question_data['answer_text'])
-                )
-                global_qn += 1
-        conn.commit()
-        print(f"Answer object {answer_id} created for user {user_id}.")
-        return get_answer(answer_id)
-    except psycopg2.InterfaceError as e:
-        print(f"[create_answers] InterfaceError: {e}. Resetting connection and retrying once.")
-        reset_connection()
-        try:
+        with get_db_connection() as cursor:
             cursor.execute("INSERT INTO answers_main (answerId, userId) VALUES (%s, %s)", (answer_id, user_id))
             global_qn = 1
             for section_data in answers_template:
@@ -681,11 +740,30 @@ def create_answers(user_id):
                     )
                     global_qn += 1
             conn.commit()
-            print(f"Answer object {answer_id} created for user {user_id} (after reset).")
+            print(f"Answer object {answer_id} created for user {user_id}.")
             return get_answer(answer_id)
+    except psycopg2.InterfaceError as e:
+        print(f"[create_answers] InterfaceError: {e}. Retrying once.")
+        try:
+            with get_db_connection() as cursor:
+                cursor.execute("INSERT INTO answers_main (answerId, userId) VALUES (%s, %s)", (answer_id, user_id))
+                global_qn = 1
+                for section_data in answers_template:
+                    cursor.execute(
+                        "INSERT INTO answers_sections (answerId_fk, section_number, section_title) VALUES (%s, %s, %s) RETURNING sectionId",
+                        (answer_id, section_data['section_number'], section_data['section_title'])
+                    )
+                    section_id = cursor.fetchone()[0]
+                    for question_data in section_data['questions']:
+                        cursor.execute(
+                            "INSERT INTO answers_questions (sectionId_fk, answer_number, global_question_number, answer_text) VALUES (%s, %s, %s, %s)",
+                            (section_id, question_data['answer_number'], global_qn, question_data['answer_text'])
+                        )
+                        global_qn += 1
+                print(f"Answer object {answer_id} created for user {user_id} (after retry).")
+                return get_answer(answer_id)
         except Exception as e2:
-            conn.rollback()
-            print(f"Database error during answer creation after reset: {e2}")
+            print(f"Database error during answer creation after retry: {e2}")
             return None
     except psycopg2.Error as e:
         conn.rollback()
@@ -695,38 +773,39 @@ def create_answers(user_id):
 def get_answer(answer_id):
     for attempt in range(2):
         try:
-            cursor.execute("SELECT userId FROM answers_main WHERE answerId = %s", (answer_id,))
-            main_row = cursor.fetchone()
-            if not main_row:
-                return None
-            result = {"answerId": answer_id, "userId": main_row[0], "sections": []}
-            cursor.execute("""
-                SELECT sectionId, section_number, section_title 
-                FROM answers_sections 
-                WHERE answerId_fk = %s 
-                ORDER BY section_number
-            """, (answer_id,))
-            sections = cursor.fetchall()
-            for sec_id, sec_num, sec_title in sections:
-                section_obj = {
-                    "section_number": sec_num,
-                    "section_title": sec_title,
-                    "questions": []
-                }
+            with get_db_connection() as cursor:
+                cursor.execute("SELECT userId FROM answers_main WHERE answerId = %s", (answer_id,))
+                main_row = cursor.fetchone()
+                if not main_row:
+                    return None
+                result = {"answerId": answer_id, "userId": main_row[0], "sections": []}
                 cursor.execute("""
-                    SELECT answer_number, answer_text 
-                    FROM answers_questions 
-                    WHERE sectionId_fk = %s 
-                    ORDER BY answer_number
-                """, (sec_id,))
-                questions = cursor.fetchall()
-                for ans_num, ans_text in questions:
-                    section_obj["questions"].append({
-                        "answer_number": ans_num,
-                        "answer_text": ans_text
-                    })
-                result["sections"].append(section_obj)
-            return result
+                    SELECT sectionId, section_number, section_title 
+                    FROM answers_sections 
+                    WHERE answerId_fk = %s 
+                    ORDER BY section_number
+                """, (answer_id,))
+                sections = cursor.fetchall()
+                for sec_id, sec_num, sec_title in sections:
+                    section_obj = {
+                        "section_number": sec_num,
+                        "section_title": sec_title,
+                        "questions": []
+                    }
+                    cursor.execute("""
+                        SELECT answer_number, answer_text 
+                        FROM answers_questions 
+                        WHERE sectionId_fk = %s 
+                        ORDER BY answer_number
+                    """, (sec_id,))
+                    questions = cursor.fetchall()
+                    for ans_num, ans_text in questions:
+                        section_obj["questions"].append({
+                            "answer_number": ans_num,
+                            "answer_text": ans_text
+                        })
+                    result["sections"].append(section_obj)
+                return result
         except psycopg2.InterfaceError as e:
             print(f"[get_answer] InterfaceError: {e}. Resetting connection and retrying once.")
             reset_connection()
@@ -739,14 +818,15 @@ def get_answer(answer_id):
 def get_answer_from_number(answer_id, section_number, answer_number):
     for attempt in range(2):
         try:
-            cursor.execute("""
-                SELECT aq.answer_text 
-                FROM answers_questions AS aq
-                JOIN answers_sections AS asec ON aq.sectionId_fk = asec.sectionId
-                WHERE asec.answerId_fk = %s AND asec.section_number = %s AND aq.answer_number = %s
-            """, (answer_id, section_number, answer_number))
-            row = cursor.fetchone()
-            return row[0] if row else None
+            with get_db_connection() as cursor:
+                cursor.execute("""
+                    SELECT aq.answer_text 
+                    FROM answers_questions AS aq
+                    JOIN answers_sections AS asec ON aq.sectionId_fk = asec.sectionId
+                    WHERE asec.answerId_fk = %s AND asec.section_number = %s AND aq.answer_number = %s
+                """, (answer_id, section_number, answer_number))
+                row = cursor.fetchone()
+                return row[0] if row else None
         except psycopg2.InterfaceError as e:
             print(f"[get_answer_from_number] InterfaceError: {e}. Resetting connection and retrying once.")
             reset_connection()
@@ -770,24 +850,25 @@ def get_previous_answers(answer_id, limit_global_question_number):
     print(f"  SQL query: {query}")
     print(f"  SQL params: ({answer_id}, {limit_global_question_number})")
     try:
-        cursor.execute(query, (answer_id, limit_global_question_number))
-        rows = cursor.fetchall()
-        print(f"  SQL result rows: {rows}")
-        result = [row[0] for row in rows]
-        print(f"  Final result: {result}")
-        return result
-    except psycopg2.InterfaceError as e:
-        print(f"[get_previous_answers] InterfaceError: {e}. Resetting connection and retrying once.")
-        reset_connection()
-        try:
+        with get_db_connection() as cursor:
             cursor.execute(query, (answer_id, limit_global_question_number))
             rows = cursor.fetchall()
-            print(f"  SQL result rows (after reset): {rows}")
+            print(f"  SQL result rows: {rows}")
             result = [row[0] for row in rows]
-            print(f"  Final result (after reset): {result}")
+            print(f"  Final result: {result}")
             return result
+    except psycopg2.InterfaceError as e:
+        print(f"[get_previous_answers] InterfaceError: {e}. Retrying once.")
+        try:
+            with get_db_connection() as cursor:
+                cursor.execute(query, (answer_id, limit_global_question_number))
+                rows = cursor.fetchall()
+                print(f"  SQL result rows (after retry): {rows}")
+                result = [row[0] for row in rows]
+                print(f"  Final result (after retry): {result}")
+                return result
         except Exception as e2:
-            print(f"  Database error in get_previous_answers after reset: {e2}")
+            print(f"  Database error in get_previous_answers after retry: {e2}")
             return []
     except psycopg2.Error as e:
         print(f"  Database error in get_previous_answers: {e}")
@@ -797,42 +878,7 @@ def get_previous_answers(answer_id, limit_global_question_number):
 def update_answer(answer_id, global_question_number, new_text):
     try:
         print(f"[update_answer] Attempting update: answer_id={answer_id}, global_question_number={global_question_number}, new_text={new_text}")
-        cursor.execute("""
-            UPDATE answers_questions
-            SET answer_text = %s
-            WHERE global_question_number = %s AND sectionId_fk IN (
-                SELECT sectionId FROM answers_sections WHERE answerId_fk = %s
-            )
-        """, (new_text, global_question_number, answer_id))
-        conn.commit()
-        if cursor.rowcount > 0:
-            print(f"[update_answer] Answer updated successfully for answer_id={answer_id}, global_question_number={global_question_number}.")
-            return True
-        else:
-            print(f"[update_answer] No answer found to update for answer_id={answer_id}, global_question_number={global_question_number}. Attempting upsert...")
-            section_number, answer_number = get_section_and_answer_number(global_question_number)
-            cursor.execute("SELECT sectionId FROM answers_sections WHERE answerId_fk = %s AND section_number = %s", (answer_id, section_number))
-            section_row = cursor.fetchone()
-            if not section_row:
-                print(f"[update_answer] No section found for answer_id={answer_id}, section_number={section_number}. Cannot upsert.")
-                return {'error': f'No section found for answer_id={answer_id}, section_number={section_number}. Cannot upsert.'}
-            section_id = section_row[0]
-            try:
-                cursor.execute("""
-                    INSERT INTO answers_questions (sectionId_fk, answer_number, global_question_number, answer_text)
-                    VALUES (%s, %s, %s, %s)
-                """, (section_id, answer_number, global_question_number, new_text))
-                conn.commit()
-                print(f"[update_answer] Inserted new answer for answer_id={answer_id}, global_question_number={global_question_number}.")
-                return True
-            except psycopg2.Error as e:
-                print(f"[update_answer] Database error during upsert: {e}")
-                conn.rollback()
-                return {'error': f'Database error during upsert: {e}'}
-    except psycopg2.InterfaceError as e:
-        print(f"[update_answer] InterfaceError: {e}. Resetting connection and retrying once.")
-        reset_connection()
-        try:
+        with get_db_connection() as cursor:
             cursor.execute("""
                 UPDATE answers_questions
                 SET answer_text = %s
@@ -842,16 +888,16 @@ def update_answer(answer_id, global_question_number, new_text):
             """, (new_text, global_question_number, answer_id))
             conn.commit()
             if cursor.rowcount > 0:
-                print(f"[update_answer] Answer updated successfully for answer_id={answer_id}, global_question_number={global_question_number} (after reset).")
+                print(f"[update_answer] Answer updated successfully for answer_id={answer_id}, global_question_number={global_question_number}.")
                 return True
             else:
-                print(f"[update_answer] No answer found to update for answer_id={answer_id}, global_question_number={global_question_number} (after reset). Attempting upsert...")
+                print(f"[update_answer] No answer found to update for answer_id={answer_id}, global_question_number={global_question_number}. Attempting upsert...")
                 section_number, answer_number = get_section_and_answer_number(global_question_number)
                 cursor.execute("SELECT sectionId FROM answers_sections WHERE answerId_fk = %s AND section_number = %s", (answer_id, section_number))
                 section_row = cursor.fetchone()
                 if not section_row:
-                    print(f"[update_answer] No section found for answer_id={answer_id}, section_number={section_number} (after reset). Cannot upsert.")
-                    return {'error': f'No section found for answer_id={answer_id}, section_number={section_number} (after reset). Cannot upsert.'}
+                    print(f"[update_answer] No section found for answer_id={answer_id}, section_number={section_number}. Cannot upsert.")
+                    return {'error': f'No section found for answer_id={answer_id}, section_number={section_number}. Cannot upsert.'}
                 section_id = section_row[0]
                 try:
                     cursor.execute("""
@@ -859,16 +905,48 @@ def update_answer(answer_id, global_question_number, new_text):
                         VALUES (%s, %s, %s, %s)
                     """, (section_id, answer_number, global_question_number, new_text))
                     conn.commit()
-                    print(f"[update_answer] Inserted new answer for answer_id={answer_id}, global_question_number={global_question_number} (after reset).")
+                    print(f"[update_answer] Inserted new answer for answer_id={answer_id}, global_question_number={global_question_number}.")
                     return True
-                except psycopg2.Error as e2:
-                    print(f"[update_answer] Database error during upsert after reset: {e2}")
+                except psycopg2.Error as e:
+                    print(f"[update_answer] Database error during upsert: {e}")
                     conn.rollback()
-                    return {'error': f'Database error during upsert after reset: {e2}'}
+                    return {'error': f'Database error during upsert: {e}'}
+    except psycopg2.InterfaceError as e:
+        print(f"[update_answer] InterfaceError: {e}. Retrying once.")
+        try:
+            with get_db_connection() as cursor:
+                cursor.execute("""
+                    UPDATE answers_questions
+                    SET answer_text = %s
+                    WHERE global_question_number = %s AND sectionId_fk IN (
+                        SELECT sectionId FROM answers_sections WHERE answerId_fk = %s
+                    )
+                """, (new_text, global_question_number, answer_id))
+                if cursor.rowcount > 0:
+                    print(f"[update_answer] Answer updated successfully for answer_id={answer_id}, global_question_number={global_question_number} (after retry).")
+                    return True
+                else:
+                    print(f"[update_answer] No answer found to update for answer_id={answer_id}, global_question_number={global_question_number} (after retry). Attempting upsert...")
+                    section_number, answer_number = get_section_and_answer_number(global_question_number)
+                    cursor.execute("SELECT sectionId FROM answers_sections WHERE answerId_fk = %s AND section_number = %s", (answer_id, section_number))
+                    section_row = cursor.fetchone()
+                    if not section_row:
+                        print(f"[update_answer] No section found for answer_id={answer_id}, section_number={section_number} (after retry). Cannot upsert.")
+                        return {'error': f'No section found for answer_id={answer_id}, section_number={section_number} (after retry). Cannot upsert.'}
+                    section_id = section_row[0]
+                    try:
+                        cursor.execute("""
+                            INSERT INTO answers_questions (sectionId_fk, answer_number, global_question_number, answer_text)
+                            VALUES (%s, %s, %s, %s)
+                        """, (section_id, answer_number, global_question_number, new_text))
+                        print(f"[update_answer] Inserted new answer for answer_id={answer_id}, global_question_number={global_question_number} (after retry).")
+                        return True
+                    except psycopg2.Error as e2:
+                        print(f"[update_answer] Database error during upsert after retry: {e2}")
+                        return {'error': f'Database error during upsert after retry: {e2}'}
         except Exception as e2:
-            conn.rollback()
-            print(f"[update_answer] Database error during answer update after reset: {e2}")
-            return {'error': f'Database error during answer update after reset: {e2}'}
+            print(f"[update_answer] Database error during answer update after retry: {e2}")
+            return {'error': f'Database error during answer update after retry: {e2}'}
     except psycopg2.Error as e:
         print(f"[update_answer] Database error during answer update: {e}")
         conn.rollback()
@@ -877,20 +955,20 @@ def update_answer(answer_id, global_question_number, new_text):
 def delete_answer(answer_id):
     for attempt in range(2):
         try:
-            cursor.execute("DELETE FROM answers_main WHERE answerId = %s", (answer_id,))
-            conn.commit()
-            if cursor.rowcount > 0:
-                print(f"Answer object {answer_id} deleted successfully.")
-                return True
-            else:
-                print(f"Answer object {answer_id} not found.")
-                return False
+            with get_db_connection() as cursor:
+                cursor.execute("DELETE FROM answers_main WHERE answerId = %s", (answer_id,))
+                conn.commit()
+                if cursor.rowcount > 0:
+                    print(f"Answer object {answer_id} deleted successfully.")
+                    return True
+                else:
+                    print(f"Answer object {answer_id} not found.")
+                    return False
         except psycopg2.InterfaceError as e:
             print(f"[delete_answer] InterfaceError: {e}. Resetting connection and retrying once.")
             reset_connection()
         except psycopg2.Error as e:
             print(f"Database error in delete_answer: {e}")
-            conn.rollback()
             return False
         return False
     
@@ -901,18 +979,19 @@ def delete_answer(answer_id):
 def save_image_url(answer_id, section_number, question_number, cloudinary_url, cloudinary_public_id):
     for attempt in range(2):
         try:
-            cursor.execute("""
-                INSERT INTO answer_images (answerId_fk, section_number, question_number, cloudinary_url, cloudinary_public_id)
-                VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (answerId_fk, section_number, question_number)
-                DO UPDATE SET 
-                    cloudinary_url = EXCLUDED.cloudinary_url,
-                    cloudinary_public_id = EXCLUDED.cloudinary_public_id,
-                    created_at = CURRENT_TIMESTAMP
-            """, (answer_id, section_number, question_number, cloudinary_url, cloudinary_public_id))
-            conn.commit()
-            print(f"Image URL saved for answer {answer_id}, section {section_number}, question {question_number}")
-            return True
+            with get_db_connection() as cursor:
+                cursor.execute("""
+                    INSERT INTO answer_images (answerId_fk, section_number, question_number, cloudinary_url, cloudinary_public_id)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (answerId_fk, section_number, question_number)
+                    DO UPDATE SET 
+                        cloudinary_url = EXCLUDED.cloudinary_url,
+                        cloudinary_public_id = EXCLUDED.cloudinary_public_id,
+                        created_at = CURRENT_TIMESTAMP
+                """, (answer_id, section_number, question_number, cloudinary_url, cloudinary_public_id))
+                conn.commit()
+                print(f"Image URL saved for answer {answer_id}, section {section_number}, question {question_number}")
+                return True
         except psycopg2.InterfaceError as e:
             print(f"[save_image_url] InterfaceError: {e}. Resetting connection and retrying once.")
             reset_connection()
@@ -925,19 +1004,20 @@ def save_image_url(answer_id, section_number, question_number, cloudinary_url, c
 def get_image_url(answer_id, section_number, question_number):
     for attempt in range(2):
         try:
-            cursor.execute("""
-                SELECT cloudinary_url, cloudinary_public_id, created_at
-                FROM answer_images
-                WHERE answerId_fk = %s AND section_number = %s AND question_number = %s
-            """, (answer_id, section_number, question_number))
-            row = cursor.fetchone()
-            if row:
-                return {
-                    "cloudinary_url": row[0],
-                    "cloudinary_public_id": row[1],
-                    "created_at": row[2]
-                }
-            return None
+            with get_db_connection() as cursor:
+                cursor.execute("""
+                    SELECT cloudinary_url, cloudinary_public_id, created_at
+                    FROM answer_images
+                    WHERE answerId_fk = %s AND section_number = %s AND question_number = %s
+                """, (answer_id, section_number, question_number))
+                row = cursor.fetchone()
+                if row:
+                    return {
+                        "cloudinary_url": row[0],
+                        "cloudinary_public_id": row[1],
+                        "created_at": row[2]
+                    }
+                return None
         except psycopg2.InterfaceError as e:
             print(f"[get_image_url] InterfaceError: {e}. Resetting connection and retrying once.")
             reset_connection()
@@ -949,15 +1029,16 @@ def get_image_url(answer_id, section_number, question_number):
 def delete_image_url(answer_id, section_number, question_number):
     for attempt in range(2):
         try:
-            cursor.execute("""
-                DELETE FROM answer_images
-                WHERE answerId_fk = %s AND section_number = %s AND question_number = %s
-            """, (answer_id, section_number, question_number))
-            conn.commit()
-            if cursor.rowcount > 0:
-                print(f"Image URL deleted for answer {answer_id}, section {section_number}, question {question_number}")
-                return True
-            return False
+            with get_db_connection() as cursor:
+                cursor.execute("""
+                    DELETE FROM answer_images
+                    WHERE answerId_fk = %s AND section_number = %s AND question_number = %s
+                """, (answer_id, section_number, question_number))
+                conn.commit()
+                if cursor.rowcount > 0:
+                    print(f"Image URL deleted for answer {answer_id}, section {section_number}, question {question_number}")
+                    return True
+                return False
         except psycopg2.InterfaceError as e:
             print(f"[delete_image_url] InterfaceError: {e}. Resetting connection and retrying once.")
             reset_connection()
@@ -970,23 +1051,24 @@ def delete_image_url(answer_id, section_number, question_number):
 def get_all_images_for_answer(answer_id):
     for attempt in range(2):
         try:
-            cursor.execute("""
-                SELECT section_number, question_number, cloudinary_url, cloudinary_public_id, created_at
-                FROM answer_images
-                WHERE answerId_fk = %s
-                ORDER BY section_number, question_number
-            """, (answer_id,))
-            rows = cursor.fetchall()
-            return [
-                {
-                    "section_number": row[0],
-                    "question_number": row[1],
-                    "cloudinary_url": row[2],
-                    "cloudinary_public_id": row[3],
-                    "created_at": row[4]
-                }
-                for row in rows
-            ]
+            with get_db_connection() as cursor:
+                cursor.execute("""
+                    SELECT section_number, question_number, cloudinary_url, cloudinary_public_id, created_at
+                    FROM answer_images
+                    WHERE answerId_fk = %s
+                    ORDER BY section_number, question_number
+                """, (answer_id,))
+                rows = cursor.fetchall()
+                return [
+                    {
+                        "section_number": row[0],
+                        "question_number": row[1],
+                        "cloudinary_url": row[2],
+                        "cloudinary_public_id": row[3],
+                        "created_at": row[4]
+                    }
+                    for row in rows
+                ]
         except psycopg2.InterfaceError as e:
             print(f"[get_all_images_for_answer] InterfaceError: {e}. Resetting connection and retrying once.")
             reset_connection()
@@ -1001,19 +1083,20 @@ def create_brand_assets(brand_id, user_id, full_brand_identity, social_media_con
     """Create or update brand assets for paid users"""
     asset_id = str(uuid.uuid4())
     try:
-        cursor.execute("""
-            INSERT INTO brand_assets (id, brandId, userId, full_brand_identity, social_media_content)
-            VALUES (%s, %s, %s, %s, %s)
-            ON CONFLICT (brandId) 
-            DO UPDATE SET 
-                userId = EXCLUDED.userId,
-                full_brand_identity = EXCLUDED.full_brand_identity,
-                social_media_content = EXCLUDED.social_media_content,
-                updated_at = CURRENT_TIMESTAMP
-        """, (asset_id, brand_id, user_id, json.dumps(full_brand_identity), json.dumps(social_media_content)))
-        conn.commit()
-        print(f"Brand assets created/updated for brand {brand_id} and user {user_id}")
-        return asset_id
+        with get_db_connection() as cursor:
+            cursor.execute("""
+                INSERT INTO brand_assets (id, brandId, userId, full_brand_identity, social_media_content)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (brandId) 
+                DO UPDATE SET 
+                    userId = EXCLUDED.userId,
+                    full_brand_identity = EXCLUDED.full_brand_identity,
+                    social_media_content = EXCLUDED.social_media_content,
+                    updated_at = CURRENT_TIMESTAMP
+            """, (asset_id, brand_id, user_id, json.dumps(full_brand_identity), json.dumps(social_media_content)))
+            conn.commit()
+            print(f"Brand assets created/updated for brand {brand_id} and user {user_id}")
+            return asset_id
     except psycopg2.Error as e:
         print(f"Database error creating brand assets: {e}")
         conn.rollback()
@@ -1023,23 +1106,24 @@ def get_brand_assets(brand_id):
     """Get brand assets for a specific brand"""
     for attempt in range(2):
         try:
-            cursor.execute("""
-                SELECT id, brandId, userId, full_brand_identity, social_media_content, created_at, updated_at
-                FROM brand_assets 
-                WHERE brandId = %s
-            """, (brand_id,))
-            row = cursor.fetchone()
-            if row:
-                return {
-                    "id": row[0],
-                    "brandId": row[1],
-                    "userId": row[2],
-                    "full_brand_identity": json.loads(row[3]) if row[3] else None,
-                    "social_media_content": json.loads(row[4]) if row[4] else None,
-                    "created_at": row[5],
-                    "updated_at": row[6]
-                }
-            return None
+            with get_db_connection() as cursor:
+                cursor.execute("""
+                    SELECT id, brandId, userId, full_brand_identity, social_media_content, created_at, updated_at
+                    FROM brand_assets 
+                    WHERE brandId = %s
+                """, (brand_id,))
+                row = cursor.fetchone()
+                if row:
+                    return {
+                        "id": row[0],
+                        "brandId": row[1],
+                        "userId": row[2],
+                        "full_brand_identity": json.loads(row[3]) if row[3] else None,
+                        "social_media_content": json.loads(row[4]) if row[4] else None,
+                        "created_at": row[5],
+                        "updated_at": row[6]
+                    }
+                return None
         except psycopg2.InterfaceError as e:
             print(f"[get_brand_assets] InterfaceError: {e}. Resetting connection and retrying once.")
             reset_connection()
@@ -1052,25 +1136,26 @@ def get_brand_assets_by_user(user_id):
     """Get all brand assets for a specific user"""
     for attempt in range(2):
         try:
-            cursor.execute("""
-                SELECT id, brandId, userId, full_brand_identity, social_media_content, created_at, updated_at
-                FROM brand_assets 
-                WHERE userId = %s
-                ORDER BY created_at DESC
-            """, (user_id,))
-            rows = cursor.fetchall()
-            return [
-                {
-                    "id": row[0],
-                    "brandId": row[1],
-                    "userId": row[2],
-                    "full_brand_identity": json.loads(row[3]) if row[3] else None,
-                    "social_media_content": json.loads(row[4]) if row[4] else None,
-                    "created_at": row[5],
-                    "updated_at": row[6]
-                }
-                for row in rows
-            ]
+            with get_db_connection() as cursor:
+                cursor.execute("""
+                    SELECT id, brandId, userId, full_brand_identity, social_media_content, created_at, updated_at
+                    FROM brand_assets 
+                    WHERE userId = %s
+                    ORDER BY created_at DESC
+                """, (user_id,))
+                rows = cursor.fetchall()
+                return [
+                    {
+                        "id": row[0],
+                        "brandId": row[1],
+                        "userId": row[2],
+                        "full_brand_identity": json.loads(row[3]) if row[3] else None,
+                        "social_media_content": json.loads(row[4]) if row[4] else None,
+                        "created_at": row[5],
+                        "updated_at": row[6]
+                    }
+                    for row in rows
+                ]
         except psycopg2.InterfaceError as e:
             print(f"[get_brand_assets_by_user] InterfaceError: {e}. Resetting connection and retrying once.")
             reset_connection()
@@ -1083,12 +1168,13 @@ def delete_brand_assets(brand_id):
     """Delete brand assets for a specific brand"""
     for attempt in range(2):
         try:
-            cursor.execute("DELETE FROM brand_assets WHERE brandId = %s", (brand_id,))
-            conn.commit()
-            if cursor.rowcount > 0:
-                print(f"Brand assets deleted for brand {brand_id}")
-                return True
-            return False
+            with get_db_connection() as cursor:
+                cursor.execute("DELETE FROM brand_assets WHERE brandId = %s", (brand_id,))
+                conn.commit()
+                if cursor.rowcount > 0:
+                    print(f"Brand assets deleted for brand {brand_id}")
+                    return True
+                return False
         except psycopg2.InterfaceError as e:
             print(f"[delete_brand_assets] InterfaceError: {e}. Resetting connection and retrying once.")
             reset_connection()
