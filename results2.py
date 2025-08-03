@@ -9,6 +9,7 @@ import uuid
 import setup
 import textOnImage
 import cloudinary_utils
+import shutil
 
 
 
@@ -836,7 +837,6 @@ def generate_results(userId, brandId):
 
 
 def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumbers, registrationNumber, website, brandLogo, others = {}):
-    import shutil
     images_dir = 'images'
     try:
         user = db.get_user(userId)
@@ -846,7 +846,19 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
         previous_questions = questions.get_previous_questions(11)
         previous_answers = db.get_previous_answers(answers["answerId"], 11)
         question_and_answers = " ".join([f"Question: {q} Answer: {a}." for q, a in zip(previous_questions, previous_answers)])
-        previously_generated_brand_identity = brand["brand_identity"]
+        # Parse previously generated brand identity
+        # brand_identity_data is not defined yet at this point in the function.
+        # To fix this, we need to parse it from the brand object before using it.
+        # Let's parse brand_identity_data from brand["brand_identity"] if it exists, else use an empty dict.
+        if brand.get("brand_identity"):
+            try:
+                brand_identity_data = json.loads(brand["brand_identity"]) if isinstance(brand["brand_identity"], str) else brand["brand_identity"]
+            except (json.JSONDecodeError, TypeError) as e:
+                print(f"Error parsing brand_identity JSON: {e}")
+                brand_identity_data = {}
+        else:
+            brand_identity_data = {}
+        previously_generated_brand_identity = brand_identity_data
         
         
         # print(question_and_answers)
@@ -915,6 +927,7 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             print("Section success \n\n")
             return assets
 
+        # ========== IMAGE GENERATION ENABLED ==========
         # Usage for each asset type, now passing brandLogo:
 
         brandPatterns = generate_identity_assets(
@@ -926,10 +939,10 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
                 "{question_and_answers}"
                 "<<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>"
                 "{previously_generated_brand_identity}"
-                "<<<. Generate 3 unique, visually appealing brand pattern prompts for an AI image generator. Each pattern should reflect the brand's personality, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a list of 3 detailed prompts. Do not add any extra text or formatting. You MUST respond with a list of strings in angle braces, in this format: ["prompt1", "prompt2"]. '''
+                "<<<. Generate 1 unique, visually appealing brand pattern prompt for an AI image generator. The pattern should reflect the brand's personality, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a single detailed prompt. Do not add any extra text or formatting. You MUST respond with a single string prompt. '''
             ),
-            prompt="Please give me 3 brand pattern prompts as a list.",
-            expected_count=3,
+            prompt="Please give me 1 brand pattern prompt.",
+            expected_count=1,
             cloudinary_folder="brand_patterns",
             userName=userName,
             userEmail=userEmail,
@@ -949,10 +962,10 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
                 "{question_and_answers}"
                 "<<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>"
                 "{previously_generated_brand_identity}"
-                "<<<. Generate 2 highly detailed prompts for an AI image generator to create business card mockups for the brand. Each prompt should specify the brand name, tagline, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a list of 2 prompts. No extra text. You MUST respond with a list of strings in angle braces, in this format: ["prompt1", "prompt2"]. '''
+                "<<<. Generate 1 highly detailed prompt for an AI image generator to create a business card mockup for the brand. The prompt should specify the brand name, tagline, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a single prompt. No extra text. You MUST respond with a single string prompt. '''
             ),
-            prompt="Please give me 2 business card prompts as a list.",
-            expected_count=2,
+            prompt="Please give me 1 business card prompt.",
+            expected_count=1,
             cloudinary_folder="business_cards",
             userName=userName,
             userEmail=userEmail,
@@ -995,10 +1008,10 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
                 "{question_and_answers}"
                 "<<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>"
                 "{previously_generated_brand_identity}"
-                "<<<. Generate 2 detailed prompts for an AI image generator to create t-shirt mockups for the brand. Specify logo placement, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a list of 2 prompts. You MUST respond with a list of strings in angle braces, in this format: ["prompt1", "prompt2"]. '''
+                "<<<. Generate 1 detailed prompt for an AI image generator to create a t-shirt mockup for the brand. Specify logo placement, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a single prompt. You MUST respond with a single string prompt. '''
             ),
-            prompt="Please give me 2 t-shirt mockup prompts as a list.",
-            expected_count=2,
+            prompt="Please give me 1 t-shirt mockup prompt.",
+            expected_count=1,
             cloudinary_folder="tshirt_mockups",
             userName=userName,
             userEmail=userEmail,
@@ -1082,11 +1095,11 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             Say hello to Lumirural — a bold new initiative built to light up lives, one village at a time.
             In many rural communities, nightfall means silence, stillness, and struggle. No lights to read. No safe path to walk. No way to keep going.
             We created Lumirural to change that.
-            At [Insert Founder's Name]’s core vision was a simple question:
+            At [Insert Founder's Name]'s core vision was a simple question:
             👉 What if every household, no matter how remote, had access to affordable, clean, and reliable light?
-            That question sparked a movement — one that’s now empowering families, improving education, and making communities safer through sustainable solar-powered lighting.
-            We’re not just selling torches.
-            We’re giving people the ability to live, learn, work, and thrive after dark.
+            That question sparked a movement — one that's now empowering families, improving education, and making communities safer through sustainable solar-powered lighting.
+            We're not just selling torches.
+            We're giving people the ability to live, learn, work, and thrive after dark.
             💛 Follow us to join the journey.
             🌱 Tell a friend in need.
             🔦 Let's bring light to where it matters most.
@@ -1099,28 +1112,28 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             Bring light to places the world often overlooks.
             We believe in sustainable energy.
             We believe in community power.
-            We believe it’s time for rural Africa to shine — literally.
+            We believe it's time for rural Africa to shine — literally.
             ✨ This is just the beginning.
-            Come along, share our story, and let’s brighten the future together.
+            Come along, share our story, and let's brighten the future together.
             #MeetTheTeam #Lumirural #SocialEnergy #FoundersWithPurpose #SolarAfrica
 
             3- 💡 No Power. No Progress.
-            That’s the Problem Lumirural is Solving.
+            That's the Problem Lumirural is Solving.
             Tired of struggling with darkness in rural homes, kids studying under candlelight, and families closing their day at sunset? So were we.
-            That’s why we created Lumirural — to bring affordable, clean, and safe solar-powered light to communities that have been left in the dark for far too long.
+            That's why we created Lumirural — to bring affordable, clean, and safe solar-powered light to communities that have been left in the dark for far too long.
             Every evening, millions of people across Cameroon and Africa are forced to choose between expensive fuel, dangerous kerosene lamps, or complete darkness.
             We said enough is enough.
             ✅ With Lumirural, children can study at night
             ✅ Small shops can stay open after sunset
             ✅ Women and families can feel safe walking outside
-            ✅ Life doesn’t have to stop just because the sun sets
-            We’re lighting homes — but more than that, we’re lighting hope.
+            ✅ Life doesn't have to stop just because the sun sets
+            We're lighting homes — but more than that, we're lighting hope.
             Join us as we illuminate the path forward.
             #TheProblemWeSolve #Lumirural #LightUpAfrica #SolarSolutions #EnergyForAll
 
 
 
-            4- 🔦 A Closer Look at What’s Lighting Up Soon 👀
+            4- 🔦 A Closer Look at What's Lighting Up Soon 👀
             Say hello to the tools of transformation — built by Lumirural to power every home, every family, every dream.
             🌞 Solar Lighting Kits
             Affordable, durable, and designed for rural realities — our kits include lights, USB ports, and long-lasting solar panels for families, students, and small businesses.
@@ -1129,11 +1142,11 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             🔋 Power Stations for Community Use
             Bigger solutions for schools, churches, and health centers — helping entire communities thrive after dark.
             💼 Pay-as-You-Go Solar Options
-            Energy shouldn’t be a luxury. Our flexible payment plans make light accessible to all.
+            Energy shouldn't be a luxury. Our flexible payment plans make light accessible to all.
             From farm to classroom, market to maternity ward, Lumirural is bringing light, safety, and possibility to places the grid forgot.
-            This isn’t just electricity —
-            It’s dignity, freedom, and a future that stays on after dark.
-            📸 Swipe to see what’s coming soon and how you can be part of the change.
+            This isn't just electricity —
+            It's dignity, freedom, and a future that stays on after dark.
+            📸 Swipe to see what's coming soon and how you can be part of the change.
             #Lumirural #OurProducts #SolarSolutions #LightChangesEverything #EnergyForDevelopment
 
 
@@ -1142,28 +1155,28 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
 
 
             5- 🛠️ The Work Behind the Light ✨
-            It’s been months of late nights, field visits, dusty roads, power cuts, bold ideas, and real conversations.
+            It's been months of late nights, field visits, dusty roads, power cuts, bold ideas, and real conversations.
             From sketching designs on scrap paper to testing prototypes in remote villages...
-            From team brainstorms under torchlight to meeting families who inspired everything we’re building...
-            Here’s a sneak peek behind our launch:
+            From team brainstorms under torchlight to meeting families who inspired everything we're building...
+            Here's a sneak peek behind our launch:
             📸 [Insert photos or videos: packaging, production, team at work, first installations]
-            At Lumirural, we’re not just assembling solar kits —
-            We’re co-creating a future where every child can read at night, where mothers can cook safely, and where families no longer fear the dark.
+            At Lumirural, we're not just assembling solar kits —
+            We're co-creating a future where every child can read at night, where mothers can cook safely, and where families no longer fear the dark.
             This journey has been real, raw, and full of purpose.
-            And now, we’re ready to shine.
+            And now, we're ready to shine.
             Thank you for being part of the story.
-            The lights are coming on — and we’re just getting started.
+            The lights are coming on — and we're just getting started.
             #BehindLumirural #MakingOf #StartupJourney #LightInTheDark #SolarAfrica #BTSLaunch
 
             6- 💬 Real Stories. Real Impact.
-            Here’s what people are already saying about Lumirural…
-            🗣️ “Before this light, my children couldn’t read after 6pm. Now, they do homework at night — and even help me prepare for market.”
+            Here's what people are already saying about Lumirural…
+            🗣️ "Before this light, my children couldn't read after 6pm. Now, they do homework at night — and even help me prepare for market."
             — Mama Elise, Small Business Owner, Babadjou
-            🗣️ “I used to charge my phone once a week at a shop far away. Now I charge it at home and even make small money letting others charge theirs.”
+            🗣️ "I used to charge my phone once a week at a shop far away. Now I charge it at home and even make small money letting others charge theirs."
             — Tata Collins, Farmer, Batibo
-            🗣️ “This isn’t just light  it’s freedom. It’s security. It’s dignity.”
+            🗣️ "This isn't just light  it's freedom. It's security. It's dignity."
             — Community Health Worker, Ndop
-            🌍 From households to health centers, the difference is already being felt — and we’re only getting started.
+            🌍 From households to health centers, the difference is already being felt — and we're only getting started.
             Because when you give people light, you give them time, safety, and a fighting chance.
             ➡️ Want to be part of the change?
             DM us to get Lumirural in your home or community.
@@ -1178,7 +1191,7 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             ✅ 1. Community-Based Demonstrations (On-Ground Activation)
             Why it works: Most of your customers may be unfamiliar with solar tech or skeptical of promises. Seeing is believing.
             What to do:
-            Partner with local chiefs, churches, health centers, and schools to organize “Light Up” demos.
+            Partner with local chiefs, churches, health centers, and schools to organize "Light Up" demos.
 
 
             Showcase how the products work (especially at night).
@@ -1204,7 +1217,7 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             Identify local role models (teachers, nurses, pastors) to be informal brand advocates.
 
 
-            🎯 You’re not just selling lights, you’re selling empowerment — make people part of the mission.
+            🎯 You're not just selling lights, you're selling empowerment — make people part of the mission.
 
             ✅ 3. WhatsApp-Based Marketing and Ordering
             Why it works: WhatsApp is the most used digital tool among your target audience — even more than websites or social media.
@@ -1240,7 +1253,7 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             Introduce Pay-As-You-Go (PAYG) or small weekly installment models.
 
 
-            Bundle offers: e.g., “Buy 3 lights, get 1 for your neighbor free” or “Mother’s Pack: Light + Phone Charger for 5,000 off”
+            Bundle offers: e.g., "Buy 3 lights, get 1 for your neighbor free" or "Mother's Pack: Light + Phone Charger for 5,000 off"
 
 
             Allow school-based packages for students, supported by PTAs or community sponsors.
@@ -1268,9 +1281,9 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             💡 All this for just 25,000 FCFA
             One-time purchase. Lifetime of peace and Free Delivery
 
-            💡 AD COPY 2: "Own the Sun — We’ll Package It for You"
+            💡 AD COPY 2: "Own the Sun — We'll Package It for You"
             Imagine having light every night without paying monthly bills.
-            Let’s make it happen:
+            Let's make it happen:
             📲 https://wa.me/237XXXXXXXXX
             The LUMIrural Solar Kit is:
             ✔️ Rechargeable
@@ -1279,21 +1292,21 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             ✔️ Charges your phone and radio too
             Clean, reliable energy that fits your pocket.
             🎁 Get yours now at only 22,500 FCFA
-            Limited stock — let’s light you up.
+            Limited stock — let's light you up.
 
             💡 Ad Copy 3:
             "Your Neighbor Has Light. Why Are You Still in the Dark?"
             📲 Order yours now: https://wa.me/237XXXXXXXXX
-            The street is talking and it’s saying...
-            “Lumirural don land!”
+            The street is talking and it's saying...
+            "Lumirural don land!"
             ✅ Clean solar energy
             ✅ Long-lasting bulbs
-            ✅ Phone charging that doesn’t depend on “Eneo mood”
+            ✅ Phone charging that doesn't depend on "Eneo mood"
             ✅ No noise, no smoke, just vibes
             All this brightness for just 15,000 FRS.
             Even your generator is sweating right now. 😅
-            Don’t let darkness shame your compound.
-            We’re just one WhatsApp message away.
+            Don't let darkness shame your compound.
+            We're just one WhatsApp message away.
             
             
             
@@ -1303,29 +1316,343 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
         )
         prompt = "Please give me the social media content as JSON in the specified structure."
         response = openAI.get_text_prediction(system_prompt, prompt)
-        try:
-            social_media_content = json.loads(response.strip())
+        print('response', response)
+        
+        # Use the existing clean_and_parse_json function to handle malformed JSON
+        social_media_content = clean_and_parse_json(response)
+        
+        if social_media_content:
             ready_made_posts = social_media_content.get("ready_made_posts", [])
             ad_copies = social_media_content.get("ad_copies", [])
             relevant_marketing_strategies = social_media_content.get("relevant_marketing_strategies", [])
-        except Exception as e:
-            print(f"Error parsing social media content: {e}")
+        else:
+            print("Warning: Could not parse social media content, using default values")
             ready_made_posts = []
             ad_copies = []
             relevant_marketing_strategies = []
 
+        # ========== Generate Premium Brand Guidelines ==========
+        brand_guidelines_system_prompt = f'''You are a brand identity expert. Here is a list of questions we asked the user and here are the answers they gave: >>>
+        {question_and_answers} 
+        <<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>
+        {previously_generated_brand_identity}
+        <<<. Generate comprehensive brand guidelines in the following JSON structure:
+        {{
+            "style_guide": {{
+                "typography_rules": [
+                    {{
+                        "font_family": "string",
+                        "usage": "string",
+                        "size_range": "string",
+                        "line_height": "string",
+                        "spacing": "string"
+                    }}
+                ],
+                "color_usage": [
+                    {{
+                        "color_name": "string",
+                        "hex_value": "string",
+                        "usage_context": "string",
+                        "do_not_use_for": "string"
+                    }}
+                ],
+                "spacing_guidelines": [
+                    {{
+                        "element": "string",
+                        "margin": "string",
+                        "padding": "string",
+                        "description": "string"
+                    }}
+                ]
+            }},
+            "logo_usage_rules": [
+                {{
+                    "rule": "string",
+                    "description": "string",
+                    "examples": "string"
+                }}
+            ],
+            "brand_voice": {{
+                "tone": "string",
+                "personality_traits": ["string"],
+                "communication_style": "string",
+                "do_not_use": ["string"]
+            }},
+            "visual_hierarchy": [
+                {{
+                    "element": "string",
+                    "priority": "string",
+                    "guidelines": "string"
+                }}
+            ]
+        }}
+        
+        Make the guidelines comprehensive, professional, and actionable. Include specific rules and examples.'''
+
+        brand_guidelines_prompt = "Please give me comprehensive brand guidelines as JSON."
+        brand_guidelines_response = openAI.get_text_prediction(brand_guidelines_system_prompt, brand_guidelines_prompt)
+        brand_guidelines = clean_and_parse_json(brand_guidelines_response)
+        
+        if not brand_guidelines:
+            print("Warning: Could not parse brand guidelines, using default values")
+            brand_guidelines = {
+                "style_guide": {"typography_rules": [], "color_usage": [], "spacing_guidelines": []},
+                "logo_usage_rules": [],
+                "brand_voice": {"tone": "", "personality_traits": [], "communication_style": "", "do_not_use": []},
+                "visual_hierarchy": []
+            }
+
+        # ========== Generate Marketing Templates ==========
+        marketing_templates_system_prompt = f'''You are a marketing expert. Here is a list of questions we asked the user and here are the answers they gave: >>>
+        {question_and_answers} 
+        <<<. Generate marketing templates in the following JSON structure:
+        {{
+            "email_templates": [
+                {{
+                    "template_name": "string",
+                    "subject_line": "string",
+                    "greeting": "string",
+                    "body": "string",
+                    "closing": "string",
+                    "signature": "string"
+                }}
+            ],
+            "presentation_templates": [
+                {{
+                    "slide_title": "string",
+                    "content": "string",
+                    "key_points": ["string"],
+                    "visual_suggestions": "string"
+                }}
+            ],
+            "brochure_content": [
+                {{
+                    "section_title": "string",
+                    "content": "string",
+                    "call_to_action": "string"
+                }}
+            ],
+            "landing_page_copy": {{
+                "hero_headline": "string",
+                "hero_subheadline": "string",
+                "benefits": ["string"],
+                "features": ["string"],
+                "testimonials": ["string"],
+                "call_to_action": "string"
+            }}
+        }}
+        
+        Make the templates professional, engaging, and tailored to the brand.'''
+
+        marketing_templates_prompt = "Please give me marketing templates as JSON."
+        marketing_templates_response = openAI.get_text_prediction(marketing_templates_system_prompt, marketing_templates_prompt)
+        marketing_templates = clean_and_parse_json(marketing_templates_response)
+        
+        if not marketing_templates:
+            print("Warning: Could not parse marketing templates, using default values")
+            marketing_templates = {
+                "email_templates": [],
+                "presentation_templates": [],
+                "brochure_content": [],
+                "landing_page_copy": {"hero_headline": "", "hero_subheadline": "", "benefits": [], "features": [], "testimonials": [], "call_to_action": ""}
+            }
+
+        # ========== Generate Business Strategy Documents ==========
+        business_strategy_system_prompt = f'''You are a business strategy expert. Here is a list of questions we asked the user and here are the answers they gave: >>>
+        {question_and_answers} 
+        <<<. Generate business strategy documents in the following JSON structure:
+        {{
+            "competitive_analysis": [
+                {{
+                    "competitor_name": "string",
+                    "strengths": ["string"],
+                    "weaknesses": ["string"],
+                    "market_position": "string",
+                    "differentiation_opportunities": ["string"]
+                }}
+            ],
+            "swot_analysis": {{
+                "strengths": ["string"],
+                "weaknesses": ["string"],
+                "opportunities": ["string"],
+                "threats": ["string"]
+            }},
+            "target_audience_profiles": [
+                {{
+                    "persona_name": "string",
+                    "demographics": "string",
+                    "psychographics": "string",
+                    "pain_points": ["string"],
+                    "motivations": ["string"],
+                    "buying_behavior": "string"
+                }}
+            ],
+            "market_positioning": {{
+                "positioning_statement": "string",
+                "value_proposition": "string",
+                "competitive_advantages": ["string"],
+                "market_gaps": ["string"]
+            }}
+        }}
+        
+        Make the analysis thorough, data-driven, and actionable.'''
+
+        business_strategy_prompt = "Please give me business strategy documents as JSON."
+        business_strategy_response = openAI.get_text_prediction(business_strategy_system_prompt, business_strategy_prompt)
+        business_strategy = clean_and_parse_json(business_strategy_response)
+        
+        if not business_strategy:
+            print("Warning: Could not parse business strategy, using default values")
+            business_strategy = {
+                "competitive_analysis": [],
+                "swot_analysis": {"strengths": [], "weaknesses": [], "opportunities": [], "threats": []},
+                "target_audience_profiles": [],
+                "market_positioning": {"positioning_statement": "", "value_proposition": "", "competitive_advantages": [], "market_gaps": []}
+            }
+
+        # ========== Generate Implementation Roadmap ==========
+        implementation_roadmap_system_prompt = f'''You are a project management expert. Here is a list of questions we asked the user and here are the answers they gave: >>>
+        {question_and_answers} 
+        <<<. Generate an implementation roadmap in the following JSON structure:
+        {{
+            "launch_timeline": [
+                {{
+                    "phase": "string",
+                    "duration": "string",
+                    "milestones": ["string"],
+                    "deliverables": ["string"],
+                    "resources_needed": ["string"]
+                }}
+            ],
+            "budget_estimates": [
+                {{
+                    "category": "string",
+                    "estimated_cost": "string",
+                    "priority": "string",
+                    "description": "string"
+                }}
+            ],
+            "vendor_recommendations": [
+                {{
+                    "service_type": "string",
+                    "recommended_vendors": ["string"],
+                    "selection_criteria": ["string"],
+                    "estimated_cost_range": "string"
+                }}
+            ],
+            "quality_assurance": [
+                {{
+                    "checkpoint": "string",
+                    "criteria": ["string"],
+                    "testing_method": "string",
+                    "success_metrics": ["string"]
+                }}
+            ]
+        }}
+        
+        Make the roadmap practical, realistic, and actionable.'''
+
+        implementation_roadmap_prompt = "Please give me an implementation roadmap as JSON."
+        implementation_roadmap_response = openAI.get_text_prediction(implementation_roadmap_system_prompt, implementation_roadmap_prompt)
+        implementation_roadmap = clean_and_parse_json(implementation_roadmap_response)
+        
+        if not implementation_roadmap:
+            print("Warning: Could not parse implementation roadmap, using default values")
+            implementation_roadmap = {
+                "launch_timeline": [],
+                "budget_estimates": [],
+                "vendor_recommendations": [],
+                "quality_assurance": []
+            }
+
+        # ========== Generate Digital Specifications ==========
+        digital_specs_system_prompt = f'''You are a technical specifications expert. Here is a list of questions we asked the user and here are the answers they gave: >>>
+        {question_and_answers} 
+        <<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>
+        {previously_generated_brand_identity}
+        <<<. Generate digital specifications in the following JSON structure:
+        {{
+            "file_format_guidelines": [
+                {{
+                    "format": "string",
+                    "use_case": "string",
+                    "specifications": "string",
+                    "file_naming": "string"
+                }}
+            ],
+            "color_profiles": [
+                {{
+                    "profile_type": "string",
+                    "color_values": "string",
+                    "usage_context": "string",
+                    "conversion_notes": "string"
+                }}
+            ],
+            "print_specifications": [
+                {{
+                    "material": "string",
+                    "bleed": "string",
+                    "margins": "string",
+                    "resolution": "string",
+                    "color_mode": "string"
+                }}
+            ],
+            "digital_specifications": [
+                {{
+                    "platform": "string",
+                    "dimensions": "string",
+                    "file_size": "string",
+                    "format": "string",
+                    "optimization_notes": "string"
+                }}
+            ]
+        }}
+        
+        Make the specifications technical, accurate, and industry-standard.'''
+
+        digital_specs_prompt = "Please give me digital specifications as JSON."
+        digital_specs_response = openAI.get_text_prediction(digital_specs_system_prompt, digital_specs_prompt)
+        digital_specifications = clean_and_parse_json(digital_specs_response)
+        
+        if not digital_specifications:
+            print("Warning: Could not parse digital specifications, using default values")
+            digital_specifications = {
+                "file_format_guidelines": [],
+                "color_profiles": [],
+                "print_specifications": [],
+                "digital_specifications": []
+            }
 
         # ================================== Prepare results object  ==================================
 
+        # Extract brand identity information from previously generated data
+        brand_name = brand.get("name", "")
+        
+        # Parse brand_identity JSON string if it exists
+        brand_identity_data = {}
+        if brand.get("brand_identity"):
+            try:
+                brand_identity_data = json.loads(brand["brand_identity"]) if isinstance(brand["brand_identity"], str) else brand["brand_identity"]
+            except (json.JSONDecodeError, TypeError) as e:
+                print(f"Error parsing brand_identity JSON: {e}")
+                brand_identity_data = {}
+        
+        brand_identity_description = brand_identity_data.get("brand_identity_description", "")
+        brand_colors = brand_identity_data.get("brand_colors", [])
+        brand_typography = brand_identity_data.get("brand_typography", {})
 
         results = {
             "userId": userId,
             "brandId": brandId,
             "full_brand_identity": {
+                "brand_name": brand_name,
+                "brand_identity_description": brand_identity_description,
                 "brand_patterns": brandPatterns,
+                "brand_colors": brand_colors,
+                "brand_typography": brand_typography,
                 "business_cards": business_cards,
                 "letterheads": letterheads,
-                "tshirt_mockups": tshirt_mockups,
+                "t_shirt_mockups": tshirt_mockups,
                 "cap_mockups": cap_mockups,
                 "signboards": signboards,
             },
@@ -1333,11 +1660,18 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
                 "ready_made_posts": ready_made_posts,
                 "ad_copies": ad_copies,
                 "relevant_marketing_strategies": relevant_marketing_strategies
+            },
+            "premium_assets": {
+                "brand_guidelines": brand_guidelines,
+                "marketing_templates": marketing_templates,
+                "business_strategy": business_strategy,
+                "implementation_roadmap": implementation_roadmap,
+                "digital_specifications": digital_specifications
             }
         }
         
         # Save to database
-        db.create_brand_assets(brandId, userId, results["full_brand_identity"], results["social_media_content"])
+        db.create_brand_assets(brandId, userId, results["full_brand_identity"], results["social_media_content"], results["premium_assets"])
         
         
         

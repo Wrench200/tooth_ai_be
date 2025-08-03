@@ -668,67 +668,81 @@ answers_template = [
     ]
 }]
 
-with get_db_connection() as cursor:
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS answers_main (
-        answerId UUID PRIMARY KEY,
-        userId UUID NOT NULL,
-        FOREIGN KEY (userId) REFERENCES users(userId) ON DELETE CASCADE
-    )
-''')
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS answers_sections (
-        sectionId SERIAL PRIMARY KEY,
-        answerId_fk UUID NOT NULL,
-        section_number INT NOT NULL,
-        section_title TEXT NOT NULL,
-        FOREIGN KEY (answerId_fk) REFERENCES answers_main(answerId) ON DELETE CASCADE,
-        UNIQUE (answerId_fk, section_number)
-    )
-''')
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS answers_questions (
-        questionId SERIAL PRIMARY KEY,
-        sectionId_fk INT NOT NULL,
-        answer_number INT NOT NULL,
-        global_question_number INT NOT NULL,
-        answer_text TEXT,
-        FOREIGN KEY (sectionId_fk) REFERENCES answers_sections(sectionId) ON DELETE CASCADE,
-        UNIQUE (sectionId_fk, answer_number),
-        UNIQUE (sectionId_fk, global_question_number)
-    )
-''')
-
-# Table to store Cloudinary image URLs
-with get_db_connection() as cursor:
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS answer_images (
-            imageId SERIAL PRIMARY KEY,
-            answerId_fk UUID NOT NULL,
-            section_number INT NOT NULL,
-            question_number INT NOT NULL,
-            cloudinary_url TEXT NOT NULL,
-            cloudinary_public_id TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (answerId_fk) REFERENCES answers_main(answerId) ON DELETE CASCADE,
-            UNIQUE (answerId_fk, section_number, question_number)
-        )
-    ''')
-
-    # Table to store paid brand assets
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS brand_assets (
-            id UUID PRIMARY KEY,
-            brandId UUID NOT NULL,
+# Wrap table creation in try-except to prevent import errors
+try:
+    with get_db_connection() as cursor:
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS answers_main (
+            answerId UUID PRIMARY KEY,
             userId UUID NOT NULL,
-            full_brand_identity JSONB,
-            social_media_content JSONB,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (brandId) REFERENCES brands(id) ON DELETE CASCADE,
             FOREIGN KEY (userId) REFERENCES users(userId) ON DELETE CASCADE
         )
     ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS answers_sections (
+            sectionId SERIAL PRIMARY KEY,
+            answerId_fk UUID NOT NULL,
+            section_number INT NOT NULL,
+            section_title TEXT NOT NULL,
+            FOREIGN KEY (answerId_fk) REFERENCES answers_main(answerId) ON DELETE CASCADE,
+            UNIQUE (answerId_fk, section_number)
+        )
+    ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS answers_questions (
+            questionId SERIAL PRIMARY KEY,
+            sectionId_fk INT NOT NULL,
+            answer_number INT NOT NULL,
+            global_question_number INT NOT NULL,
+            answer_text TEXT,
+            FOREIGN KEY (sectionId_fk) REFERENCES answers_sections(sectionId) ON DELETE CASCADE,
+            UNIQUE (sectionId_fk, answer_number),
+            UNIQUE (sectionId_fk, global_question_number)
+        )
+    ''')
+
+    # Table to store Cloudinary image URLs
+    with get_db_connection() as cursor:
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS answer_images (
+                imageId SERIAL PRIMARY KEY,
+                answerId_fk UUID NOT NULL,
+                section_number INT NOT NULL,
+                question_number INT NOT NULL,
+                cloudinary_url TEXT NOT NULL,
+                cloudinary_public_id TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (answerId_fk) REFERENCES answers_main(answerId) ON DELETE CASCADE,
+                UNIQUE (answerId_fk, section_number, question_number)
+            )
+        ''')
+
+        # Table to store paid brand assets
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS brand_assets (
+                id UUID PRIMARY KEY,
+                brandId UUID NOT NULL,
+                userId UUID NOT NULL,
+                full_brand_identity JSONB,
+                social_media_content JSONB,
+                premium_assets JSONB,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (brandId) REFERENCES brands(id) ON DELETE CASCADE,
+                FOREIGN KEY (userId) REFERENCES users(userId) ON DELETE CASCADE
+            )
+        ''')
+        
+        # Add premium_assets column if it doesn't exist (for existing databases)
+        try:
+            cursor.execute('''
+                ALTER TABLE brand_assets 
+                ADD COLUMN IF NOT EXISTS premium_assets JSONB
+            ''')
+        except Exception as e:
+            print(f"Note: premium_assets column may already exist: {e}")
+except Exception as e:
+    print(f"Note: Database tables may already exist or connection not available during import: {e}")
 
 # Helper: Map (section_number, answer_number) to global_question_number
 from questions import questions as flat_questions
@@ -1115,21 +1129,57 @@ def get_all_images_for_answer(answer_id):
 
 # ===================== Brand Assets Management ===========================================
 
-def create_brand_assets(brand_id, user_id, full_brand_identity, social_media_content):
+def create_brand_assets(brand_id, user_id, full_brand_identity, social_media_content, premium_assets=None):
     """Create or update brand assets for paid users"""
     asset_id = str(uuid.uuid4())
+    
+    # First, try to determine the correct column name
     try:
         with get_db_connection() as cursor:
             cursor.execute("""
-                INSERT INTO brand_assets (id, brandId, userId, full_brand_identity, social_media_content)
-                VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (brandId) 
-                DO UPDATE SET 
-                    userId = EXCLUDED.userId,
-                    full_brand_identity = EXCLUDED.full_brand_identity,
-                    social_media_content = EXCLUDED.social_media_content,
-                    updated_at = CURRENT_TIMESTAMP
-            """, (asset_id, brand_id, user_id, json.dumps(full_brand_identity), json.dumps(social_media_content)))
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'brand_assets' AND column_name ILIKE 'userid'
+                ORDER BY column_name
+            """)
+            columns = cursor.fetchall()
+            user_id_column = None
+            for col in columns:
+                if col[0] == 'userId':
+                    user_id_column = 'userId'
+                    break
+                elif col[0] == 'userid':
+                    user_id_column = 'userid'
+                    break
+            
+            if not user_id_column:
+                print("WARNING: Could not determine user ID column name, defaulting to 'userId'")
+                user_id_column = 'userId'
+            
+            print(f"Using column name: {user_id_column}")
+            
+            # Use the correct column name in the query
+            # First try to insert, if it fails due to existing record, then update
+            try:
+                cursor.execute(f"""
+                    INSERT INTO brand_assets (id, brandId, {user_id_column}, full_brand_identity, social_media_content, premium_assets)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (asset_id, brand_id, user_id, json.dumps(full_brand_identity), json.dumps(social_media_content), json.dumps(premium_assets) if premium_assets else None))
+            except psycopg2.IntegrityError as e:
+                # If insert fails due to duplicate brandId, update instead
+                if "duplicate key" in str(e) or "unique constraint" in str(e):
+                    cursor.execute(f"""
+                        UPDATE brand_assets 
+                        SET {user_id_column} = %s,
+                            full_brand_identity = %s,
+                            social_media_content = %s,
+                            premium_assets = %s,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE brandId = %s
+                    """, (user_id, json.dumps(full_brand_identity), json.dumps(social_media_content), json.dumps(premium_assets) if premium_assets else None, brand_id))
+                else:
+                    # Re-raise if it's a different integrity error
+                    raise
             print(f"Brand assets created/updated for brand {brand_id} and user {user_id}")
             return asset_id
     except psycopg2.Error as e:
@@ -1141,8 +1191,29 @@ def get_brand_assets(brand_id):
     for attempt in range(2):
         try:
             with get_db_connection() as cursor:
+                # First, try to determine the correct column name
                 cursor.execute("""
-                    SELECT id, brandId, userId, full_brand_identity, social_media_content, created_at, updated_at
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name = 'brand_assets' AND column_name ILIKE 'userid'
+                    ORDER BY column_name
+                """)
+                columns = cursor.fetchall()
+                user_id_column = None
+                for col in columns:
+                    if col[0] == 'userId':
+                        user_id_column = 'userId'
+                        break
+                    elif col[0] == 'userid':
+                        user_id_column = 'userid'
+                        break
+                
+                if not user_id_column:
+                    print("WARNING: Could not determine user ID column name, defaulting to 'userId'")
+                    user_id_column = 'userId'
+                
+                cursor.execute(f"""
+                    SELECT id, brandId, {user_id_column}, full_brand_identity, social_media_content, premium_assets, created_at, updated_at
                     FROM brand_assets 
                     WHERE brandId = %s
                 """, (brand_id,))
@@ -1154,8 +1225,9 @@ def get_brand_assets(brand_id):
                         "userId": row[2],
                         "full_brand_identity": json.loads(row[3]) if row[3] else None,
                         "social_media_content": json.loads(row[4]) if row[4] else None,
-                        "created_at": row[5],
-                        "updated_at": row[6]
+                        "premium_assets": json.loads(row[5]) if row[5] else None,
+                        "created_at": row[6],
+                        "updated_at": row[7]
                     }
                 return None
         except psycopg2.InterfaceError as e:
@@ -1171,10 +1243,31 @@ def get_brand_assets_by_user(user_id):
     for attempt in range(2):
         try:
             with get_db_connection() as cursor:
+                # First, try to determine the correct column name
                 cursor.execute("""
-                    SELECT id, brandId, userId, full_brand_identity, social_media_content, created_at, updated_at
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name = 'brand_assets' AND column_name ILIKE 'userid'
+                    ORDER BY column_name
+                """)
+                columns = cursor.fetchall()
+                user_id_column = None
+                for col in columns:
+                    if col[0] == 'userId':
+                        user_id_column = 'userId'
+                        break
+                    elif col[0] == 'userid':
+                        user_id_column = 'userid'
+                        break
+                
+                if not user_id_column:
+                    print("WARNING: Could not determine user ID column name, defaulting to 'userId'")
+                    user_id_column = 'userId'
+                
+                cursor.execute(f"""
+                    SELECT id, brandId, {user_id_column}, full_brand_identity, social_media_content, premium_assets, created_at, updated_at
                     FROM brand_assets 
-                    WHERE userId = %s
+                    WHERE {user_id_column} = %s
                     ORDER BY created_at DESC
                 """, (user_id,))
                 rows = cursor.fetchall()
@@ -1185,8 +1278,9 @@ def get_brand_assets_by_user(user_id):
                         "userId": row[2],
                         "full_brand_identity": json.loads(row[3]) if row[3] else None,
                         "social_media_content": json.loads(row[4]) if row[4] else None,
-                        "created_at": row[5],
-                        "updated_at": row[6]
+                        "premium_assets": json.loads(row[5]) if row[5] else None,
+                        "created_at": row[6],
+                        "updated_at": row[7]
                     }
                     for row in rows
                 ]
@@ -1215,3 +1309,22 @@ def delete_brand_assets(brand_id):
             print(f"Database error deleting brand assets: {e}")
             return False
     return False
+
+def check_brand_assets_table_structure():
+    """Check the actual column names in the brand_assets table"""
+    try:
+        with get_db_connection() as cursor:
+            cursor.execute("""
+                SELECT column_name, data_type 
+                FROM information_schema.columns 
+                WHERE table_name = 'brand_assets'
+                ORDER BY ordinal_position
+            """)
+            columns = cursor.fetchall()
+            print("brand_assets table structure:")
+            for column in columns:
+                print(f"  {column[0]} ({column[1]})")
+            return columns
+    except psycopg2.Error as e:
+        print(f"Error checking brand_assets table structure: {e}")
+        return None
