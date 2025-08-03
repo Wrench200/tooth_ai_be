@@ -11,7 +11,7 @@ import cloudinary_utils
 import time
 import traceback
 from db import get_global_question_number
-from fpdf import FPDF  # Change to fpdf2
+from fpdf import FPDF
 import io, requests, os
 import tempfile
 import re
