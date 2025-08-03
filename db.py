@@ -5,12 +5,69 @@ from dotenv import load_dotenv
 import uuid
 import psycopg2
 import psycopg2.extras
+import urllib.parse
 
 load_dotenv()  # Load environment variables from .env
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-conn = psycopg2.connect(DATABASE_URL)
+def fix_database_url(url):
+    """Fix common issues with DATABASE_URL format"""
+    if not url:
+        return url
+    
+    # Fix sslmode parameter if it's malformed
+    if 'sslmode' in url and 'sslmode=' not in url:
+        # Replace malformed sslmode with correct format
+        url = url.replace('?sslmode&', '?sslmode=require&')
+        url = url.replace('&sslmode&', '&sslmode=require&')
+        url = url.replace('&sslmode', '&sslmode=require')
+        if url.endswith('?sslmode'):
+            url = url.replace('?sslmode', '?sslmode=require')
+    
+    # Ensure sslmode is set for production
+    if 'sslmode=' not in url:
+        if '?' in url:
+            url += '&sslmode=require'
+        else:
+            url += '?sslmode=require'
+    
+    return url
+
+# Fix the DATABASE_URL if needed
+DATABASE_URL = fix_database_url(DATABASE_URL)
+
+def create_connection():
+    """Create a database connection with proper error handling"""
+    try:
+        conn = psycopg2.connect(DATABASE_URL)
+        return conn
+    except psycopg2.ProgrammingError as e:
+        print(f"Database URL format error: {e}")
+        print(f"Current DATABASE_URL: {DATABASE_URL}")
+        # Try to create a minimal connection for debugging
+        try:
+            # Parse the URL manually
+            parsed = urllib.parse.urlparse(DATABASE_URL)
+            conn_params = {
+                'host': parsed.hostname,
+                'port': parsed.port or 5432,
+                'database': parsed.path.lstrip('/'),
+                'user': parsed.username,
+                'password': parsed.password,
+                'sslmode': 'require'
+            }
+            conn = psycopg2.connect(**conn_params)
+            return conn
+        except Exception as e2:
+            print(f"Failed to create connection with parsed parameters: {e2}")
+            raise e
+    except Exception as e:
+        print(f"Database connection error: {e}")
+        raise e
+
+# Create initial connection
+conn = create_connection()
 cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
 def reset_connection():
@@ -26,7 +83,7 @@ def reset_connection():
         pass
     
     # Reconnect
-    conn = psycopg2.connect(DATABASE_URL)
+    conn = create_connection()
     cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
 def test_connection():
