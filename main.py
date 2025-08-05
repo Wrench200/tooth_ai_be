@@ -692,7 +692,7 @@ def register_user():
         
         # Remove password from response for security
         user_response = {
-            'userId': user['userId'],
+            'userId': user.get('userid') or user.get('userId'),
             'username': user['username'],
             'email': user['email']
         }
@@ -806,7 +806,7 @@ def login():
         print("user:", user)
         # Remove password from response for security
         user_response = {
-            'userId': user['userid'],
+            'userId': user.get('userid') or user.get('userId'),
             'username': user['username'],
             'email': user['email']
         }
