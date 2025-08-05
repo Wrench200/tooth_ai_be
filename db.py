@@ -436,6 +436,8 @@ def ensure_tables_exist():
                 brand_identity TEXT,
                 marketing_and_social_media_strategy TEXT,
                 payment_status BOOLEAN DEFAULT FALSE,
+                premium BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (userId) REFERENCES users(userId) ON DELETE CASCADE
             )
             ''')
