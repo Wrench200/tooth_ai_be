@@ -190,6 +190,7 @@ with get_db_connection() as cursor:
         username TEXT NOT NULL,
         email TEXT UNIQUE NOT NULL,
         password TEXT,
+        generated BOOLEAN DEFAULT FALSE,
         google_id TEXT UNIQUE,
         profile_picture TEXT,
         auth_provider TEXT DEFAULT 'email',
@@ -451,7 +452,50 @@ try:
 except Exception as e:
     print(f"Warning: Could not initialize tables during import: {e}")
 
+def check_user_generated_status(user_id):
+    """Check if a user has already generated a brand"""
+    for attempt in range(2):
+        try:
+            with get_db_connection() as cursor:
+                cursor.execute("SELECT generated FROM users WHERE userId = %s", (user_id,))
+                row = cursor.fetchone()
+                if row:
+                    return row[0]  # Return the generated boolean value
+                return None  # User not found
+        except psycopg2.Error as e:
+            print(f"Database error in check_user_generated_status (attempt {attempt + 1}): {e}")
+            if attempt == 0:  # Only reset on first failure
+                reset_connection()
+            else:
+                return None
+    return None
+
+def update_user_generated_status(user_id, generated_status):
+    """Update the generated status of a user"""
+    for attempt in range(2):
+        try:
+            with get_db_connection() as cursor:
+                cursor.execute("UPDATE users SET generated = %s WHERE userId = %s", (generated_status, user_id))
+                return True
+        except psycopg2.Error as e:
+            print(f"Database error in update_user_generated_status (attempt {attempt + 1}): {e}")
+            if attempt == 0:  # Only reset on first failure
+                reset_connection()
+            else:
+                return False
+    return False
+
 def create_brand(user_id):
+    # First check if user has already generated a brand
+    generated_status = check_user_generated_status(user_id)
+    if generated_status is None:
+        print(f"User {user_id} not found.")
+        return None
+    
+    if generated_status:
+        print(f"User {user_id} has already generated a brand.")
+        return None
+    
     brand_id = str(uuid.uuid4())
     answers = create_answers(user_id)
     
@@ -484,8 +528,11 @@ def create_brand(user_id):
             new_brand["logo"], new_brand["brand_strategy"], new_brand["brand_communication"],
             new_brand["brand_identity"], new_brand["marketing_and_social_media_strategy"], new_brand["payment_status"]
         ))
+            
+            # Update user's generated status to True
+            cursor.execute("UPDATE users SET generated = TRUE WHERE userId = %s", (user_id,))
         
-        print(f"Brand {brand_id} created for user {user_id}.")
+        print(f"Brand {brand_id} created for user {user_id} and generated status updated.")
         return new_brand
     except psycopg2.IntegrityError as e:
         print(f"Error creating brand: {e}")

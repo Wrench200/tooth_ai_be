@@ -885,10 +885,26 @@ def create_brand():
     # }
 
     brand = db.create_brand(data['userId'])
+    
+    if brand is None:
+        # Check if it's because user has already generated a brand
+        generated_status = db.check_user_generated_status(data['userId'])
+        if generated_status is True:
+            return jsonify({
+                'success': False,
+                'message': 'You have already generated a brand. You can only generate one brand per account.',
+                'brand': None
+            }), 400
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to create brand. Please try again.',
+                'brand': None
+            }), 500
 
     return jsonify({
         'success': True,
-        'message': 'success',
+        'message': 'Brand created successfully',
         'brand': brand
     }), 200
     
