@@ -803,10 +803,10 @@ def login():
                 'success': False,
                 'error': 'Invalid email or password'
             }), 401
-        
+        print("user:", user)
         # Remove password from response for security
         user_response = {
-            'userId': user['userId'],
+            'userId': user['userid'],
             'username': user['username'],
             'email': user['email']
         }
