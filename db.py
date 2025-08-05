@@ -453,7 +453,7 @@ except Exception as e:
 
 def create_brand(user_id):
     brand_id = str(uuid.uuid4())
-    # answers = create_answers(user_id)
+    answers = create_answers(user_id)
     
     # Debug: Print the answers object
     print("Answers object:", answers)
