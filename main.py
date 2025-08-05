@@ -806,7 +806,7 @@ def login():
         
         # Remove password from response for security
         user_response = {
-            'userId': user['userid'],
+            'userId': user['userId'],
             'username': user['username'],
             'email': user['email']
         }
