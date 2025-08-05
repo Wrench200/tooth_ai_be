@@ -841,6 +841,28 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
     try:
         user = db.get_user(userId)
         brand = db.get_brand(brandId)
+        
+        # Check if brand exists
+        if not brand:
+            return {"error": True, "message": "Brand not found"}
+        
+        # Check payment status
+        payment_status = db.check_brand_payment_status(brandId)
+        if payment_status is None:
+            return {"error": True, "message": "Unable to verify payment status"}
+        
+        if not payment_status:
+            return {"error": True, "message": "Payment required. Please complete payment before generating final results."}
+        
+        # Update logo field in brand table if brandLogo is provided
+        if brandLogo:
+            try:
+                db.update_brand(brandId, "logo", brandLogo)
+                print(f"Updated logo for brand {brandId}: {brandLogo}")
+            except Exception as e:
+                print(f"Error updating logo: {e}")
+                # Continue with generation even if logo update fails
+        
         answers = db.get_answer(brand["answerid"])
         
         previous_questions = questions.get_previous_questions(11)

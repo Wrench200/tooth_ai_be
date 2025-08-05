@@ -329,7 +329,7 @@ def create_google_user(google_id, email, name, profile_picture):
                 INSERT INTO users (userId, username, email, password, google_id, profile_picture, auth_provider)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
             """, (user_id, name, email, None, google_id, profile_picture, "google"))
-            conn.commit()
+           
             print(f"Google user {user_id} added.")
             return new_user
         except psycopg2.InterfaceError as e:
@@ -374,7 +374,7 @@ def update_user(user_id, updated_info):
                 for key in ["username", "email", "password"]:
                     if key in updated_info:
                         cursor.execute(f"UPDATE users SET {key} = %s WHERE userId = %s", (updated_info[key], user_id))
-                conn.commit()
+                
                 print(f"User {user_id} updated.")
                 return "Done"
         except psycopg2.InterfaceError as e:
@@ -394,7 +394,7 @@ def delete_user(user_id):
         try:
             with get_db_connection() as cursor:
                 cursor.execute("DELETE FROM users WHERE userId = %s", (user_id,))
-                conn.commit()
+                
                 print(f"User {user_id} deleted.")
                 return "Done"
         except psycopg2.InterfaceError as e:
@@ -435,6 +435,7 @@ def ensure_tables_exist():
                 brand_communication TEXT,
                 brand_identity TEXT,
                 marketing_and_social_media_strategy TEXT,
+                payment_status BOOLEAN DEFAULT FALSE,
                 FOREIGN KEY (userId) REFERENCES users(userId) ON DELETE CASCADE
             )
             ''')
@@ -469,23 +470,24 @@ def create_brand(user_id):
         "brand_communication": "",
         "brand_identity": "",
         "marketing_and_social_media_strategy": "",
+        "payment_status": False,
     }
     try:
         with get_db_connection() as cursor:
             cursor.execute("""
-            INSERT INTO brands (id, userId, answerId, name, logo, brand_strategy, brand_communication, brand_identity, marketing_and_social_media_strategy)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO brands (id, userId, answerId, name, logo, brand_strategy, brand_communication, brand_identity, marketing_and_social_media_strategy, payment_status)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             new_brand["id"], new_brand["userId"], new_brand["answerId"], new_brand["name"],
             new_brand["logo"], new_brand["brand_strategy"], new_brand["brand_communication"],
-            new_brand["brand_identity"], new_brand["marketing_and_social_media_strategy"]
+            new_brand["brand_identity"], new_brand["marketing_and_social_media_strategy"], new_brand["payment_status"]
         ))
-        conn.commit()
+        
         print(f"Brand {brand_id} created for user {user_id}.")
         return new_brand
     except psycopg2.IntegrityError as e:
         print(f"Error creating brand: {e}")
-        conn.rollback()
+        
         return None
 
 def get_brand(brand_id):
@@ -537,7 +539,7 @@ def get_all_user_brands(user_id):
 def update_brand(brand_id, property_name, new_value):
     allowed_properties = [
         "name", "logo", "answerId", "brand_strategy", "brand_communication",
-        "brand_identity", "marketing_and_social_media_strategy"
+        "brand_identity", "marketing_and_social_media_strategy", "payment_status"
     ]
     if property_name not in allowed_properties:
         raise ValueError(f"Invalid or non-updatable property: {property_name}")
@@ -546,7 +548,7 @@ def update_brand(brand_id, property_name, new_value):
         try:
             with get_db_connection() as cursor:
                 cursor.execute(query, (new_value, brand_id))
-                conn.commit()
+                
                 if cursor.rowcount == 0:
                     print(f"Brand {brand_id} not found or value was not changed.")
                     return None
@@ -565,7 +567,7 @@ def delete_brand(brand_id):
         try:
             with get_db_connection() as cursor:
                 cursor.execute("DELETE FROM brands WHERE id = %s", (brand_id,))
-                conn.commit()
+                
                 if cursor.rowcount > 0:
                     print(f"Brand {brand_id} has been deleted.")
                     return True
@@ -577,6 +579,44 @@ def delete_brand(brand_id):
             reset_connection()
         except psycopg2.Error as e:
             print(f"Database error in delete_brand: {e}")
+            return False
+    return False
+
+def check_brand_payment_status(brand_id):
+    """Check if a brand has been paid for"""
+    for attempt in range(2):
+        try:
+            with get_db_connection() as cursor:
+                cursor.execute("SELECT payment_status FROM brands WHERE id = %s", (brand_id,))
+                row = cursor.fetchone()
+                if row:
+                    return row[0]  # Returns True/False
+                return None  # Brand not found
+        except psycopg2.InterfaceError as e:
+            print(f"[check_brand_payment_status] InterfaceError: {e}. Resetting connection and retrying once.")
+            reset_connection()
+        except psycopg2.Error as e:
+            print(f"Database error in check_brand_payment_status: {e}")
+            return None
+    return None
+
+def update_brand_payment_status(brand_id, payment_status):
+    """Update the payment status of a brand"""
+    for attempt in range(2):
+        try:
+            with get_db_connection() as cursor:
+                cursor.execute("UPDATE brands SET payment_status = %s WHERE id = %s", (payment_status, brand_id))
+                
+                if cursor.rowcount == 0:
+                    print(f"Brand {brand_id} not found or payment status was not changed.")
+                    return False
+                print(f"Brand {brand_id} payment status updated to: {payment_status}")
+                return True
+        except psycopg2.InterfaceError as e:
+            print(f"[update_brand_payment_status] InterfaceError: {e}. Resetting connection and retrying once.")
+            reset_connection()
+        except psycopg2.Error as e:
+            print(f"Database error in update_brand_payment_status: {e}")
             return False
     return False
 
@@ -789,9 +829,49 @@ def create_answers(user_id):
                         (section_id, question_data['answer_number'], global_qn, question_data['answer_text'])
                     )
                     global_qn += 1
-            conn.commit()
             print(f"Answer object {answer_id} created for user {user_id}.")
-            return get_answer(answer_id)
+            
+            # Construct the result directly instead of calling get_answer
+            result = {
+                "answerId": answer_id,
+                "userId": user_id,
+                "sections": []
+            }
+            
+            # Get the sections we just created
+            cursor.execute("""
+                SELECT sectionId, section_number, section_title 
+                FROM answers_sections 
+                WHERE answerId_fk = %s 
+                ORDER BY section_number
+            """, (answer_id,))
+            sections = cursor.fetchall()
+            
+            for sec_id, sec_num, sec_title in sections:
+                section_obj = {
+                    "section_number": sec_num,
+                    "section_title": sec_title,
+                    "questions": []
+                }
+                
+                # Get the questions for this section
+                cursor.execute("""
+                    SELECT answer_number, answer_text 
+                    FROM answers_questions 
+                    WHERE sectionId_fk = %s 
+                    ORDER BY answer_number
+                """, (sec_id,))
+                questions = cursor.fetchall()
+                
+                for ans_num, ans_text in questions:
+                    section_obj["questions"].append({
+                        "answer_number": ans_num,
+                        "answer_text": ans_text
+                    })
+                
+                result["sections"].append(section_obj)
+            
+            return result
     except psycopg2.InterfaceError as e:
         print(f"[create_answers] InterfaceError: {e}. Retrying once.")
         try:
@@ -811,12 +891,52 @@ def create_answers(user_id):
                         )
                         global_qn += 1
                 print(f"Answer object {answer_id} created for user {user_id} (after retry).")
-                return get_answer(answer_id)
+                
+                # Construct the result directly instead of calling get_answer
+                result = {
+                    "answerId": answer_id,
+                    "userId": user_id,
+                    "sections": []
+                }
+                
+                # Get the sections we just created
+                cursor.execute("""
+                    SELECT sectionId, section_number, section_title 
+                    FROM answers_sections 
+                    WHERE answerId_fk = %s 
+                    ORDER BY section_number
+                """, (answer_id,))
+                sections = cursor.fetchall()
+                
+                for sec_id, sec_num, sec_title in sections:
+                    section_obj = {
+                        "section_number": sec_num,
+                        "section_title": sec_title,
+                        "questions": []
+                    }
+                    
+                    # Get the questions for this section
+                    cursor.execute("""
+                        SELECT answer_number, answer_text 
+                        FROM answers_questions 
+                        WHERE sectionId_fk = %s 
+                        ORDER BY answer_number
+                    """, (sec_id,))
+                    questions = cursor.fetchall()
+                    
+                    for ans_num, ans_text in questions:
+                        section_obj["questions"].append({
+                            "answer_number": ans_num,
+                            "answer_text": ans_text
+                        })
+                    
+                    result["sections"].append(section_obj)
+                
+                return result
         except Exception as e2:
             print(f"Database error during answer creation after retry: {e2}")
             return None
     except psycopg2.Error as e:
-        conn.rollback()
         print(f"Database error during answer creation: {e.pgerror}")
         return None
 
@@ -936,7 +1056,7 @@ def update_answer(answer_id, global_question_number, new_text):
                     SELECT sectionId FROM answers_sections WHERE answerId_fk = %s
                 )
             """, (new_text, global_question_number, answer_id))
-            conn.commit()
+            
             if cursor.rowcount > 0:
                 print(f"[update_answer] Answer updated successfully for answer_id={answer_id}, global_question_number={global_question_number}.")
                 return True
@@ -954,12 +1074,12 @@ def update_answer(answer_id, global_question_number, new_text):
                         INSERT INTO answers_questions (sectionId_fk, answer_number, global_question_number, answer_text)
                         VALUES (%s, %s, %s, %s)
                     """, (section_id, answer_number, global_question_number, new_text))
-                    conn.commit()
+                    
                     print(f"[update_answer] Inserted new answer for answer_id={answer_id}, global_question_number={global_question_number}.")
                     return True
                 except psycopg2.Error as e:
                     print(f"[update_answer] Database error during upsert: {e}")
-                    conn.rollback()
+                   
                     return {'error': f'Database error during upsert: {e}'}
     except psycopg2.InterfaceError as e:
         print(f"[update_answer] InterfaceError: {e}. Retrying once.")
@@ -999,7 +1119,7 @@ def update_answer(answer_id, global_question_number, new_text):
             return {'error': f'Database error during answer update after retry: {e2}'}
     except psycopg2.Error as e:
         print(f"[update_answer] Database error during answer update: {e}")
-        conn.rollback()
+        
         return {'error': f'Database error during answer update: {e}'}
 
 def delete_answer(answer_id):
@@ -1007,7 +1127,7 @@ def delete_answer(answer_id):
         try:
             with get_db_connection() as cursor:
                 cursor.execute("DELETE FROM answers_main WHERE answerId = %s", (answer_id,))
-                conn.commit()
+                
                 if cursor.rowcount > 0:
                     print(f"Answer object {answer_id} deleted successfully.")
                     return True
@@ -1039,7 +1159,7 @@ def save_image_url(answer_id, section_number, question_number, cloudinary_url, c
                         cloudinary_public_id = EXCLUDED.cloudinary_public_id,
                         created_at = CURRENT_TIMESTAMP
                 """, (answer_id, section_number, question_number, cloudinary_url, cloudinary_public_id))
-                conn.commit()
+                
                 print(f"Image URL saved for answer {answer_id}, section {section_number}, question {question_number}")
                 return True
         except psycopg2.InterfaceError as e:
@@ -1047,7 +1167,7 @@ def save_image_url(answer_id, section_number, question_number, cloudinary_url, c
             reset_connection()
         except psycopg2.Error as e:
             print(f"Database error saving image URL: {e}")
-            conn.rollback()
+           
             return False
     return False
 
@@ -1084,7 +1204,7 @@ def delete_image_url(answer_id, section_number, question_number):
                     DELETE FROM answer_images
                     WHERE answerId_fk = %s AND section_number = %s AND question_number = %s
                 """, (answer_id, section_number, question_number))
-                conn.commit()
+                
                 if cursor.rowcount > 0:
                     print(f"Image URL deleted for answer {answer_id}, section {section_number}, question {question_number}")
                     return True
@@ -1094,7 +1214,7 @@ def delete_image_url(answer_id, section_number, question_number):
             reset_connection()
         except psycopg2.Error as e:
             print(f"Database error deleting image URL: {e}")
-            conn.rollback()
+            
             return False
     return False
 
@@ -1219,13 +1339,26 @@ def get_brand_assets(brand_id):
                 """, (brand_id,))
                 row = cursor.fetchone()
                 if row:
+                    # Helper function to safely parse JSON fields
+                    def safe_json_loads(value):
+                        if value is None:
+                            return None
+                        if isinstance(value, dict):
+                            return value
+                        if isinstance(value, str):
+                            try:
+                                return json.loads(value)
+                            except (json.JSONDecodeError, TypeError):
+                                return value
+                        return value
+                    
                     return {
                         "id": row[0],
                         "brandId": row[1],
                         "userId": row[2],
-                        "full_brand_identity": json.loads(row[3]) if row[3] else None,
-                        "social_media_content": json.loads(row[4]) if row[4] else None,
-                        "premium_assets": json.loads(row[5]) if row[5] else None,
+                        "full_brand_identity": safe_json_loads(row[3]),
+                        "social_media_content": safe_json_loads(row[4]),
+                        "premium_assets": safe_json_loads(row[5]),
                         "created_at": row[6],
                         "updated_at": row[7]
                     }
@@ -1271,14 +1404,28 @@ def get_brand_assets_by_user(user_id):
                     ORDER BY created_at DESC
                 """, (user_id,))
                 rows = cursor.fetchall()
+                
+                # Helper function to safely parse JSON fields
+                def safe_json_loads(value):
+                    if value is None:
+                        return None
+                    if isinstance(value, dict):
+                        return value
+                    if isinstance(value, str):
+                        try:
+                            return json.loads(value)
+                        except (json.JSONDecodeError, TypeError):
+                            return value
+                    return value
+                
                 return [
                     {
                         "id": row[0],
                         "brandId": row[1],
                         "userId": row[2],
-                        "full_brand_identity": json.loads(row[3]) if row[3] else None,
-                        "social_media_content": json.loads(row[4]) if row[4] else None,
-                        "premium_assets": json.loads(row[5]) if row[5] else None,
+                        "full_brand_identity": safe_json_loads(row[3]),
+                        "social_media_content": safe_json_loads(row[4]),
+                        "premium_assets": safe_json_loads(row[5]),
                         "created_at": row[6],
                         "updated_at": row[7]
                     }
@@ -1328,3 +1475,109 @@ def check_brand_assets_table_structure():
     except psycopg2.Error as e:
         print(f"Error checking brand_assets table structure: {e}")
         return None
+
+def get_full_brand(brand_id):
+    """Get complete brand information including brand details and brand assets"""
+    for attempt in range(2):
+        try:
+            with get_db_connection() as cursor:
+                # Get brand information
+                cursor.execute("SELECT * FROM brands WHERE id = %s", (brand_id,))
+                brand_row = cursor.fetchone()
+                
+                if not brand_row:
+                    return None
+                
+                # Get column names from cursor description
+                brand_column_names = [desc[0] for desc in cursor.description]
+                brand_data = dict(zip(brand_column_names, brand_row))
+                
+                # Helper function to safely parse JSON fields
+                def safe_json_loads(value):
+                    if value is None:
+                        return None
+                    if isinstance(value, dict):
+                        return value
+                    if isinstance(value, str):
+                        try:
+                            return json.loads(value)
+                        except (json.JSONDecodeError, TypeError):
+                            return value
+                    return value
+                
+                # Parse JSON fields in brand data
+                json_fields = ['brand_strategy', 'brand_communication', 'brand_identity', 'marketing_and_social_media_strategy']
+                for field in json_fields:
+                    if field in brand_data and brand_data[field]:
+                        brand_data[field] = safe_json_loads(brand_data[field])
+                
+                # Get brand assets information
+                # First, try to determine the correct column name for user_id
+                cursor.execute("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name = 'brand_assets' AND column_name ILIKE 'userid'
+                    ORDER BY column_name
+                """)
+                columns = cursor.fetchall()
+                user_id_column = None
+                for col in columns:
+                    if col[0] == 'userId':
+                        user_id_column = 'userId'
+                        break
+                    elif col[0] == 'userid':
+                        user_id_column = 'userid'
+                        break
+                
+                if not user_id_column:
+                    print("WARNING: Could not determine user ID column name, defaulting to 'userId'")
+                    user_id_column = 'userId'
+                
+                cursor.execute(f"""
+                    SELECT id, brandId, {user_id_column}, full_brand_identity, social_media_content, premium_assets, created_at, updated_at
+                    FROM brand_assets 
+                    WHERE brandId = %s
+                """, (brand_id,))
+                assets_row = cursor.fetchone()
+                
+                brand_assets_data = None
+                if assets_row:
+                    # Helper function to safely parse JSON fields
+                    def safe_json_loads(value):
+                        if value is None:
+                            return None
+                        if isinstance(value, dict):
+                            return value
+                        if isinstance(value, str):
+                            try:
+                                return json.loads(value)
+                            except (json.JSONDecodeError, TypeError):
+                                return value
+                        return value
+                    
+                    brand_assets_data = {
+                        "id": assets_row[0],
+                        "brandId": assets_row[1],
+                        "userId": assets_row[2],
+                        "full_brand_identity": safe_json_loads(assets_row[3]),
+                        "social_media_content": safe_json_loads(assets_row[4]),
+                        "premium_assets": safe_json_loads(assets_row[5]),
+                        "created_at": assets_row[6],
+                        "updated_at": assets_row[7]
+                    }
+                
+                # Combine brand and assets data
+                full_brand = {
+                    "brand": brand_data,
+                    "brand_assets": brand_assets_data
+                }
+                
+                return full_brand
+                
+        except psycopg2.InterfaceError as e:
+            print(f"[get_full_brand] InterfaceError: {e}. Resetting connection and retrying once.")
+            reset_connection()
+        except psycopg2.Error as e:
+            print(f"Database error getting full brand: {e}")
+            return None
+    return None

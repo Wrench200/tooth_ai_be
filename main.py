@@ -11,7 +11,7 @@ import cloudinary_utils
 import time
 import traceback
 from db import get_global_question_number
-from fpdf import FPDF
+from fpdf import FPDF, XPos, YPos
 import io, requests, os
 import tempfile
 import re
@@ -63,15 +63,15 @@ class BrandPDF(FPDF):
             y = i * (self.h / steps)
             self.rect(0, y, self.w, self.h / steps + 1, style='F')
         # Fonts
-        self.add_font('DejaVu', '', UNICODE_FONT_PATH, uni=True)
-        self.add_font('DejaVu', 'B', UNICODE_FONT_BOLD_PATH, uni=True)
-        self.add_font('DejaVu', 'I', UNICODE_FONT_ITALIC_PATH, uni=True)
-        self.add_font('DejaVu', 'BI', UNICODE_FONT_BOLD_ITALIC_PATH, uni=True)
+        self.add_font('DejaVu', '', UNICODE_FONT_PATH)
+        self.add_font('DejaVu', 'B', UNICODE_FONT_BOLD_PATH)
+        self.add_font('DejaVu', 'I', UNICODE_FONT_ITALIC_PATH)
+        self.add_font('DejaVu', 'BI', UNICODE_FONT_BOLD_ITALIC_PATH)
         # Centered 'Brand Blueprint'
         self.set_text_color(255, 255, 255)
         self.set_font('DejaVu', '', 20)
         self.set_y(self.h * 0.25)
-        self.cell(0, 10, 'Brand Blueprint', ln=True, align='C')
+        self.cell(0, 10, 'Brand Blueprint', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
         # White underline
         y_underline = self.get_y() + 0.4
         self.set_draw_color(255, 255, 255)
@@ -80,37 +80,37 @@ class BrandPDF(FPDF):
         # 'For: {brand_name}'
         self.set_y(y_underline + 8)
         self.set_font('DejaVu', 'B', 28)
-        self.cell(0, 14, f'{brand_name}', ln=True, align='C')
+        self.cell(0, 14, f'{brand_name}', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
         # Tagline (italic, smaller, white)
         self.set_y(self.get_y() + 2)
         self.set_font('DejaVu', 'I', 14)
         self.set_text_color(255, 255, 255)
-        self.cell(0, 12, f'"{brand_tagline}"', ln=True, align='C')
+        self.cell(0, 12, f'"{brand_tagline}"', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
         self.set_text_color(0, 0, 0)
 
     def add_section_title(self, title, emphasize=False, color=None):
-       self.add_font('DejaVu', 'B', UNICODE_FONT_PATH, uni=True)
+       self.add_font('DejaVu', 'B', UNICODE_FONT_PATH)
        self.set_font('DejaVu', 'B', 18)
        if color:
         self.set_text_color(*color)
        else:
         self.set_text_color(40, 40, 120) if emphasize else self.set_text_color(0, 0, 0)
-       self.cell(0, 12, remove_emojis(title), ln=True, align='C')
+       self.cell(0, 12, remove_emojis(title), new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
        self.set_text_color(0, 0, 0)
        self.ln(4)
        self.set_y(self.get_y() + 10)
 
     def add_sub_section_title(self, title, emphasize=False):
-        self.add_font('DejaVu', 'B', UNICODE_FONT_BOLD_PATH, uni=True)
+        self.add_font('DejaVu', 'B', UNICODE_FONT_BOLD_PATH)
         self.set_font('DejaVu', 'B', 18 if emphasize else 14)
         self.set_text_color(40, 40, 120) if emphasize else self.set_text_color(0, 0, 0)
-        self.cell(0, 12, remove_emojis(title), ln=True, align='L')
+        self.cell(0, 12, remove_emojis(title), new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='L')
         self.set_text_color(0, 0, 0)
         self.ln(4)
         self.set_y(self.get_y() + 4)
 
     def add_key_value(self, key, value, emphasize=False):
-        self.add_font('DejaVu', '', UNICODE_FONT_PATH, uni=True)
+        self.add_font('DejaVu', '', UNICODE_FONT_PATH)
         self.set_font('DejaVu', 'B', 12 if emphasize else 11)
         self.set_fill_color(230, 230, 230)  # Light gray
         import re
@@ -132,7 +132,7 @@ class BrandPDF(FPDF):
         total_height = key_height + gap_height + value_height + 6  # 6 for bottom ln
         if self.get_y() + total_height > self.h - self.b_margin:
             self.add_page()
-        self.cell(0, 8, remove_emojis(f"{key}"), ln=1, fill=True)
+        self.cell(0, 8, remove_emojis(f"{key}"), new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
         self.ln(3)
         self.set_font('DejaVu', '', 12)
         self.multi_cell(0, 6, remove_emojis(value_str))
@@ -151,7 +151,7 @@ class BrandPDF(FPDF):
             self.set_fill_color(r, g, b)
             self.cell(20, 10, '', 0, 0, '', True)
             self.set_font('DejaVu', '', 12)
-            self.cell(0, 10, remove_emojis(f"{color.get('color_name', '')} ({hex_val}) - {color.get('description', '')}"), ln=1)
+            self.cell(0, 10, remove_emojis(f"{color.get('color_name', '')} ({hex_val}) - {color.get('description', '')}"), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         self.ln(2)
 
     def add_logo_images(self, logos):
@@ -170,7 +170,7 @@ class BrandPDF(FPDF):
                 except Exception as e:
                     print(f"Error loading image {url}: {e}")
                     self.set_font('DejaVu', '', 10)
-                    self.cell(0, 8, '[Image could not be loaded]', ln=1)
+                    self.cell(0, 8, '[Image could not be loaded]', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             self.ln(2)
             self.set_font('DejaVu', '', 10)
             self.multi_cell(0, 8, remove_emojis(logo.get('description', '')))
@@ -212,7 +212,7 @@ class BrandPDF(FPDF):
                     break
             if font_file:
                 try:
-                    self.add_font(font_family, font_style, font_file, uni=True)
+                    self.add_font(font_family, font_style, font_file)
                 except Exception:
                     pass
                 self.set_font(font_family, font_style, font_size_num)
@@ -220,13 +220,13 @@ class BrandPDF(FPDF):
                 # Fallback to DejaVu
                 self.set_font('DejaVu', font_style, font_size_num)
             # Font name in its style
-            self.cell(0, 10, f"{font_family} {font_weight.title()}", ln=1)
+            self.cell(0, 10, f"{font_family} {font_weight.title()}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             # Sample text
             sample_text = "The quick brown fox jumps over the lazy dog. 1234567890"
-            self.cell(0, 10, sample_text, ln=1)
+            self.cell(0, 10, sample_text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             # Font details
             self.set_font('DejaVu', '', 11)
-            self.cell(0, 8, f"Size: {font_size}   |   Line Height: {line_height}", ln=1)
+            self.cell(0, 8, f"Size: {font_size}   |   Line Height: {line_height}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             self.multi_cell(0, 8, remove_emojis(description))
             self.ln(4)
 
@@ -234,7 +234,7 @@ class BrandPDF(FPDF):
         self.add_section_title("Content Calendar Sample")
         if not calendar_entries:
             self.set_font('DejaVu', '', 11)
-            self.cell(0, 8, "No content calendar entries available.", ln=1)
+            self.cell(0, 8, "No content calendar entries available.", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             return
         # Table headers
         headers = ["Date", "Event", "Design concept", "Caption"]
@@ -257,12 +257,12 @@ class BrandPDF(FPDF):
         if section_title:
             self.set_font('DejaVu', 'B', 32)
             self.set_text_color(40, 40, 40)
-            self.cell(0, 30, section_title, ln=True, align=title_align)
+            self.cell(0, 30, section_title, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align=title_align)
             self.ln(5)
         # Subtitle
         if subtitle:
             self.set_font('DejaVu', 'B', 18)
-            self.cell(0, 10, subtitle, ln=True, align=subtitle_align)
+            self.cell(0, 10, subtitle, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align=subtitle_align)
             self.ln(10)
         # Draw circles for each color
         page_width = self.w - self.l_margin - self.r_margin
@@ -288,7 +288,7 @@ class BrandPDF(FPDF):
             self.set_xy(x, y + circle_diameter / 2 - 6)
             self.set_text_color(255, 255, 255)
             self.set_font('DejaVu', 'B', 14)
-            self.cell(circle_diameter, 12, hex_val, align='C', ln=0)
+            self.cell(circle_diameter, 12, hex_val, align='C', new_x=XPos.RIGHT, new_y=YPos.TOP)
             # Label below
             self.set_xy(x, y + circle_diameter + 2)
             self.set_text_color(40, 40, 40)
@@ -319,7 +319,7 @@ class BrandPDF(FPDF):
             except Exception as e:
                 print(f"Error loading recommended logo {logo_url}: {e}")
                 self.set_font('DejaVu', '', 10)
-                self.cell(0, 8, '[Image could not be loaded]', ln=1)
+                self.cell(0, 8, '[Image could not be loaded]', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         if description:
             self.set_font('DejaVu', '', 10)
             self.multi_cell(0, 8, remove_emojis(description))
@@ -329,7 +329,7 @@ class BrandPDF(FPDF):
         self.add_sub_section_title("Logo Variants")
         if not variants or all(v.lower().startswith("error") for v in variants):
             self.set_font('DejaVu', '', 10)
-            self.cell(0, 8, "No logo variants available.", ln=1)
+            self.cell(0, 8, "No logo variants available.", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             return
         for v in variants:
             if v and not v.lower().startswith("error"):
@@ -387,12 +387,12 @@ class BrandPDF(FPDF):
                 except Exception as e:
                     print(f"Error loading application image {url}: {e}")
                     self.set_font('DejaVu', '', 10)
-                    self.cell(0, 8, '[Image could not be loaded]', ln=1)
+                    self.cell(0, 8, '[Image could not be loaded]', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
                 # Caption below image
                 if app_type:
                     self.set_y(y + display_h + 5)
                     self.set_font('DejaVu', 'B', 14)
-                    self.cell(0, 12, remove_emojis(app_type), ln=1, align='C')
+                    self.cell(0, 12, remove_emojis(app_type), new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
                 self.ln(4)
 
 
@@ -1206,9 +1206,13 @@ def app_status():
 
 @app.route('/download_brand_pdf/<brandId>', methods=['GET'])
 def download_brand_pdf(brandId):
-    brand = db.get_brand(brandId)
-    if not brand:
+    # Get full brand data including brand assets
+    full_brand = db.get_full_brand(brandId)
+    if not full_brand:
         return jsonify({'error': 'Brand not found'}), 404
+
+    brand = full_brand['brand']
+    brand_assets = full_brand['brand_assets']
 
     import json
     def parse_json_field(field):
@@ -1247,7 +1251,6 @@ def download_brand_pdf(brandId):
     brand_identity = parse_json_field(brand.get('brand_identity', {}))
     brand_communication = parse_json_field(brand.get('brand_communication', {}))
     marketing = parse_json_field(brand.get('marketing_and_social_media_strategy', {}))
-
 
     # Cover page info
     brand_name = brand_communication.get('brand_name', brand.get('name', ''))
@@ -1326,6 +1329,95 @@ def download_brand_pdf(brandId):
             pdf.add_sub_section_title("What Makes Us Different")
             pdf.add_key_value("Positioning Statement", wmd.get('positioning_statement', ''), True)
             pdf.add_key_value("The Difference We Provide", wmd.get('the_difference_we_provide', ''))
+        
+        # Business Strategy Section (from brand_assets)
+        if brand_assets and brand_assets.get('premium_assets', {}).get('business_strategy'):
+            business_strategy = brand_assets['premium_assets']['business_strategy']
+            pdf.add_page()
+            pdf.add_section_title("Business Strategy", True, primary_rgb)
+            
+            # Market Positioning
+            if business_strategy.get('market_positioning'):
+                positioning = business_strategy['market_positioning']
+                pdf.add_sub_section_title("Market Positioning", True)
+                for key, value in positioning.items():
+                    if isinstance(value, list):
+                        pdf.add_key_value(key.replace('_', ' ').title(), ', '.join(value), True)
+                    else:
+                        pdf.add_key_value(key.replace('_', ' ').title(), str(value), True)
+            
+            # SWOT Analysis
+            if business_strategy.get('swot_analysis'):
+                swot = business_strategy['swot_analysis']
+                pdf.add_sub_section_title("SWOT Analysis", True)
+                for category, items in swot.items():
+                    if isinstance(items, list):
+                        pdf.add_key_value(category.title(), ', '.join(items), True)
+                    else:
+                        pdf.add_key_value(category.title(), str(items), True)
+            
+            # Target Audience Profiles
+            if business_strategy.get('target_audience_profiles'):
+                profiles = business_strategy['target_audience_profiles']
+                pdf.add_sub_section_title("Target Audience Profiles", True)
+                for i, profile in enumerate(profiles):
+                    if isinstance(profile, dict):
+                        pdf.add_key_value(f"Persona {i+1}: {profile.get('persona_name', 'Unknown')}", 
+                                        f"Demographics: {profile.get('demographics', 'N/A')} | "
+                                        f"Motivations: {', '.join(profile.get('motivations', []))} | "
+                                        f"Pain Points: {', '.join(profile.get('pain_points', []))}", True)
+            
+            # Competitive Analysis
+            if business_strategy.get('competitive_analysis'):
+                competitors = business_strategy['competitive_analysis']
+                pdf.add_sub_section_title("Competitive Analysis", True)
+                for i, competitor in enumerate(competitors):
+                    if isinstance(competitor, dict):
+                        comp_name = competitor.get('competitor_name', f'Competitor {i+1}')
+                        strengths = ', '.join(competitor.get('strengths', []))
+                        weaknesses = ', '.join(competitor.get('weaknesses', []))
+                        pdf.add_key_value(f"{comp_name} - Strengths", strengths, True)
+                        pdf.add_key_value(f"{comp_name} - Weaknesses", weaknesses, True)
+        
+        # Implementation Roadmap Section (from brand_assets)
+        if brand_assets and brand_assets.get('premium_assets', {}).get('implementation_roadmap'):
+            roadmap = brand_assets['premium_assets']['implementation_roadmap']
+            pdf.add_page()
+            pdf.add_section_title("Implementation Roadmap", True, primary_rgb)
+            
+            # Launch Timeline
+            if roadmap.get('launch_timeline'):
+                timeline = roadmap['launch_timeline']
+                pdf.add_sub_section_title("Launch Timeline", True)
+                for phase in timeline:
+                    if isinstance(phase, dict):
+                        phase_name = phase.get('phase', 'Unknown Phase')
+                        duration = phase.get('duration', 'N/A')
+                        deliverables = ', '.join(phase.get('deliverables', []))
+                        pdf.add_key_value(f"{phase_name} ({duration})", deliverables, True)
+            
+            # Budget Estimates
+            if roadmap.get('budget_estimates'):
+                budgets = roadmap['budget_estimates']
+                pdf.add_sub_section_title("Budget Estimates", True)
+                for budget in budgets:
+                    if isinstance(budget, dict):
+                        category = budget.get('category', 'Unknown')
+                        cost = budget.get('estimated_cost', 'N/A')
+                        description = budget.get('description', '')
+                        pdf.add_key_value(f"{category} - {cost}", description, True)
+            
+            # Quality Assurance
+            if roadmap.get('quality_assurance'):
+                qa = roadmap['quality_assurance']
+                pdf.add_sub_section_title("Quality Assurance", True)
+                for checkpoint in qa:
+                    if isinstance(checkpoint, dict):
+                        checkpoint_name = checkpoint.get('checkpoint', 'Unknown')
+                        criteria = ', '.join(checkpoint.get('criteria', []))
+                        metrics = ', '.join(checkpoint.get('success_metrics', []))
+                        pdf.add_key_value(f"{checkpoint_name} - Criteria", criteria, True)
+                        pdf.add_key_value(f"{checkpoint_name} - Success Metrics", metrics, True)
 
     # Brand Identity Section
     if brand_identity:
@@ -1365,37 +1457,502 @@ def download_brand_pdf(brandId):
         pdf.add_page()
         if brand_identity.get('logos'):
             pdf.add_logo_images(brand_identity['logos'])
-        # Recommended Logo
-        pdf.add_page()
-        if brand_identity.get('reommended_logo'):
-            pdf.add_recommended_logo(brand_identity['reommended_logo'])
-        # Logo Variants
-        if brand_identity.get('logo_variants'):
-            pdf.add_logo_variants(brand_identity['logo_variants'])
-        # Applications
-        pdf.add_page()
-        if brand_identity.get('applications'):
-            pdf.add_applications(brand_identity['applications'])
+        
+        # Brand Guidelines Section (from brand_assets)
+        if brand_assets and brand_assets.get('premium_assets', {}).get('brand_guidelines'):
+            guidelines = brand_assets['premium_assets']['brand_guidelines']
+            pdf.add_page()
+            pdf.add_section_title("Brand Guidelines", True, primary_rgb)
+            
+            # Brand Voice
+            if guidelines.get('brand_voice'):
+                voice = guidelines['brand_voice']
+                pdf.add_sub_section_title("Brand Voice", True)
+                for key, value in voice.items():
+                    if isinstance(value, list):
+                        pdf.add_key_value(key.replace('_', ' ').title(), ', '.join(value), True)
+                    else:
+                        pdf.add_key_value(key.replace('_', ' ').title(), str(value), True)
+            
+            # Logo Usage Rules
+            if guidelines.get('logo_usage_rules'):
+                rules = guidelines['logo_usage_rules']
+                pdf.add_sub_section_title("Logo Usage Rules", True)
+                for i, rule in enumerate(rules):
+                    if isinstance(rule, dict):
+                        rule_name = rule.get('rule', f'Rule {i+1}')
+                        description = rule.get('description', '')
+                        examples = rule.get('examples', '')
+                        pdf.add_key_value(f"{rule_name}", f"{description} | Examples: {examples}", True)
+            
+            # Style Guide
+            if guidelines.get('style_guide'):
+                style = guidelines['style_guide']
+                pdf.add_sub_section_title("Style Guide", True)
+                
+                # Color Usage
+                if style.get('color_usage'):
+                    pdf.add_key_value("Color Usage", "", True)
+                    for color in style['color_usage']:
+                        if isinstance(color, dict):
+                            color_name = color.get('color_name', 'Unknown')
+                            hex_value = color.get('hex_value', 'N/A')
+                            usage = color.get('usage_context', 'N/A')
+                            pdf.add_key_value(f"{color_name} ({hex_value})", usage, False)
+                
+                # Typography Rules
+                if style.get('typography_rules'):
+                    pdf.add_key_value("Typography Rules", "", True)
+                    for typo in style['typography_rules']:
+                        if isinstance(typo, dict):
+                            font = typo.get('font_family', 'Unknown')
+                            usage = typo.get('usage', 'N/A')
+                            size_range = typo.get('size_range', 'N/A')
+                            pdf.add_key_value(f"{font} ({size_range})", usage, False)
+            
+            # Visual Hierarchy
+            if guidelines.get('visual_hierarchy'):
+                hierarchy = guidelines['visual_hierarchy']
+                pdf.add_sub_section_title("Visual Hierarchy", True)
+                for element in hierarchy:
+                    if isinstance(element, dict):
+                        element_name = element.get('element', 'Unknown')
+                        guidelines_text = element.get('guidelines', '')
+                        priority = element.get('priority', 'N/A')
+                        pdf.add_key_value(f"{element_name} ({priority})", guidelines_text, True)
+        
+        # Digital Specifications Section (from brand_assets)
+        if brand_assets and brand_assets.get('premium_assets', {}).get('digital_specifications'):
+            digital_specs = brand_assets['premium_assets']['digital_specifications']
+            pdf.add_page()
+            pdf.add_section_title("Digital Specifications", True, primary_rgb)
+            
+            # Color Profiles
+            if digital_specs.get('color_profiles'):
+                profiles = digital_specs['color_profiles']
+                pdf.add_sub_section_title("Color Profiles", True)
+                for profile in profiles:
+                    if isinstance(profile, dict):
+                        profile_type = profile.get('profile_type', 'Unknown')
+                        color_values = profile.get('color_values', 'N/A')
+                        usage = profile.get('usage_context', 'N/A')
+                        pdf.add_key_value(f"{profile_type} Profile", f"{color_values} | {usage}", True)
+            
+            # Digital Specifications
+            if digital_specs.get('digital_specifications'):
+                specs = digital_specs['digital_specifications']
+                pdf.add_sub_section_title("Platform Specifications", True)
+                for spec in specs:
+                    if isinstance(spec, dict):
+                        platform = spec.get('platform', 'Unknown')
+                        dimensions = spec.get('dimensions', 'N/A')
+                        format_type = spec.get('format', 'N/A')
+                        file_size = spec.get('file_size', 'N/A')
+                        pdf.add_key_value(f"{platform} ({dimensions})", f"Format: {format_type} | Size: {file_size}", True)
+            
+            # File Format Guidelines
+            if digital_specs.get('file_format_guidelines'):
+                formats = digital_specs['file_format_guidelines']
+                pdf.add_sub_section_title("File Format Guidelines", True)
+                for format_guide in formats:
+                    if isinstance(format_guide, dict):
+                        format_type = format_guide.get('format', 'Unknown')
+                        use_case = format_guide.get('use_case', 'N/A')
+                        specs = format_guide.get('specifications', 'N/A')
+                        pdf.add_key_value(f"{format_type} Format", f"{use_case} | {specs}", True)
+            
+            # Print Specifications
+            if digital_specs.get('print_specifications'):
+                print_specs = digital_specs['print_specifications']
+                pdf.add_sub_section_title("Print Specifications", True)
+                for print_spec in print_specs:
+                    if isinstance(print_spec, dict):
+                        resolution = print_spec.get('resolution', 'N/A')
+                        color_mode = print_spec.get('color_mode', 'N/A')
+                        material = print_spec.get('material', 'N/A')
+                        pdf.add_key_value(f"Print Specs", f"Resolution: {resolution} | Color: {color_mode} | Material: {material}", True)
 
-    # Marketing & Social Media Section
-    content_calendar = None
-    if marketing:
-        pdf.add_page()
-        print('DEBUG: marketing type:', type(marketing), 'value:', marketing)
-        pdf.add_section_title("Marketing & Social Media Strategy", True, primary_rgb)
-        if isinstance(marketing, dict):
-            print('marketing:', marketing)
-            for key, value in marketing.items():
-                print('DEBUG: marketing key:', key, 'type:', type(value))
-                if key.lower() in ["strategy", "description", "summary"]:
-                    pdf.add_key_value(key.replace('_', ' ').title(), value, True)
-                if key.lower() in ["content_calendar", "content_calender", "contentcalender", "calendar"]:
-                    content_calendar = value
-            print('DEBUG: content_calendar:', content_calendar)
-            if content_calendar:
-                pdf.add_content_calendar(parse_json_field(content_calendar), 5)
-        elif isinstance(marketing, str) and marketing.strip():
-            pdf.add_key_value("Strategy", marketing.strip(), True)
+
+    # Brand Applications Section
+    if brand_assets:
+        full_brand_identity = brand_assets.get('full_brand_identity')
+        if full_brand_identity and isinstance(full_brand_identity, dict):
+            # Business Cards
+            business_cards = full_brand_identity.get('business_cards', [])
+            if business_cards:
+                for i, card in enumerate(business_cards):
+                    pdf.add_page()
+                    # Add title for business card
+                    pdf.add_section_title("Business Card", True, primary_rgb)
+                    image_url = card.get('image_url')
+                    if image_url and not image_url.startswith('Error:'):
+                        try:
+                            response = requests.get(image_url)
+                            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
+                                tmp_img.write(response.content)
+                                tmp_img.flush()
+                                tmp_img_path = tmp_img.name
+                            # Calculate optimal size while maintaining aspect ratio
+                            from PIL import Image
+                            with Image.open(tmp_img_path) as img:
+                                img_width, img_height = img.size
+                                aspect_ratio = img_width / img_height
+                                
+                                # Calculate maximum size that fits the page (accounting for title space)
+                                page_width = pdf.w
+                                page_height = pdf.h - 50  # Leave space for title
+                                page_aspect = page_width / page_height
+                                
+                                if aspect_ratio > page_aspect:
+                                    # Image is wider than page, fit to width
+                                    display_width = page_width
+                                    display_height = page_width / aspect_ratio
+                                    x = 0
+                                    y = 50 + (page_height - display_height) / 2  # Start below title
+                                else:
+                                    # Image is taller than page, fit to height
+                                    display_height = page_height
+                                    display_width = page_height * aspect_ratio
+                                    x = (page_width - display_width) / 2
+                                    y = 50  # Start below title
+                                
+                                pdf.image(tmp_img_path, x=x, y=y, w=display_width, h=display_height)
+                            os.remove(tmp_img_path)
+                        except Exception as e:
+                            print(f"Error loading business card image: {e}")
+                            pdf.add_key_value("Error", "Business card image could not be loaded")
+            
+            # Letterheads
+            letterheads = full_brand_identity.get('letterheads', [])
+            if letterheads:
+                for i, letterhead in enumerate(letterheads):
+                    pdf.add_page()
+                    # Add title for letterhead
+                    pdf.add_section_title("Letterhead", True, primary_rgb)
+                    image_url = letterhead.get('image_url')
+                    if image_url and not image_url.startswith('Error:'):
+                        try:
+                            response = requests.get(image_url)
+                            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
+                                tmp_img.write(response.content)
+                                tmp_img.flush()
+                                tmp_img_path = tmp_img.name
+                            # Calculate optimal size while maintaining aspect ratio
+                            from PIL import Image
+                            with Image.open(tmp_img_path) as img:
+                                img_width, img_height = img.size
+                                aspect_ratio = img_width / img_height
+                                
+                                # Calculate maximum size that fits the page (accounting for title space)
+                                page_width = pdf.w
+                                page_height = pdf.h - 50  # Leave space for title
+                                page_aspect = page_width / page_height
+                                
+                                if aspect_ratio > page_aspect:
+                                    # Image is wider than page, fit to width
+                                    display_width = page_width
+                                    display_height = page_width / aspect_ratio
+                                    x = 0
+                                    y = 50 + (page_height - display_height) / 2  # Start below title
+                                else:
+                                    # Image is taller than page, fit to height
+                                    display_height = page_height
+                                    display_width = page_height * aspect_ratio
+                                    x = (page_width - display_width) / 2
+                                    y = 50  # Start below title
+                                
+                                pdf.image(tmp_img_path, x=x, y=y, w=display_width, h=display_height)
+                            os.remove(tmp_img_path)
+                        except Exception as e:
+                            print(f"Error loading letterhead image: {e}")
+                            pdf.add_key_value("Error", "Letterhead image could not be loaded")
+            
+            # T-Shirt Mockups
+            t_shirt_mockups = full_brand_identity.get('t_shirt_mockups', [])
+            if t_shirt_mockups:
+                for i, tshirt in enumerate(t_shirt_mockups):
+                    pdf.add_page()
+                    # Add title for t-shirt mockup
+                    pdf.add_section_title("T-Shirt Mockup", True, primary_rgb)
+                    image_url = tshirt.get('image_url')
+                    if image_url and not image_url.startswith('Error:'):
+                        try:
+                            response = requests.get(image_url)
+                            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
+                                tmp_img.write(response.content)
+                                tmp_img.flush()
+                                tmp_img_path = tmp_img.name
+                            # Calculate optimal size while maintaining aspect ratio
+                            from PIL import Image
+                            with Image.open(tmp_img_path) as img:
+                                img_width, img_height = img.size
+                                aspect_ratio = img_width / img_height
+                                
+                                # Calculate maximum size that fits the page (accounting for title space)
+                                page_width = pdf.w
+                                page_height = pdf.h - 50  # Leave space for title
+                                page_aspect = page_width / page_height
+                                
+                                if aspect_ratio > page_aspect:
+                                    # Image is wider than page, fit to width
+                                    display_width = page_width
+                                    display_height = page_width / aspect_ratio
+                                    x = 0
+                                    y = 50 + (page_height - display_height) / 2  # Start below title
+                                else:
+                                    # Image is taller than page, fit to height
+                                    display_height = page_height
+                                    display_width = page_height * aspect_ratio
+                                    x = (page_width - display_width) / 2
+                                    y = 50  # Start below title
+                                
+                                pdf.image(tmp_img_path, x=x, y=y, w=display_width, h=display_height)
+                            os.remove(tmp_img_path)
+                        except Exception as e:
+                            print(f"Error loading t-shirt mockup image: {e}")
+                            pdf.add_key_value("Error", "T-shirt mockup image could not be loaded")
+            
+            # Cap Mockups
+            cap_mockups = full_brand_identity.get('cap_mockups', [])
+            if cap_mockups:
+                for i, cap in enumerate(cap_mockups):
+                    pdf.add_page()
+                    # Add title for cap mockup
+                    pdf.add_section_title("Cap Mockup", True, primary_rgb)
+                    image_url = cap.get('image_url')
+                    if image_url and not image_url.startswith('Error:'):
+                        try:
+                            response = requests.get(image_url)
+                            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
+                                tmp_img.write(response.content)
+                                tmp_img.flush()
+                                tmp_img_path = tmp_img.name
+                            # Calculate optimal size while maintaining aspect ratio
+                            from PIL import Image
+                            with Image.open(tmp_img_path) as img:
+                                img_width, img_height = img.size
+                                aspect_ratio = img_width / img_height
+                                
+                                # Calculate maximum size that fits the page (accounting for title space)
+                                page_width = pdf.w
+                                page_height = pdf.h - 50  # Leave space for title
+                                page_aspect = page_width / page_height
+                                
+                                if aspect_ratio > page_aspect:
+                                    # Image is wider than page, fit to width
+                                    display_width = page_width
+                                    display_height = page_width / aspect_ratio
+                                    x = 0
+                                    y = 50 + (page_height - display_height) / 2  # Start below title
+                                else:
+                                    # Image is taller than page, fit to height
+                                    display_height = page_height
+                                    display_width = page_height * aspect_ratio
+                                    x = (page_width - display_width) / 2
+                                    y = 50  # Start below title
+                                
+                                pdf.image(tmp_img_path, x=x, y=y, w=display_width, h=display_height)
+                            os.remove(tmp_img_path)
+                        except Exception as e:
+                            print(f"Error loading cap mockup image: {e}")
+                            pdf.add_key_value("Error", "Cap mockup image could not be loaded")
+            
+            # Signboards
+            signboards = full_brand_identity.get('signboards', [])
+            if signboards:
+                for i, signboard in enumerate(signboards):
+                    pdf.add_page()
+                    # Add title for signboard
+                    pdf.add_section_title("Signboard", True, primary_rgb)
+                    image_url = signboard.get('image_url')
+                    if image_url and not image_url.startswith('Error:'):
+                        try:
+                            response = requests.get(image_url)
+                            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
+                                tmp_img.write(response.content)
+                                tmp_img.flush()
+                                tmp_img_path = tmp_img.name
+                            # Calculate optimal size while maintaining aspect ratio
+                            from PIL import Image
+                            with Image.open(tmp_img_path) as img:
+                                img_width, img_height = img.size
+                                aspect_ratio = img_width / img_height
+                                
+                                # Calculate maximum size that fits the page (accounting for title space)
+                                page_width = pdf.w
+                                page_height = pdf.h - 50  # Leave space for title
+                                page_aspect = page_width / page_height
+                                
+                                if aspect_ratio > page_aspect:
+                                    # Image is wider than page, fit to width
+                                    display_width = page_width
+                                    display_height = page_width / aspect_ratio
+                                    x = 0
+                                    y = 50 + (page_height - display_height) / 2  # Start below title
+                                else:
+                                    # Image is taller than page, fit to height
+                                    display_height = page_height
+                                    display_width = page_height * aspect_ratio
+                                    x = (page_width - display_width) / 2
+                                    y = 50  # Start below title
+                                
+                                pdf.image(tmp_img_path, x=x, y=y, w=display_width, h=display_height)
+                            os.remove(tmp_img_path)
+                        except Exception as e:
+                            print(f"Error loading signboard image: {e}")
+                            pdf.add_key_value("Error", "Signboard image could not be loaded")
+            
+            # Brand Patterns
+            brand_patterns = full_brand_identity.get('brand_patterns', [])
+            if brand_patterns:
+                for i, pattern in enumerate(brand_patterns):
+                    pdf.add_page()
+                    # Add title for brand pattern
+                    pdf.add_section_title("Brand Pattern", True, primary_rgb)
+                    image_url = pattern.get('image_url')
+                    if image_url and not image_url.startswith('Error:'):
+                        try:
+                            response = requests.get(image_url)
+                            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
+                                tmp_img.write(response.content)
+                                tmp_img.flush()
+                                tmp_img_path = tmp_img.name
+                            # Calculate optimal size while maintaining aspect ratio
+                            from PIL import Image
+                            with Image.open(tmp_img_path) as img:
+                                img_width, img_height = img.size
+                                aspect_ratio = img_width / img_height
+                                
+                                # Calculate maximum size that fits the page (accounting for title space)
+                                page_width = pdf.w
+                                page_height = pdf.h - 50  # Leave space for title
+                                page_aspect = page_width / page_height
+                                
+                                if aspect_ratio > page_aspect:
+                                    # Image is wider than page, fit to width
+                                    display_width = page_width
+                                    display_height = page_width / aspect_ratio
+                                    x = 0
+                                    y = 50 + (page_height - display_height) / 2  # Start below title
+                                else:
+                                    # Image is taller than page, fit to height
+                                    display_height = page_height
+                                    display_width = page_height * aspect_ratio
+                                    x = (page_width - display_width) / 2
+                                    y = 50  # Start below title
+                                
+                                pdf.image(tmp_img_path, x=x, y=y, w=display_width, h=display_height)
+                            os.remove(tmp_img_path)
+                        except Exception as e:
+                            print(f"Error loading brand pattern image: {e}")
+                            pdf.add_key_value("Error", "Brand pattern image could not be loaded")
+        
+        # Marketing Templates Section (from brand_assets)
+        if brand_assets and brand_assets.get('premium_assets', {}).get('marketing_templates'):
+            templates = brand_assets['premium_assets']['marketing_templates']
+            pdf.add_page()
+            pdf.add_section_title("Marketing Templates", True, primary_rgb)
+            
+            # Landing Page Copy
+            if templates.get('landing_page_copy'):
+                landing = templates['landing_page_copy']
+                pdf.add_sub_section_title("Landing Page Copy", True)
+                pdf.add_key_value("Hero Headline", landing.get('hero_headline', ''), True)
+                pdf.add_key_value("Hero Subheadline", landing.get('hero_subheadline', ''), True)
+                pdf.add_key_value("Call to Action", landing.get('call_to_action', ''), True)
+                
+                if landing.get('benefits'):
+                    pdf.add_key_value("Benefits", ', '.join(landing['benefits']), True)
+                
+                if landing.get('features'):
+                    pdf.add_key_value("Features", ', '.join(landing['features']), True)
+                
+                if landing.get('testimonials'):
+                    pdf.add_key_value("Testimonials", '', True)
+                    for i, testimonial in enumerate(landing['testimonials']):
+                        pdf.add_key_value(f"Testimonial {i+1}", testimonial, False)
+            
+            # Email Templates
+            if templates.get('email_templates'):
+                emails = templates['email_templates']
+                pdf.add_sub_section_title("Email Templates", True)
+                for i, email in enumerate(emails):
+                    if isinstance(email, dict):
+                        template_name = email.get('template_name', f'Email Template {i+1}')
+                        subject = email.get('subject_line', '')
+                        greeting = email.get('greeting', '')
+                        body = email.get('body', '')
+                        closing = email.get('closing', '')
+                        signature = email.get('signature', '')
+                        
+                        pdf.add_key_value(f"{template_name} - Subject", subject, True)
+                        pdf.add_key_value(f"{template_name} - Greeting", greeting, False)
+                        pdf.add_key_value(f"{template_name} - Body", body, False)
+                        pdf.add_key_value(f"{template_name} - Closing", f"{closing} {signature}", False)
+            
+            # Brochure Content
+            if templates.get('brochure_content'):
+                brochure = templates['brochure_content']
+                pdf.add_sub_section_title("Brochure Content", True)
+                for i, section in enumerate(brochure):
+                    if isinstance(section, dict):
+                        section_title = section.get('section_title', f'Section {i+1}')
+                        content = section.get('content', '')
+                        call_to_action = section.get('call_to_action', '')
+                        
+                        pdf.add_key_value(f"{section_title}", content, True)
+                        if call_to_action:
+                            pdf.add_key_value(f"{section_title} - CTA", call_to_action, False)
+            
+            # Presentation Templates
+            if templates.get('presentation_templates'):
+                presentations = templates['presentation_templates']
+                pdf.add_sub_section_title("Presentation Templates", True)
+                for i, slide in enumerate(presentations):
+                    if isinstance(slide, dict):
+                        slide_title = slide.get('slide_title', f'Slide {i+1}')
+                        content = slide.get('content', '')
+                        key_points = ', '.join(slide.get('key_points', []))
+                        visual_suggestions = slide.get('visual_suggestions', '')
+                        
+                        pdf.add_key_value(f"{slide_title}", content, True)
+                        if key_points:
+                            pdf.add_key_value(f"{slide_title} - Key Points", key_points, False)
+                        if visual_suggestions:
+                            pdf.add_key_value(f"{slide_title} - Visual Suggestions", visual_suggestions, False)
+        
+        # Social Media Content Section (from brand_assets)
+        if brand_assets and brand_assets.get('social_media_content'):
+            social_content = brand_assets['social_media_content']
+            pdf.add_page()
+            pdf.add_section_title("Social Media Content", True, primary_rgb)
+            
+            # Ad Copies
+            if social_content.get('ad_copies'):
+                ads = social_content['ad_copies']
+                pdf.add_sub_section_title("Ad Copies", True)
+                for i, ad in enumerate(ads):
+                    pdf.add_key_value(f"Ad Copy {i+1}", ad, True)
+            
+            # Ready Made Posts
+            if social_content.get('ready_made_posts'):
+                posts = social_content['ready_made_posts']
+                pdf.add_sub_section_title("Ready Made Posts", True)
+                for i, post in enumerate(posts):
+                    if isinstance(post, dict):
+                        caption = post.get('caption', '')
+                        design_concept = post.get('design_concept', '')
+                        
+                        pdf.add_key_value(f"Post {i+1} - Caption", caption, True)
+                        if design_concept:
+                            pdf.add_key_value(f"Post {i+1} - Design Concept", design_concept, False)
+            
+            # Marketing Strategies
+            if social_content.get('relevant_marketing_strategies'):
+                strategies = social_content['relevant_marketing_strategies']
+                pdf.add_sub_section_title("Marketing Strategies", True)
+                for i, strategy in enumerate(strategies):
+                    pdf.add_key_value(f"Strategy {i+1}", strategy, True)
 
     # Final note
     pdf.add_page()
@@ -1406,7 +1963,7 @@ def download_brand_pdf(brandId):
         True
     )
 
-    pdf_bytes = pdf.output(dest='S').encode('latin1')
+    pdf_bytes = pdf.output()
     pdf_output = io.BytesIO(pdf_bytes)
     pdf_output.seek(0)
     return send_file(pdf_output, as_attachment=True, download_name=f"brand_{brandId}_blueprint.pdf", mimetype='application/pdf')
@@ -1512,6 +2069,122 @@ def delete_brand_assets():
             'success': False,
             'message': f'Error deleting brand assets: {str(e)}',
             'deleted': False
+        }), 500
+
+@app.route('/get_full_brand/<brand_id>', methods=['GET'])
+def get_full_brand(brand_id):
+    """Get complete brand information including brand details and brand assets"""
+    try:
+        if not brand_id:
+            return jsonify({
+                'success': False,
+                'message': 'brandId is required',
+                'full_brand': None
+            }), 400
+        
+        full_brand = db.get_full_brand(brand_id)
+        
+        if full_brand:
+            return jsonify({
+                'success': True,
+                'message': 'Full brand information retrieved successfully',
+                'full_brand': full_brand
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Brand not found',
+                'full_brand': None
+            }), 404
+            
+    except Exception as e:
+        print(f"Error getting full brand: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'message': f'Error retrieving full brand information: {str(e)}',
+            'full_brand': None
+        }), 500
+
+@app.route('/update_brand_payment_status', methods=['POST'])
+def update_brand_payment_status():
+    """Update the payment status of a brand"""
+    try:
+        data = request.get_json()
+        if not data or 'brandId' not in data or 'paymentStatus' not in data:
+            return jsonify({
+                'success': False,
+                'message': 'brandId and paymentStatus are required',
+                'updated': False
+            }), 400
+        
+        brand_id = data['brandId']
+        payment_status = data['paymentStatus']
+        
+        # Validate payment_status is boolean
+        if not isinstance(payment_status, bool):
+            return jsonify({
+                'success': False,
+                'message': 'paymentStatus must be a boolean value',
+                'updated': False
+            }), 400
+        
+        success = db.update_brand_payment_status(brand_id, payment_status)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Payment status updated successfully',
+                'updated': True
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to update payment status',
+                'updated': False
+            }), 500
+            
+    except Exception as e:
+        print(f"Error updating brand payment status: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Error updating payment status: {str(e)}',
+            'updated': False
+        }), 500
+
+@app.route('/check_brand_payment_status/<brand_id>', methods=['GET'])
+def check_brand_payment_status(brand_id):
+    """Check the payment status of a brand"""
+    try:
+        if not brand_id:
+            return jsonify({
+                'success': False,
+                'message': 'brandId is required',
+                'payment_status': None
+            }), 400
+        
+        payment_status = db.check_brand_payment_status(brand_id)
+        
+        if payment_status is not None:
+            return jsonify({
+                'success': True,
+                'message': 'Payment status retrieved successfully',
+                'payment_status': payment_status
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Brand not found',
+                'payment_status': None
+            }), 404
+            
+    except Exception as e:
+        print(f"Error checking brand payment status: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Error checking payment status: {str(e)}',
+            'payment_status': None
         }), 500
 
 @app.route('/get_brand_results/<brand_id>', methods=['GET'])
@@ -1763,6 +2436,254 @@ def google_token_auth():
         return jsonify({
             'success': False,
             'message': f'Error during Google token authentication: {str(e)}'
+        }), 500
+
+# ===================== Flutterwave Payment Endpoints =====================
+
+@app.route('/payment/initiate', methods=['POST'])
+def initiate_payment():
+    """Initiate a payment transaction"""
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        required_fields = ['amount', 'email', 'phone_number', 'name', 'brand_id']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({
+                    'success': False,
+                    'message': f'Missing required field: {field}'
+                }), 400
+        
+        # Extract data
+        amount = data['amount']
+        email = data['email']
+        phone_number = data['phone_number']
+        name = data['name']
+        brand_id = data['brand_id']
+        currency = data.get('currency', 'NGN')
+        
+        # Generate unique transaction reference
+        import uuid
+        tx_ref = f"brand_ai_{brand_id}_{uuid.uuid4().hex[:8]}"
+        
+        # Import Flutterwave payment handler
+        try:
+            from flutterwave_payment import flutterwave
+        except ImportError:
+            return jsonify({
+                'success': False,
+                'message': 'Payment service not available'
+            }), 500
+        
+        # Initiate payment
+        result = flutterwave.initiate_payment(
+            amount=amount,
+            email=email,
+            phone_number=phone_number,
+            name=name,
+            tx_ref=tx_ref,
+            currency=currency
+        )
+        
+        if result['success']:
+            # Store payment info in database (optional)
+            # You can create a payments table to track payment attempts
+            
+            return jsonify({
+                'success': True,
+                'message': 'Payment initiated successfully',
+                'payment_url': result['payment_url'],
+                'tx_ref': result['tx_ref'],
+                'flw_ref': result['flw_ref']
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'message': result['message']
+            }), 400
+            
+    except Exception as e:
+        print(f"Error initiating payment: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Error initiating payment: {str(e)}'
+        }), 500
+
+@app.route('/payment/verify', methods=['POST'])
+def verify_payment():
+    """Verify a payment transaction"""
+    try:
+        data = request.get_json()
+        
+        if not data or 'transaction_id' not in data:
+            return jsonify({
+                'success': False,
+                'message': 'Transaction ID is required'
+            }), 400
+        
+        transaction_id = data['transaction_id']
+        
+        # Import Flutterwave payment handler
+        try:
+            from flutterwave_payment import flutterwave
+        except ImportError:
+            return jsonify({
+                'success': False,
+                'message': 'Payment service not available'
+            }), 500
+        
+        # Verify payment
+        result = flutterwave.verify_payment(transaction_id)
+        
+        if result['success']:
+            # Update brand payment status if payment is successful
+            if result['status'] == 'successful':
+                # Extract brand_id from tx_ref (format: brand_ai_{brand_id}_{random})
+                tx_ref = result['tx_ref']
+                if tx_ref.startswith('brand_ai_'):
+                    parts = tx_ref.split('_')
+                    if len(parts) >= 3:
+                        brand_id = parts[2]
+                        # Update payment status
+                        db.update_brand_payment_status(brand_id, True)
+                        print(f"Payment successful for brand {brand_id}")
+            
+            return jsonify({
+                'success': True,
+                'message': 'Payment verified successfully',
+                'payment_data': result
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'message': result['message']
+            }), 400
+            
+    except Exception as e:
+        print(f"Error verifying payment: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Error verifying payment: {str(e)}'
+        }), 500
+
+@app.route('/payment/callback', methods=['GET'])
+def payment_callback():
+    """Handle payment callback from Flutterwave"""
+    try:
+        # Get query parameters
+        status = request.args.get('status')
+        tx_ref = request.args.get('tx_ref')
+        transaction_id = request.args.get('transaction_id')
+        
+        if status == 'successful':
+            # Verify the payment
+            try:
+                from flutterwave_payment import flutterwave
+                result = flutterwave.verify_payment(transaction_id)
+                
+                if result['success'] and result['status'] == 'successful':
+                    # Extract brand_id from tx_ref
+                    if tx_ref.startswith('brand_ai_'):
+                        parts = tx_ref.split('_')
+                        if len(parts) >= 3:
+                            brand_id = parts[2]
+                            # Update payment status
+                            db.update_brand_payment_status(brand_id, True)
+                            print(f"Payment successful for brand {brand_id}")
+                    
+                    return jsonify({
+                        'success': True,
+                        'message': 'Payment completed successfully',
+                        'tx_ref': tx_ref,
+                        'transaction_id': transaction_id
+                    }), 200
+                else:
+                    return jsonify({
+                        'success': False,
+                        'message': 'Payment verification failed'
+                    }), 400
+            except ImportError:
+                return jsonify({
+                    'success': False,
+                    'message': 'Payment service not available'
+                }), 500
+        else:
+            return jsonify({
+                'success': False,
+                'message': f'Payment failed with status: {status}'
+            }), 400
+            
+    except Exception as e:
+        print(f"Error in payment callback: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Error processing payment callback: {str(e)}'
+        }), 500
+
+@app.route('/payment/webhook', methods=['POST'])
+def payment_webhook():
+    """Handle webhook from Flutterwave"""
+    try:
+        # Get the raw request body and signature
+        payload = request.get_data(as_text=True)
+        signature = request.headers.get('Verif-Hash')
+        
+        if not signature:
+            return jsonify({
+                'success': False,
+                'message': 'Missing webhook signature'
+            }), 400
+        
+        # Parse the payload
+        try:
+            webhook_data = json.loads(payload)
+        except json.JSONDecodeError:
+            return jsonify({
+                'success': False,
+                'message': 'Invalid JSON payload'
+            }), 400
+        
+        # Import Flutterwave payment handler
+        try:
+            from flutterwave_payment import flutterwave
+        except ImportError:
+            return jsonify({
+                'success': False,
+                'message': 'Payment service not available'
+            }), 500
+        
+        # Process webhook
+        result = flutterwave.process_webhook(webhook_data, signature)
+        
+        if result['success']:
+            # Handle successful payment
+            if result['event'] == 'charge.completed':
+                # Extract brand_id from tx_ref
+                tx_ref = result['tx_ref']
+                if tx_ref.startswith('brand_ai_'):
+                    parts = tx_ref.split('_')
+                    if len(parts) >= 3:
+                        brand_id = parts[2]
+                        # Update payment status
+                        db.update_brand_payment_status(brand_id, True)
+                        print(f"Webhook: Payment successful for brand {brand_id}")
+            
+            return jsonify({
+                'success': True,
+                'message': 'Webhook processed successfully'
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'message': result['message']
+            }), 400
+            
+    except Exception as e:
+        print(f"Error processing webhook: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Error processing webhook: {str(e)}'
         }), 500
 
 if __name__ == '__main__':
