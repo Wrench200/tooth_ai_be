@@ -567,149 +567,149 @@ def get_suggestions():
 
 
 
-# @app.route('/register_user', methods=['POST'])
-# def register_user():
-#     """
-#     Register a new user with comprehensive validation and error handling
-#     """
-#     try:
-#         # Validate request format
-#         if not request.is_json:
-#             return jsonify({
-#                 'success': False,
-#                 'error': 'Content-Type must be application/json'
-#             }), 400
+@app.route('/register_user', methods=['POST'])
+def register_user():
+    """
+    Register a new user with comprehensive validation and error handling
+    """
+    try:
+        # Validate request format
+        if not request.is_json:
+            return jsonify({
+                'success': False,
+                'error': 'Content-Type must be application/json'
+            }), 400
         
-#         data = request.get_json()
-#         if not data:
-#             return jsonify({
-#                 'success': False,
-#                 'error': 'No JSON data provided'
-#             }), 400
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'No JSON data provided'
+            }), 400
         
-#         # Validate required fields
-#         required_fields = ['userName', 'email', 'password']
-#         missing_fields = []
-#         for field in required_fields:
-#             if field not in data or not data[field]:
-#                 missing_fields.append(field)
+        # Validate required fields
+        required_fields = ['userName', 'email', 'password']
+        missing_fields = []
+        for field in required_fields:
+            if field not in data or not data[field]:
+                missing_fields.append(field)
         
-#         if missing_fields:
-#             return jsonify({
-#                 'success': False,
-#                 'error': f'Missing required fields: {", ".join(missing_fields)}'
-#             }), 400
+        if missing_fields:
+            return jsonify({
+                'success': False,
+                'error': f'Missing required fields: {", ".join(missing_fields)}'
+            }), 400
         
-#         # Extract and sanitize input
-#         username = str(data['userName']).strip()
-#         email = str(data['email']).strip().lower()
-#         password = str(data['password'])
+        # Extract and sanitize input
+        username = str(data['userName']).strip()
+        email = str(data['email']).strip().lower()
+        password = str(data['password'])
         
-#         # Validate username
-#         if len(username) < 2:
-#             return jsonify({
-#                 'success': False,
-#                 'error': 'Username must be at least 2 characters long'
-#             }), 400
+        # Validate username
+        if len(username) < 2:
+            return jsonify({
+                'success': False,
+                'error': 'Username must be at least 2 characters long'
+            }), 400
         
-#         if len(username) > 50:
-#             return jsonify({
-#                 'success': False,
-#                 'error': 'Username must be less than 50 characters'
-#             }), 400
+        if len(username) > 50:
+            return jsonify({
+                'success': False,
+                'error': 'Username must be less than 50 characters'
+            }), 400
         
-#         # Validate email format
-#         import re
-#         email_pattern = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
-#         if not email_pattern.match(email):
-#             return jsonify({
-#                 'success': False,
-#                 'error': 'Invalid email format'
-#             }), 400
+        # Validate email format
+        import re
+        email_pattern = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+        if not email_pattern.match(email):
+            return jsonify({
+                'success': False,
+                'error': 'Invalid email format'
+            }), 400
         
-#         # Validate password strength
-#         if len(password) < 6:
-#             return jsonify({
-#                 'success': False,
-#                 'error': 'Password must be at least 6 characters long'
-#             }), 400
+        # Validate password strength
+        if len(password) < 6:
+            return jsonify({
+                'success': False,
+                'error': 'Password must be at least 6 characters long'
+            }), 400
         
-#         if len(password) > 128:
-#             return jsonify({
-#                 'success': False,
-#                 'error': 'Password must be less than 128 characters'
-#             }), 400
+        if len(password) > 128:
+            return jsonify({
+                'success': False,
+                'error': 'Password must be less than 128 characters'
+            }), 400
         
-#         # Check if user already exists
-#         try:
-#             existing_user = db.get_user_from_email(email)
-#             if existing_user:
-#                 return jsonify({
-#                     'success': False,
-#                     'error': 'User with this email already exists'
-#                 }), 409
-#         except Exception as e:
-#             print(f"REGISTER ERROR (db.get_user_from_email): {e}")
-#             traceback.print_exc()
-#             return jsonify({
-#                 'success': False,
-#                 'error': 'Database error during user lookup'
-#             }), 500
+        # Check if user already exists
+        try:
+            existing_user = db.get_user_from_email(email)
+            if existing_user:
+                return jsonify({
+                    'success': False,
+                    'error': 'User with this email already exists'
+                }), 409
+        except Exception as e:
+            print(f"REGISTER ERROR (db.get_user_from_email): {e}")
+            traceback.print_exc()
+            return jsonify({
+                'success': False,
+                'error': 'Database error during user lookup'
+            }), 500
         
-#         # Create user
-#         try:
-#             user = db.create_user(username, email, password)
-#         except Exception as e:
-#             print(f"REGISTER ERROR (db.create_user): {e}")
-#             traceback.print_exc()
-#             return jsonify({
-#                 'success': False,
-#                 'error': 'Database error during user creation'
-#             }), 500
+        # Create user
+        try:
+            user = db.create_user(username, email, password)
+        except Exception as e:
+            print(f"REGISTER ERROR (db.create_user): {e}")
+            traceback.print_exc()
+            return jsonify({
+                'success': False,
+                'error': 'Database error during user creation'
+            }), 500
         
-#         if not user:
-#             return jsonify({
-#                 'success': False,
-#                 'error': 'Failed to create user'
-#             }), 500
+        if not user:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to create user'
+            }), 500
         
-#         # Validate user object structure
-#         if not isinstance(user, dict):
-#             print(f"REGISTER ERROR: User object is not a dict: {user}")
-#             return jsonify({
-#                 'success': False,
-#                 'error': 'Invalid user object returned from database'
-#             }), 500
+        # Validate user object structure
+        if not isinstance(user, dict):
+            print(f"REGISTER ERROR: User object is not a dict: {user}")
+            return jsonify({
+                'success': False,
+                'error': 'Invalid user object returned from database'
+            }), 500
         
-#         required_user_keys = ['userId', 'username', 'email']
-#         missing_keys = [key for key in required_user_keys if key not in user]
-#         if missing_keys:
-#             print(f"REGISTER ERROR: Missing keys in user object: {missing_keys}")
-#             return jsonify({
-#                 'success': False,
-#                 'error': f'Invalid user object structure: missing {", ".join(missing_keys)}'
-#             }), 500
+        required_user_keys = ['userId', 'username', 'email']
+        missing_keys = [key for key in required_user_keys if key not in user]
+        if missing_keys:
+            print(f"REGISTER ERROR: Missing keys in user object: {missing_keys}")
+            return jsonify({
+                'success': False,
+                'error': f'Invalid user object structure: missing {", ".join(missing_keys)}'
+            }), 500
         
-#         # Remove password from response for security
-#         user_response = {
-#             'userId': user.get('userid') or user.get('userId'),
-#             'username': user['username'],
-#             'email': user['email']
-#         }
+        # Remove password from response for security
+        user_response = {
+            'userId': user.get('userid') or user.get('userId'),
+            'username': user['username'],
+            'email': user['email']
+        }
         
-#         return jsonify({
-#             'success': True,
-#             'message': 'User registered successfully',
-#             'user': user_response
-#         }), 201
+        return jsonify({
+            'success': True,
+            'message': 'User registered successfully',
+            'user': user_response
+        }), 201
         
-#     except Exception as e:
-#         print(f"REGISTER ERROR (unexpected): {e}")
-#         traceback.print_exc()
-#         return jsonify({
-#             'success': False,
-#             'error': 'Unexpected error during registration'
-#         }), 500
+    except Exception as e:
+        print(f"REGISTER ERROR (unexpected): {e}")
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': 'Unexpected error during registration'
+        }), 500
 
 @app.route('/login', methods=['POST'])
 def login():
