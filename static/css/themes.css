@@ -1,0 +1,23 @@
+:root {
+  --bg: #f7f7f9;
+  --surface: #ffffff;
+  --surface-2: #f2f2f6;
+  --fg: #111114;
+  --fg-muted: #6b7280;
+  --border: #e5e7eb;
+  --hover: #f3f4f6;
+  --accent: #0a84ff; /* Apple blue */
+}
+
+[data-theme="dark"] {
+  --bg: #0b0b0c;
+  --surface: #121214;
+  --surface-2: #17171a;
+  --fg: #f5f6f7;
+  --fg-muted: #9aa3af;
+  --border: #222429;
+  --hover: #1a1b1f;
+  --accent: #0a84ff;
+}
+
+

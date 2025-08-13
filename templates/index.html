@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ToothAI Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/themes.css') }}" />
+  </head>
+  <body data-theme="light">
+    <div id="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="logo">TA</div>
+          <div class="name">ToothAI</div>
+        </div>
+        <div class="actions">
+          <button id="themeToggle" class="icon-btn" aria-label="Toggle theme">🌙</button>
+          <div id="userChip" class="user-chip hidden">
+            <img id="userAvatar" alt="avatar" />
+            <span id="userName"></span>
+          </div>
+          <button id="logoutBtn" class="btn subtle hidden">Logout</button>
+        </div>
+      </header>
+
+      <div class="layout">
+        <aside id="sidebar" class="sidebar hidden">
+          <nav>
+            <a href="#/dashboard" class="nav-item" data-nav="dashboard">Dashboard</a>
+            <a href="#/create" class="nav-item" data-nav="create">Create Brand</a>
+            <a href="#/brands" class="nav-item" data-nav="brands">My Brands</a>
+          </nav>
+        </aside>
+
+        <main id="viewRoot" class="content"></main>
+      </div>
+    </div>
+
+    <div id="toastHost" class="toast-host"></div>
+    <div id="modalHost" class="modal-host"></div>
+
+    <script>
+      (function () {
+        try {
+          const saved = localStorage.getItem('theme');
+          if (saved === 'dark') document.body.setAttribute('data-theme', 'dark');
+        } catch (e) {}
+      })();
+    </script>
+    <script src="{{ url_for('static', filename='js/api.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  </body>
+  
+</html>
+
+
