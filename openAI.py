@@ -2,59 +2,84 @@ import requests
 import os
 import json
 import time
-from setup import api_token, openai_api_key
+from setup import api_token, openai_api_key, gemini_api_key
 import functions
 import uuid
 
 
 
-headers = {
-    "Authorization": f"Bearer {api_token}",
-    "Content-Type": "application/json",
-    "Prefer": "wait"
-}
-
-
 def get_text_prediction(system_prompt, prompt, max_retries=5, backoff_factor=1, image_input=[]):
     answer = None
     retries = 0
-    
-    if image_input != [] and not isinstance(image_input, str):
-        image_input = [functions.encode_image_to_data_uri(img) for img in image_input]
-    
+
+    from setup import gemini_api_key
+    import base64
+    import mimetypes
+
+    api_key = gemini_api_key
+    if not api_key:
+        print("GEMINI_API_KEY not set in environment.")
+        return None
+
+    model = "gemini-2.5-pro"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+
     while (answer is None or answer == "") and retries < max_retries:
-        data = {
-            "input": {
-                "top_p": 1,
-                "prompt": prompt,
-                "image_input": image_input,
-                "temperature": 1,
-                "system_prompt": system_prompt,
-                "presence_penalty": 0,
-                "frequency_penalty": 0,
-                "max_completion_tokens": 4096
-            }
-        }
-
         try:
-            response = requests.post(
-                "https://api.replicate.com/v1/models/openai/gpt-4o/predictions",
-                headers=headers,
-                data=json.dumps(data),
-                timeout=60 # Add a timeout for the request
-            )
-            response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
+            parts = []
+            parts.append({"text": prompt})
 
-            result = response.json()
-            # print(result)
-            
-            output = result.get("output")
-            if isinstance(output, list):
-                answer = ''.join(output)
-            elif isinstance(output, str):
-                answer = output
-            else:
-                answer = None
+            # Prepare image inputs as inline_data (supports file paths, data URIs, or URLs)
+            inputs = image_input
+            if isinstance(inputs, str):
+                inputs = [inputs]
+            if isinstance(inputs, list):
+                for item in inputs:
+                    try:
+                        if isinstance(item, str) and os.path.isfile(item):
+                            mime_type = mimetypes.guess_type(item)[0] or "image/jpeg"
+                            with open(item, "rb") as f:
+                                raw = f.read()
+                            b64_data = base64.b64encode(raw).decode("ascii")
+                            parts.append({"inline_data": {"mime_type": mime_type, "data": b64_data}})
+                        elif isinstance(item, str) and item.startswith("data:") and "," in item:
+                            header, b64 = item.split(",", 1)
+                            mime_type = header.split(";")[0][5:] if header.startswith("data:") else "image/jpeg"
+                            parts.append({"inline_data": {"mime_type": mime_type, "data": b64}})
+                        elif isinstance(item, str) and item.startswith("http"):
+                            resp = requests.get(item, timeout=30)
+                            resp.raise_for_status()
+                            mime_type = resp.headers.get("Content-Type") or "image/jpeg"
+                            b64_data = base64.b64encode(resp.content).decode("ascii")
+                            parts.append({"inline_data": {"mime_type": mime_type, "data": b64_data}})
+                    except Exception as _:
+                        continue
+
+            payload = {
+                "system_instruction": {
+                    "parts": [{"text": system_prompt}]
+                },
+                "contents": [
+                    {
+                        "parts": parts
+                    }
+                ],
+                "generationConfig": {
+                    "temperature": 1,
+                    "topP": 1,
+                    "maxOutputTokens": 4096
+                }
+            }
+
+            headers_local = {
+                "x-goog-api-key": api_key,
+                "Content-Type": "application/json",
+            }
+
+            response = requests.post(url, headers=headers_local, json=payload, timeout=60)
+            response.raise_for_status()
+            data = response.json()
+            answer = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
 
         except requests.exceptions.RequestException as e:
             print(f"Request failed: {e}")
@@ -73,6 +98,7 @@ def get_text_prediction(system_prompt, prompt, max_retries=5, backoff_factor=1, 
             time.sleep(sleep_time)
 
     return answer
+
 
 
 
@@ -231,3 +257,5 @@ system_prompt = "You are a brand identity expert. here is a list of questions we
 prompt = "Please give me the communication for my brand as json, and make sure to fill the information in the json as pecified"
 # response = get_text_prediction(system_prompt, prompt)
 # print(response)
+
+# print(get_text_prediction("You are a cat", "What do you see?", image_input=[r"C:\Users\kumra\Desktop\Work\Customers\Tooth AI\app 4\images\A_man_dancing_in_a_car_1755069107.png"]))

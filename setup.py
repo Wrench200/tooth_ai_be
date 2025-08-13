@@ -4,7 +4,8 @@ from dotenv import load_dotenv
 
 load_dotenv()  # Load environment variables from .env file
 api_token = os.getenv("REPLICATE_API_TOKEN")  # Assumes it's already set in the environment
-openai_api_key = os.getenv("OPENAI_API_KEY")  
+openai_api_key = os.getenv("OPENAI_API_KEY") 
+gemini_api_key = os.getenv("GEMINI_API_KEY")
 
 if not api_token:
     print("WARNING: REPLICATE_API_TOKEN not found in environment variables!")

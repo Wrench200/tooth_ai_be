@@ -1717,3 +1717,8 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             
 # print("\n\n\n\nFinal result\n\n")
 # print(generate_final_results("24d0c547-8685-4ee9-95a4-b362da16da3c", "96266589-80bb-4f14-aff9-6baf8cc4dffd", "Kum Randy", "myemail@gmail.com", "652932842", "", "www.toothai.com", "https://logomoose.com/wp-content/uploads/2016/01/18.jpg"))
+# print(generate_results("5a0f3b19-60a1-4d1f-9049-857f819a6dcf", "300748a2-bb3f-4660-859e-c4edef6d0b62"))
+
+
+
+
