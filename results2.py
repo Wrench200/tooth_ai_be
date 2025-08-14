@@ -1388,59 +1388,128 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
                 "visual_hierarchy": []
             }
 
-        # ========== Generate Marketing Templates ==========
-        marketing_templates_system_prompt = f'''You are a marketing expert. Here is a list of questions we asked the user and here are the answers they gave: >>>
-        {question_and_answers} 
-        <<<. Generate marketing templates in the following JSON structure:
-        {{
-            "email_templates": [
-                {{
-                    "template_name": "string",
-                    "subject_line": "string",
-                    "greeting": "string",
-                    "body": "string",
-                    "closing": "string",
-                    "signature": "string"
-                }}
-            ],
-            "presentation_templates": [
-                {{
-                    "slide_title": "string",
-                    "content": "string",
-                    "key_points": ["string"],
-                    "visual_suggestions": "string"
-                }}
-            ],
-            "brochure_content": [
-                {{
-                    "section_title": "string",
-                    "content": "string",
-                    "call_to_action": "string"
-                }}
-            ],
-            "landing_page_copy": {{
-                "hero_headline": "string",
-                "hero_subheadline": "string",
-                "benefits": ["string"],
-                "features": ["string"],
-                "testimonials": ["string"],
-                "call_to_action": "string"
-            }}
-        }}
-        
-        Make the templates professional, engaging, and tailored to the brand.'''
+        # ========== Generate Copywriting Framework ==========
+        copywriting_framework_system_prompt = f'''You are a senior copywriting strategist. Here is a list of questions we asked the user and the answers they gave: >>>
+        {question_and_answers}
+        <<<. Based on this, produce a copywriting framework that guides how to write and market to the brand's target audience, using their fears, dreams, desires, and aspirations.
 
-        marketing_templates_prompt = "Please give me marketing templates as JSON."
-        marketing_templates_response = openAI.get_text_prediction(marketing_templates_system_prompt, marketing_templates_prompt)
-        marketing_templates = clean_and_parse_json(marketing_templates_response)
-        
-        if not marketing_templates:
-            print("Warning: Could not parse marketing templates, using default values")
-            marketing_templates = {
-                "email_templates": [],
-                "presentation_templates": [],
-                "brochure_content": [],
-                "landing_page_copy": {"hero_headline": "", "hero_subheadline": "", "benefits": [], "features": [], "testimonials": [], "call_to_action": ""}
+        Output ONLY valid JSON matching EXACTLY this structure:
+        {{
+          "persona_snapshot": {{
+            "demographics": "string",
+            "psychographics": "string",
+            "fears": ["string"],
+            "desires": ["string"],
+            "aspirations": ["string"],
+            "awareness_stage": "problem|solution|product|most_aware"
+          }},
+          "message_pillars": {{
+            "problem_narrative": "string",
+            "desired_transformation": "string",
+            "differentiators": ["string"],
+            "proof_assets": ["string"],
+            "cta_patterns": ["string"]
+          }},
+          "copy_frameworks": [
+            {{"name": "PAS", "when_to_use": "string", "outline": ["string"]}},
+            {{"name": "AIDA", "when_to_use": "string", "outline": ["string"]}},
+            {{"name": "4P", "when_to_use": "string", "outline": ["string"]}},
+            {{"name": "BAB", "when_to_use": "string", "outline": ["string"]}},
+            {{"name": "FAB", "when_to_use": "string", "outline": ["string"]}}
+          ],
+          "writing_guidance": {{
+            "fears": "string",
+            "desires": "string",
+            "dreams": "string",
+            "aspirations": "string"
+          }},
+          "tone_style_rules": {{
+            "reading_level": "string",
+            "formality": "string",
+            "lexicon_use": ["string"],
+            "lexicon_avoid": ["string"],
+            "voice": "string",
+            "cadence": "string"
+          }},
+          "objection_bank": [
+            {{"objection": "string", "reframe": "string", "proof": "string", "risk_reversal": "string"}}
+          ],
+          "hook_bank": [
+            {{"text": "string", "tag": "fear|desire|dream", "awareness_stage": "problem|solution|product|most_aware"}}
+          ],
+          "cta_bank": [
+            {{"text": "string", "friction_level": "low|medium|high"}}
+          ],
+          "channel_adaptation": {{
+            "whatsapp": "string",
+            "instagram": "string",
+            "linkedin": "string",
+            "landing_page": "string",
+            "radio_ooh": "string"
+          }},
+          "asset_recipe": ["string"],
+          "measurement": {{
+            "metrics": ["string"],
+            "ab_tests": ["string"],
+            "iteration_rules": ["string"]
+          }}
+        }}
+
+        Keep explanations concise and actionable. No extra text or markdown.'''
+
+        copywriting_framework_prompt = "Generate the copywriting framework as JSON only."
+        copywriting_framework_response = openAI.get_text_prediction(copywriting_framework_system_prompt, copywriting_framework_prompt)
+        copywriting_framework = clean_and_parse_json(copywriting_framework_response)
+
+        if not copywriting_framework:
+            print("Warning: Could not parse copywriting framework, using default values")
+            copywriting_framework = {
+                "persona_snapshot": {
+                    "demographics": "",
+                    "psychographics": "",
+                    "fears": [],
+                    "desires": [],
+                    "aspirations": [],
+                    "awareness_stage": "problem"
+                },
+                "message_pillars": {
+                    "problem_narrative": "",
+                    "desired_transformation": "",
+                    "differentiators": [],
+                    "proof_assets": [],
+                    "cta_patterns": []
+                },
+                "copy_frameworks": [],
+                "writing_guidance": {
+                    "fears": "",
+                    "desires": "",
+                    "dreams": "",
+                    "aspirations": ""
+                },
+                "tone_style_rules": {
+                    "reading_level": "",
+                    "formality": "",
+                    "lexicon_use": [],
+                    "lexicon_avoid": [],
+                    "voice": "",
+                    "cadence": ""
+                },
+                "objection_bank": [],
+                "hook_bank": [],
+                "cta_bank": [],
+                "channel_adaptation": {
+                    "whatsapp": "",
+                    "instagram": "",
+                    "linkedin": "",
+                    "landing_page": "",
+                    "radio_ooh": ""
+                },
+                "asset_recipe": [],
+                "measurement": {
+                    "metrics": [],
+                    "ab_tests": [],
+                    "iteration_rules": []
+                }
             }
 
         # ========== Generate Business Strategy Documents ==========
@@ -1497,64 +1566,6 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             }
 
 
-        # ========== Generate Digital Specifications ==========
-        digital_specs_system_prompt = f'''You are a technical specifications expert. Here is a list of questions we asked the user and here are the answers they gave: >>>
-        {question_and_answers} 
-        <<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>
-        {previously_generated_brand_identity}
-        <<<. Generate digital specifications in the following JSON structure:
-        {{
-            "file_format_guidelines": [
-                {{
-                    "format": "string",
-                    "use_case": "string",
-                    "specifications": "string",
-                    "file_naming": "string"
-                }}
-            ],
-            "color_profiles": [
-                {{
-                    "profile_type": "string",
-                    "color_values": "string",
-                    "usage_context": "string",
-                    "conversion_notes": "string"
-                }}
-            ],
-            "print_specifications": [
-                {{
-                    "material": "string",
-                    "bleed": "string",
-                    "margins": "string",
-                    "resolution": "string",
-                    "color_mode": "string"
-                }}
-            ],
-            "digital_specifications": [
-                {{
-                    "platform": "string",
-                    "dimensions": "string",
-                    "file_size": "string",
-                    "format": "string",
-                    "optimization_notes": "string"
-                }}
-            ]
-        }}
-        
-        Make the specifications technical, accurate, and industry-standard.'''
-
-        digital_specs_prompt = "Please give me digital specifications as JSON."
-        digital_specs_response = openAI.get_text_prediction(digital_specs_system_prompt, digital_specs_prompt)
-        digital_specifications = clean_and_parse_json(digital_specs_response)
-        
-        if not digital_specifications:
-            print("Warning: Could not parse digital specifications, using default values")
-            digital_specifications = {
-                "file_format_guidelines": [],
-                "color_profiles": [],
-                "print_specifications": [],
-                "digital_specifications": []
-            }
-
         # ================================== Prepare results object  ==================================
 
         # Extract brand identity information from previously generated data
@@ -1595,9 +1606,8 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             },
             "premium_assets": {
                 "brand_guidelines": brand_guidelines,
-                "marketing_templates": marketing_templates,
-                "business_strategy": business_strategy,
-                "digital_specifications": digital_specifications
+                "copywriting_framework": copywriting_framework,
+                "business_strategy": business_strategy
             }
         }
         
