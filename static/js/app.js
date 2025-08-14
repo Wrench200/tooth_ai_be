@@ -18,8 +18,8 @@
 
   function viewLogin() {
     root.innerHTML = `
-      <div class="grid cols-2">
-        <div class="card">
+      <div class="center-layout">
+        <div class="card" style="width:400px">
           <div class="title">Welcome back</div>
           <div class="muted">Sign in to continue</div>
           <div style="height:8px"></div>
@@ -31,12 +31,46 @@
             <div>
               <label>Password</label>
               <input type="password" name="password" required placeholder="••••••" />
+              <div style="margin-top:6px"><label><input type="checkbox" id="loginShowPwd" /> Show password</label></div>
             </div>
             <button class="btn primary" type="submit">Sign in</button>
             <div class="muted">No account? <a href="#/register">Create one</a></div>
           </form>
         </div>
-        <div class="card">
+      </div>`;
+
+    const loginShow = document.getElementById('loginShowPwd');
+    if (loginShow) loginShow.addEventListener('change', (e) => {
+      const pwd = root.querySelector('#loginForm input[name="password"]');
+      if (pwd) pwd.type = e.target.checked ? 'text' : 'password';
+    });
+
+    root.querySelector('#loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = e.currentTarget.querySelector('button');
+      btn.disabled = true;
+      btn.classList.add('loading');
+      const fd = new FormData(e.currentTarget);
+      const email = fd.get('email');
+      const password = fd.get('password');
+      try {
+        const res = await API.login(email, password);
+        setUser(res.user);
+        UI.toast('Signed in');
+        location.hash = '#/dashboard';
+      } catch (err) {
+        UI.toast('Login failed');
+      } finally {
+        btn.disabled = false;
+        btn.classList.remove('loading');
+      }
+    });
+  }
+
+  function viewRegister() {
+    root.innerHTML = `
+      <div class="center-layout">
+        <div class="card" style="width:400px">
           <div class="title">Create account</div>
           <div class="muted">Fast setup to start branding</div>
           <div style="height:8px"></div>
@@ -52,29 +86,25 @@
             <div>
               <label>Password</label>
               <input type="password" name="password" minlength="6" required placeholder="Minimum 6 characters" />
+              <div style="margin-top:6px"><label><input type="checkbox" id="regShowPwd" /> Show password</label></div>
             </div>
             <button class="btn" type="submit">Create account</button>
+            <div class="muted">Already have an account? <a href="#/login">Sign in</a></div>
           </form>
         </div>
       </div>`;
 
-    root.querySelector('#loginForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const fd = new FormData(e.currentTarget);
-      const email = fd.get('email');
-      const password = fd.get('password');
-      try {
-        const res = await API.login(email, password);
-        setUser(res.user);
-        UI.toast('Signed in');
-        location.hash = '#/dashboard';
-      } catch (err) {
-        UI.toast('Login failed');
-      }
+    const regShow = document.getElementById('regShowPwd');
+    if (regShow) regShow.addEventListener('change', (e) => {
+      const pwd = root.querySelector('#regForm input[name="password"]');
+      if (pwd) pwd.type = e.target.checked ? 'text' : 'password';
     });
 
     root.querySelector('#regForm').addEventListener('submit', async (e) => {
       e.preventDefault();
+      const btn = e.currentTarget.querySelector('button');
+      btn.disabled = true;
+      btn.classList.add('loading');
       const fd = new FormData(e.currentTarget);
       const userName = fd.get('name');
       const email = fd.get('email');
@@ -86,6 +116,9 @@
         location.hash = '#/dashboard';
       } catch (err) {
         UI.toast('Registration failed');
+      } finally {
+        btn.disabled = false;
+        btn.classList.remove('loading');
       }
     });
   }
@@ -292,7 +325,6 @@
           cache[textKey] = ans.value;
           try {
             const res = await API.getSuggestions({ userId: user.userId, brandId, section: section.id, question: qOne });
-            const host = tabView.querySelector('#suggestions');
             const normalize = (data) => {
               if (!data) return [];
               if (Array.isArray(data)) return data;
@@ -527,9 +559,11 @@
   function router() {
     const user = getUser();
     const hash = location.hash || '#/dashboard';
-    const needAuth = !hash.startsWith('#/login');
+    const needAuth = !(hash.startsWith('#/login') || hash.startsWith('#/register'));
     if (needAuth && !user) { viewLogin(); return; }
     if (!needAuth && user) { location.hash = '#/dashboard'; return; }
+    if (hash.startsWith('#/login')) return viewLogin();
+    if (hash.startsWith('#/register')) return viewRegister();
     if (hash.startsWith('#/dashboard')) return viewDashboard();
     if (hash.startsWith('#/create')) return viewCreateBrand();
     if (hash.startsWith('#/brand/')) return viewBrand(hash.split('/')[2]);
@@ -541,5 +575,3 @@
   setUser(getUser());
   router();
 })();
-
-

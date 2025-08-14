@@ -1383,7 +1383,11 @@ def download_brand_pdf(brandId):
                 pdf.add_key_value("Our Mission", om.get('we_are_committed_to', ''))
             ovs = bs.get('our_values', {})
             if ovs:
-                pdf.add_key_value("Our Values", ', '.join(ovs.get('values', [])))
+                values_list = ovs.get('values', [])
+                if isinstance(values_list, list):
+                    # Extract the 'name' from each dictionary in the list
+                    value_names = [str(v.get('name', '')) for v in values_list if isinstance(v, dict)]
+                    pdf.add_key_value("Our Values", ', '.join(value_names))
                 pdf.add_key_value("Values in Action", ovs.get('how_we_do_wellness_business', ''))
         # Customer Persona
         opn = brand_strategy.get('our_position', {})

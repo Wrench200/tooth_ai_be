@@ -1334,6 +1334,8 @@ def download_brand_pdf(brandId):
     marketing = parse_json_field(brand.get('marketing_and_social_media_strategy', {}))
 
     # Cover page info
+    if not isinstance(brand_communication, dict):
+        brand_communication = {}
     brand_name = brand_communication.get('brand_name', brand.get('name', ''))
     brand_tagline = brand_communication.get('brand_tagline', '')
 
