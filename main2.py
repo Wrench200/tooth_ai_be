@@ -546,8 +546,19 @@ def get_suggestions():
         mySuggestions = suggestions.generate_suggestions(section_number, frontend_question_number, answer['answerId'])
         print(f"  suggestions result: {mySuggestions}")
         
+        # Handle the case where OpenAI returns a JSON string
         if isinstance(mySuggestions, str):
-            mySuggestions = json.loads(mySuggestions)
+            try:
+                # Remove any markdown code block formatting if present
+                if mySuggestions.startswith('```json'):
+                    mySuggestions = mySuggestions.replace('```json', '').replace('```', '').strip()
+                elif mySuggestions.startswith('```'):
+                    mySuggestions = mySuggestions.replace('```', '').strip()
+                mySuggestions = json.loads(mySuggestions)
+            except json.JSONDecodeError as e:
+                print(f"  JSON decode error: {e}")
+                # If JSON parsing fails, treat it as a single suggestion
+                mySuggestions = [mySuggestions]
 
         if not "error" in mySuggestions:
             mySuggestions = {
@@ -565,6 +576,58 @@ def get_suggestions():
 
 
 
+@app.route('/check_email_exists', methods=['POST'])
+def check_email_exists():
+    """
+    Check if a user with the given email already exists in the database.
+    """
+    try:
+        if not request.is_json:
+            return jsonify({
+                'success': False,
+                'error': 'Content-Type must be application/json'
+            }), 400
+
+        data = request.get_json()
+        if not data or 'email' not in data or not data['email']:
+            return jsonify({
+                'success': False,
+                'error': 'Email is required'
+            }), 400
+
+        email = str(data['email']).strip().lower()
+
+        # Validate email format
+        import re
+        email_pattern = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+        if not email_pattern.match(email):
+            return jsonify({
+                'success': False,
+                'error': 'Invalid email format'
+            }), 400
+
+        existing_user = db.get_user_from_email(email)
+
+        if existing_user:
+            return jsonify({
+                'success': True,
+                'exists': True,
+                'message': 'User with this email already exists'
+            }), 200
+        else:
+            return jsonify({
+                'success': True,
+                'exists': False,
+                'message': 'User with this email does not exist'
+            }), 200
+
+    except Exception as e:
+        print(f"CHECK_EMAIL_EXISTS ERROR: {e}")
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': 'An unexpected error occurred while checking email existence'
+        }), 500
 
 
 @app.route('/register_user', methods=['POST'])
@@ -604,6 +667,8 @@ def register_user():
         username = str(data['userName']).strip()
         email = str(data['email']).strip().lower()
         password = str(data['password'])
+        auth_provider = str(data.get('authProvider', '')).strip()
+        
         
         # Validate username
         if len(username) < 2:
@@ -884,28 +949,12 @@ def create_brand():
     #     'userId': 'userId',
     # }
 
-    user_id = data['userId']
-    brand = db.create_brand(user_id)
+    brand = db.create_brand(data['userId'])
     
     if brand is None:
         # Check if it's because user has already generated a brand
-        generated_status = db.check_user_generated_status(user_id)
+        generated_status = db.check_user_generated_status(data['userId'])
         if generated_status is True:
-            # Repair path: if generated flag is true but no brand exists, allow one-time creation
-            try:
-                existing = db.get_all_user_brands(user_id)
-                if not existing:
-                    # Reset flag and retry once
-                    db.update_user_generated_status(user_id, False)
-                    brand_retry = db.create_brand(user_id)
-                    if brand_retry:
-                        return jsonify({
-                            'success': True,
-                            'message': 'Brand created successfully',
-                            'brand': brand_retry
-                        }), 200
-            except Exception:
-                pass
             return jsonify({
                 'success': False,
                 'message': 'You have already generated a brand. You can only generate one brand per account.',
@@ -923,84 +972,6 @@ def create_brand():
         'message': 'Brand created successfully',
         'brand': brand
     }), 200
-
-
-@app.route('/update_brand', methods=['POST'])
-def update_brand_route():
-    try:
-        data = request.get_json()
-        if not data or 'brandId' not in data or 'propertyName' not in data or 'newValue' not in data:
-            return jsonify({
-                'success': False,
-                'message': 'brandId, propertyName and newValue are required',
-                'brand': None
-            }), 400
-        brand_id = data['brandId']
-        property_name = data['propertyName']
-        new_value = data['newValue']
-
-        try:
-            updated = db.update_brand(brand_id, property_name, new_value)
-        except ValueError as ve:
-            return jsonify({
-                'success': False,
-                'message': str(ve),
-                'brand': None
-            }), 400
-
-        if updated:
-            return jsonify({
-                'success': True,
-                'message': 'Brand updated successfully',
-                'brand': updated
-            }), 200
-        else:
-            return jsonify({
-                'success': False,
-                'message': 'Failed to update brand',
-                'brand': None
-            }), 500
-    except Exception as e:
-        print(f"Error updating brand: {e}")
-        return jsonify({
-            'success': False,
-            'message': f'Error updating brand: {str(e)}',
-            'brand': None
-        }), 500
-
-
-@app.route('/delete_brand', methods=['POST'])
-def delete_brand_route():
-    try:
-        data = request.get_json()
-        if not data or 'brandId' not in data:
-            return jsonify({
-                'success': False,
-                'message': 'brandId is required',
-                'deleted': False
-            }), 400
-        brand_id = data['brandId']
-
-        deleted = db.delete_brand(brand_id)
-        if deleted:
-            return jsonify({
-                'success': True,
-                'message': 'Brand deleted successfully',
-                'deleted': True
-            }), 200
-        else:
-            return jsonify({
-                'success': False,
-                'message': 'Brand not found',
-                'deleted': False
-            }), 404
-    except Exception as e:
-        print(f"Error deleting brand: {e}")
-        return jsonify({
-            'success': False,
-            'message': f'Error deleting brand: {str(e)}',
-            'deleted': False
-        }), 500
     
     
     
@@ -1362,45 +1333,13 @@ def download_brand_pdf(brandId):
     brand_communication = parse_json_field(brand.get('brand_communication', {}))
     marketing = parse_json_field(brand.get('marketing_and_social_media_strategy', {}))
 
-    # Normalize to dicts where the PDF builder expects mapping types
-    if not isinstance(brand_strategy, dict):
-        brand_strategy = {}
-    if not isinstance(brand_identity, dict):
-        brand_identity = {}
-    if not isinstance(brand_communication, dict):
-        brand_communication = {}
-    if not isinstance(marketing, dict):
-        marketing = {}
-
-    # Normalize nested assets shape to avoid attribute errors
-    if brand_assets:
-        try:
-            pa = brand_assets.get('premium_assets')
-            if isinstance(pa, str):
-                import json as _json
-                try:
-                    pa = _json.loads(pa)
-                except Exception:
-                    pa = {}
-            if not isinstance(pa, dict):
-                pa = {}
-            brand_assets['premium_assets'] = pa
-        except Exception:
-            pass
-
     # Cover page info
     brand_name = brand_communication.get('brand_name', brand.get('name', ''))
     brand_tagline = brand_communication.get('brand_tagline', '')
 
     primary_colors = brand_identity.get('primary_colors') if brand_identity else None
-    if not isinstance(primary_colors, list):
-        primary_colors = None
     secondary_colors = brand_identity.get('secondary_colors') if brand_identity else None
-    if not isinstance(secondary_colors, list):
-        secondary_colors = None
     logos = brand_identity.get('logos') if brand_identity else None
-    if not isinstance(logos, list):
-        logos = None
     pdf = BrandPDF()
     pdf.add_cover(brand_name, brand_tagline, primary_colors, secondary_colors)
     pdf.add_page()  # Start all other content on a new page after the cover
@@ -1989,79 +1928,225 @@ def download_brand_pdf(brandId):
                             print(f"Error loading brand pattern image: {e}")
                             pdf.add_key_value("Error", "Brand pattern image could not be loaded")
         
-        # Marketing Templates Section (from brand_assets)
-        if brand_assets and brand_assets.get('premium_assets', {}).get('marketing_templates'):
-            templates = brand_assets['premium_assets']['marketing_templates']
-            pdf.add_page()
-            pdf.add_section_title("Marketing Templates", True, primary_rgb)
-            
-            # Landing Page Copy
-            if templates.get('landing_page_copy'):
-                landing = templates['landing_page_copy']
-                pdf.add_sub_section_title("Landing Page Copy", True)
-                pdf.add_key_value("Hero Headline", landing.get('hero_headline', ''), True)
-                pdf.add_key_value("Hero Subheadline", landing.get('hero_subheadline', ''), True)
-                pdf.add_key_value("Call to Action", landing.get('call_to_action', ''), True)
+        # Copywriting Framework (from brand_assets) with fallback to Marketing Templates
+        if brand_assets and brand_assets.get('premium_assets'):
+            premium_assets = brand_assets['premium_assets']
+            copy_fw = premium_assets.get('copywriting_framework')
+            if copy_fw:
+                pdf.add_page()
+                pdf.add_section_title("Copywriting Framework", True, primary_rgb)
+
+                # Persona Snapshot
+                persona = copy_fw.get('persona_snapshot', {}) if isinstance(copy_fw, dict) else {}
+                if persona:
+                    pdf.add_sub_section_title("Persona Snapshot", True)
+                    pdf.add_key_value("Demographics", persona.get('demographics', ''), True)
+                    pdf.add_key_value("Psychographics", persona.get('psychographics', ''), False)
+                    fears_list = persona.get('fears', []) or []
+                    desires_list = persona.get('desires', []) or []
+                    aspirations_list = persona.get('aspirations', []) or []
+                    if fears_list:
+                        pdf.add_key_value("Fears", ', '.join([str(x) for x in fears_list]), False)
+                    if desires_list:
+                        pdf.add_key_value("Desires", ', '.join([str(x) for x in desires_list]), False)
+                    if aspirations_list:
+                        pdf.add_key_value("Aspirations", ', '.join([str(x) for x in aspirations_list]), False)
+                    if persona.get('awareness_stage'):
+                        pdf.add_key_value("Awareness Stage", persona.get('awareness_stage', ''), False)
+
+                # Message Pillars
+                pillars = copy_fw.get('message_pillars', {}) if isinstance(copy_fw, dict) else {}
+                if pillars:
+                    pdf.add_sub_section_title("Message Pillars", True)
+                    pdf.add_key_value("Problem Narrative", pillars.get('problem_narrative', ''), True)
+                    pdf.add_key_value("Desired Transformation", pillars.get('desired_transformation', ''), False)
+                    if pillars.get('differentiators'):
+                        pdf.add_key_value("Differentiators", ', '.join(pillars.get('differentiators', [])), False)
+                    if pillars.get('proof_assets'):
+                        pdf.add_key_value("Proof Assets", ', '.join(pillars.get('proof_assets', [])), False)
+                    if pillars.get('cta_patterns'):
+                        pdf.add_key_value("CTA Patterns", ', '.join(pillars.get('cta_patterns', [])), False)
+
+                # Copy Frameworks
+                frameworks = copy_fw.get('copy_frameworks', []) if isinstance(copy_fw, dict) else []
+                if frameworks:
+                    pdf.add_sub_section_title("Copy Frameworks", True)
+                    for fw in frameworks:
+                        if isinstance(fw, dict):
+                            name = fw.get('name', 'Framework')
+                            when = fw.get('when_to_use', '')
+                            outline = fw.get('outline', []) or []
+                            pdf.add_key_value(f"{name} - When to use", when, True)
+                            if outline:
+                                pdf.add_key_value(f"{name} - Outline", ', '.join([str(x) for x in outline]), False)
+
+                # Writing Guidance
+                guidance = copy_fw.get('writing_guidance', {}) if isinstance(copy_fw, dict) else {}
+                if guidance:
+                    pdf.add_sub_section_title("Writing Guidance", True)
+                    for k in ["fears", "desires", "dreams", "aspirations"]:
+                        if guidance.get(k):
+                            pdf.add_key_value(k.capitalize(), guidance.get(k, ''), True)
+
+                # Tone & Style Rules
+                ts = copy_fw.get('tone_style_rules', {}) if isinstance(copy_fw, dict) else {}
+                if ts:
+                    pdf.add_sub_section_title("Tone & Style Rules", True)
+                    pdf.add_key_value("Reading Level", ts.get('reading_level', ''), True)
+                    pdf.add_key_value("Formality", ts.get('formality', ''), False)
+                    if ts.get('lexicon_use'):
+                        pdf.add_key_value("Lexicon (Use)", ', '.join(ts.get('lexicon_use', [])), False)
+                    if ts.get('lexicon_avoid'):
+                        pdf.add_key_value("Lexicon (Avoid)", ', '.join(ts.get('lexicon_avoid', [])), False)
+                    pdf.add_key_value("Voice", ts.get('voice', ''), False)
+                    pdf.add_key_value("Cadence", ts.get('cadence', ''), False)
+
+                # Objection Handling
+                objections = copy_fw.get('objection_bank', []) if isinstance(copy_fw, dict) else []
+                if objections:
+                    pdf.add_sub_section_title("Objection Handling", True)
+                    for i, obj in enumerate(objections):
+                        if isinstance(obj, dict):
+                            pdf.add_key_value(f"Objection {i+1}", obj.get('objection', ''), True)
+                            if obj.get('reframe'):
+                                pdf.add_key_value("Reframe", obj.get('reframe', ''), False)
+                            if obj.get('proof'):
+                                pdf.add_key_value("Proof", obj.get('proof', ''), False)
+                            if obj.get('risk_reversal'):
+                                pdf.add_key_value("Risk Reversal", obj.get('risk_reversal', ''), False)
+
+                # Hook Bank
+                hooks = copy_fw.get('hook_bank', []) if isinstance(copy_fw, dict) else []
+                if hooks:
+                    pdf.add_sub_section_title("Hook Bank", True)
+                    for i, hook in enumerate(hooks):
+                        if isinstance(hook, dict):
+                            text = hook.get('text', '')
+                            tag = hook.get('tag', '')
+                            stage = hook.get('awareness_stage', '')
+                            label = f"Hook {i+1}"
+                            details = ", ".join([v for v in [tag, stage] if v])
+                            pdf.add_key_value(label, text, True)
+                            if details:
+                                pdf.add_key_value("Details", details, False)
+
+                # CTA Bank
+                ctas = copy_fw.get('cta_bank', []) if isinstance(copy_fw, dict) else []
+                if ctas:
+                    pdf.add_sub_section_title("CTA Bank", True)
+                    for i, cta in enumerate(ctas):
+                        if isinstance(cta, dict):
+                            text = cta.get('text', '')
+                            fl = cta.get('friction_level', '')
+                            pdf.add_key_value(f"CTA {i+1}", text, True)
+                            if fl:
+                                pdf.add_key_value("Friction", fl, False)
+
+                # Channel Adaptation
+                channels = copy_fw.get('channel_adaptation', {}) if isinstance(copy_fw, dict) else {}
+                if channels:
+                    pdf.add_sub_section_title("Channel Adaptation", True)
+                    mapping = {
+                        'whatsapp': 'WhatsApp',
+                        'instagram': 'Instagram',
+                        'linkedin': 'LinkedIn',
+                        'landing_page': 'Landing Page',
+                        'radio_ooh': 'Radio/OOH'
+                    }
+                    for key, label in mapping.items():
+                        if channels.get(key):
+                            pdf.add_key_value(label, channels.get(key, ''), True)
+
+                # Asset Recipe
+                recipe = copy_fw.get('asset_recipe', []) if isinstance(copy_fw, dict) else []
+                if recipe:
+                    pdf.add_sub_section_title("Asset Recipe", True)
+                    for i, step in enumerate(recipe):
+                        pdf.add_key_value(f"Step {i+1}", str(step), True)
+
+                # Measurement
+                meas = copy_fw.get('measurement', {}) if isinstance(copy_fw, dict) else {}
+                if meas:
+                    pdf.add_sub_section_title("Measurement", True)
+                    if meas.get('metrics'):
+                        pdf.add_key_value("Metrics", ', '.join([str(x) for x in meas.get('metrics', [])]), True)
+                    if meas.get('ab_tests'):
+                        pdf.add_key_value("A/B Tests", ', '.join([str(x) for x in meas.get('ab_tests', [])]), False)
+                    if meas.get('iteration_rules'):
+                        pdf.add_key_value("Iteration Rules", ', '.join([str(x) for x in meas.get('iteration_rules', [])]), False)
+            elif premium_assets.get('marketing_templates'):
+                # Backward-compatible rendering for legacy marketing templates
+                templates = premium_assets['marketing_templates']
+                pdf.add_page()
+                pdf.add_section_title("Marketing Templates", True, primary_rgb)
                 
-                if landing.get('benefits'):
-                    pdf.add_key_value("Benefits", ', '.join(landing['benefits']), True)
+                # Landing Page Copy
+                if templates.get('landing_page_copy'):
+                    landing = templates['landing_page_copy']
+                    pdf.add_sub_section_title("Landing Page Copy", True)
+                    pdf.add_key_value("Hero Headline", landing.get('hero_headline', ''), True)
+                    pdf.add_key_value("Hero Subheadline", landing.get('hero_subheadline', ''), True)
+                    pdf.add_key_value("Call to Action", landing.get('call_to_action', ''), True)
+                    
+                    if landing.get('benefits'):
+                        pdf.add_key_value("Benefits", ', '.join(landing['benefits']), True)
+                    
+                    if landing.get('features'):
+                        pdf.add_key_value("Features", ', '.join(landing['features']), True)
+                    
+                    if landing.get('testimonials'):
+                        pdf.add_key_value("Testimonials", '', True)
+                        for i, testimonial in enumerate(landing['testimonials']):
+                            pdf.add_key_value(f"Testimonial {i+1}", testimonial, False)
                 
-                if landing.get('features'):
-                    pdf.add_key_value("Features", ', '.join(landing['features']), True)
+                # Email Templates
+                if templates.get('email_templates'):
+                    emails = templates['email_templates']
+                    pdf.add_sub_section_title("Email Templates", True)
+                    for i, email in enumerate(emails):
+                        if isinstance(email, dict):
+                            template_name = email.get('template_name', f'Email Template {i+1}')
+                            subject = email.get('subject_line', '')
+                            greeting = email.get('greeting', '')
+                            body = email.get('body', '')
+                            closing = email.get('closing', '')
+                            signature = email.get('signature', '')
+                            
+                            pdf.add_key_value(f"{template_name} - Subject", subject, True)
+                            pdf.add_key_value(f"{template_name} - Greeting", greeting, False)
+                            pdf.add_key_value(f"{template_name} - Body", body, False)
+                            pdf.add_key_value(f"{template_name} - Closing", f"{closing} {signature}", False)
                 
-                if landing.get('testimonials'):
-                    pdf.add_key_value("Testimonials", '', True)
-                    for i, testimonial in enumerate(landing['testimonials']):
-                        pdf.add_key_value(f"Testimonial {i+1}", testimonial, False)
-            
-            # Email Templates
-            if templates.get('email_templates'):
-                emails = templates['email_templates']
-                pdf.add_sub_section_title("Email Templates", True)
-                for i, email in enumerate(emails):
-                    if isinstance(email, dict):
-                        template_name = email.get('template_name', f'Email Template {i+1}')
-                        subject = email.get('subject_line', '')
-                        greeting = email.get('greeting', '')
-                        body = email.get('body', '')
-                        closing = email.get('closing', '')
-                        signature = email.get('signature', '')
-                        
-                        pdf.add_key_value(f"{template_name} - Subject", subject, True)
-                        pdf.add_key_value(f"{template_name} - Greeting", greeting, False)
-                        pdf.add_key_value(f"{template_name} - Body", body, False)
-                        pdf.add_key_value(f"{template_name} - Closing", f"{closing} {signature}", False)
-            
-            # Brochure Content
-            if templates.get('brochure_content'):
-                brochure = templates['brochure_content']
-                pdf.add_sub_section_title("Brochure Content", True)
-                for i, section in enumerate(brochure):
-                    if isinstance(section, dict):
-                        section_title = section.get('section_title', f'Section {i+1}')
-                        content = section.get('content', '')
-                        call_to_action = section.get('call_to_action', '')
-                        
-                        pdf.add_key_value(f"{section_title}", content, True)
-                        if call_to_action:
-                            pdf.add_key_value(f"{section_title} - CTA", call_to_action, False)
-            
-            # Presentation Templates
-            if templates.get('presentation_templates'):
-                presentations = templates['presentation_templates']
-                pdf.add_sub_section_title("Presentation Templates", True)
-                for i, slide in enumerate(presentations):
-                    if isinstance(slide, dict):
-                        slide_title = slide.get('slide_title', f'Slide {i+1}')
-                        content = slide.get('content', '')
-                        key_points = ', '.join(slide.get('key_points', []))
-                        visual_suggestions = slide.get('visual_suggestions', '')
-                        
-                        pdf.add_key_value(f"{slide_title}", content, True)
-                        if key_points:
-                            pdf.add_key_value(f"{slide_title} - Key Points", key_points, False)
-                        if visual_suggestions:
-                            pdf.add_key_value(f"{slide_title} - Visual Suggestions", visual_suggestions, False)
+                # Brochure Content
+                if templates.get('brochure_content'):
+                    brochure = templates['brochure_content']
+                    pdf.add_sub_section_title("Brochure Content", True)
+                    for i, section in enumerate(brochure):
+                        if isinstance(section, dict):
+                            section_title = section.get('section_title', f'Section {i+1}')
+                            content = section.get('content', '')
+                            call_to_action = section.get('call_to_action', '')
+                            
+                            pdf.add_key_value(f"{section_title}", content, True)
+                            if call_to_action:
+                                pdf.add_key_value(f"{section_title} - CTA", call_to_action, False)
+                
+                # Presentation Templates
+                if templates.get('presentation_templates'):
+                    presentations = templates['presentation_templates']
+                    pdf.add_sub_section_title("Presentation Templates", True)
+                    for i, slide in enumerate(presentations):
+                        if isinstance(slide, dict):
+                            slide_title = slide.get('slide_title', f'Slide {i+1}')
+                            content = slide.get('content', '')
+                            key_points = ', '.join(slide.get('key_points', []))
+                            visual_suggestions = slide.get('visual_suggestions', '')
+                            
+                            pdf.add_key_value(f"{slide_title}", content, True)
+                            if key_points:
+                                pdf.add_key_value(f"{slide_title} - Key Points", key_points, False)
+                            if visual_suggestions:
+                                pdf.add_key_value(f"{slide_title} - Visual Suggestions", visual_suggestions, False)
         
         # Social Media Content Section (from brand_assets)
         if brand_assets and brand_assets.get('social_media_content'):
