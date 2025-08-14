@@ -546,8 +546,19 @@ def get_suggestions():
         mySuggestions = suggestions.generate_suggestions(section_number, frontend_question_number, answer['answerId'])
         print(f"  suggestions result: {mySuggestions}")
         
+        # Handle the case where OpenAI returns a JSON string
         if isinstance(mySuggestions, str):
-            mySuggestions = json.loads(mySuggestions)
+            try:
+                # Remove any markdown code block formatting if present
+                if mySuggestions.startswith('```json'):
+                    mySuggestions = mySuggestions.replace('```json', '').replace('```', '').strip()
+                elif mySuggestions.startswith('```'):
+                    mySuggestions = mySuggestions.replace('```', '').strip()
+                mySuggestions = json.loads(mySuggestions)
+            except json.JSONDecodeError as e:
+                print(f"  JSON decode error: {e}")
+                # If JSON parsing fails, treat it as a single suggestion
+                mySuggestions = [mySuggestions]
 
         if not "error" in mySuggestions:
             mySuggestions = {
@@ -565,6 +576,58 @@ def get_suggestions():
 
 
 
+@app.route('/check_email_exists', methods=['POST'])
+def check_email_exists():
+    """
+    Check if a user with the given email already exists in the database.
+    """
+    try:
+        if not request.is_json:
+            return jsonify({
+                'success': False,
+                'error': 'Content-Type must be application/json'
+            }), 400
+
+        data = request.get_json()
+        if not data or 'email' not in data or not data['email']:
+            return jsonify({
+                'success': False,
+                'error': 'Email is required'
+            }), 400
+
+        email = str(data['email']).strip().lower()
+
+        # Validate email format
+        import re
+        email_pattern = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+        if not email_pattern.match(email):
+            return jsonify({
+                'success': False,
+                'error': 'Invalid email format'
+            }), 400
+
+        existing_user = db.get_user_from_email(email)
+
+        if existing_user:
+            return jsonify({
+                'success': True,
+                'exists': True,
+                'message': 'User with this email already exists'
+            }), 200
+        else:
+            return jsonify({
+                'success': True,
+                'exists': False,
+                'message': 'User with this email does not exist'
+            }), 200
+
+    except Exception as e:
+        print(f"CHECK_EMAIL_EXISTS ERROR: {e}")
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': 'An unexpected error occurred while checking email existence'
+        }), 500
 
 
 @app.route('/register_user', methods=['POST'])
@@ -604,6 +667,8 @@ def register_user():
         username = str(data['userName']).strip()
         email = str(data['email']).strip().lower()
         password = str(data['password'])
+        auth_provider = str(data.get('authProvider', '')).strip()
+        
         
         # Validate username
         if len(username) < 2:
