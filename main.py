@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory, send_file, redirect, url_for, session
+from flask import Flask, request, jsonify, send_from_directory, send_file, redirect, url_for, session, render_template
 from flask_cors import CORS
 import db
 import questions
@@ -407,7 +407,7 @@ CORS(
 
 @app.route('/', methods=['GET'])
 def home():
-    return 'Welcome to the Flask App!'
+    return render_template('index.html')
 
 @app.route('/health', methods=['GET'])
 def health_check():
