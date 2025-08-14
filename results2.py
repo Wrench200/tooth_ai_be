@@ -460,14 +460,6 @@ def generate_results(userId, brandId):
             {
                 "prompt": sss,
                 "description": sss
-            },
-            {
-                "prompt": sss,
-                "description": sss
-            },
-            {
-                "prompt": sss,
-                "description": sss
             }
         ],
         "primary_colors": lll (list format sample: {
@@ -498,8 +490,6 @@ def generate_results(userId, brandId):
         # print(response)
         # raise Exception("Error")
         logo_prompt1 = ""
-        logo_prompt2 = ""
-        logo_prompt3 = ""
         
         passed = False
         max_retries = 3
@@ -536,12 +526,8 @@ def generate_results(userId, brandId):
                     about_the_brand = response["about_the_brand"]
                     # Extract logo descriptions and prompts
                     logo_description_1 = response["logos"][0]["description"]
-                    logo_description_2 = response["logos"][1]["description"]
-                    logo_description_3 = response["logos"][2]["description"]
                     
                     logo_prompt1 = response["logos"][0]["prompt"]
-                    logo_prompt2 = response["logos"][1]["prompt"]
-                    logo_prompt3 = response["logos"][2]["prompt"]
                     
                     # Optionally, you could use the prompts for logo generation elsewhere
                     primary_colors = response["primary_colors"]
@@ -562,11 +548,7 @@ def generate_results(userId, brandId):
             # Set default values to prevent further errors
             about_the_brand = "Default brand description"
             logo_description_1 = "Default logo description 1"
-            logo_description_2 = "Default logo description 2"
-            logo_description_3 = "Default logo description 3"
             logo_prompt1 = "A simple, professional logo design"
-            logo_prompt2 = "A modern, minimalist logo design"
-            logo_prompt3 = "A creative, distinctive logo design"
             primary_colors = []
             secondary_colors = []
             typography = []
@@ -578,27 +560,17 @@ def generate_results(userId, brandId):
         try:
             print("Generating logos and uploading to Cloudinary...")
             logo_url_1 = imagen.generate_image(logo_prompt1, public_id=f"toothai/{brandId}/logo_1")
-            logo_url_2 = imagen.generate_image(logo_prompt2, public_id=f"toothai/{brandId}/logo_2")
-            logo_url_3 = imagen.generate_image(logo_prompt3, public_id=f"toothai/{brandId}/logo_3")
             
             # Check if any logos failed to generate
             if not logo_url_1:
                 print("Warning: Logo 1 generation failed, using placeholder")
                 logo_url_1 = "https://via.placeholder.com/400x200?text=Logo+1"
-            if not logo_url_2:
-                print("Warning: Logo 2 generation failed, using placeholder")
-                logo_url_2 = "https://via.placeholder.com/400x200?text=Logo+2"
-            if not logo_url_3:
-                print("Warning: Logo 3 generation failed, using placeholder")
-                logo_url_3 = "https://via.placeholder.com/400x200?text=Logo+3"
                 
             print("Logo generation completed successfully")
         except Exception as e:
             print(f"Error during logo generation: {e}")
             print("Using placeholder logos")
             logo_url_1 = "https://via.placeholder.com/400x200?text=Logo+1"
-            logo_url_2 = "https://via.placeholder.com/400x200?text=Logo+2"
-            logo_url_3 = "https://via.placeholder.com/400x200?text=Logo+3"
             
             
         # # Get logo recommendation
@@ -737,14 +709,6 @@ def generate_results(userId, brandId):
                     {
                         "image_url": logo_url_1,
                         "description": logo_description_1
-                    },
-                    {
-                        "image_url": logo_url_2,
-                        "description": logo_description_2
-                    },
-                    {
-                        "image_url": logo_url_3,
-                        "description": logo_description_3
                     }
                 ],
                 "reommended_logo": recommended_logo,
@@ -1532,60 +1496,6 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
                 "market_positioning": {"positioning_statement": "", "value_proposition": "", "competitive_advantages": [], "market_gaps": []}
             }
 
-        # ========== Generate Implementation Roadmap ==========
-        implementation_roadmap_system_prompt = f'''You are a project management expert. Here is a list of questions we asked the user and here are the answers they gave: >>>
-        {question_and_answers} 
-        <<<. Generate an implementation roadmap in the following JSON structure:
-        {{
-            "launch_timeline": [
-                {{
-                    "phase": "string",
-                    "duration": "string",
-                    "milestones": ["string"],
-                    "deliverables": ["string"],
-                    "resources_needed": ["string"]
-                }}
-            ],
-            "budget_estimates": [
-                {{
-                    "category": "string",
-                    "estimated_cost": "string",
-                    "priority": "string",
-                    "description": "string"
-                }}
-            ],
-            "vendor_recommendations": [
-                {{
-                    "service_type": "string",
-                    "recommended_vendors": ["string"],
-                    "selection_criteria": ["string"],
-                    "estimated_cost_range": "string"
-                }}
-            ],
-            "quality_assurance": [
-                {{
-                    "checkpoint": "string",
-                    "criteria": ["string"],
-                    "testing_method": "string",
-                    "success_metrics": ["string"]
-                }}
-            ]
-        }}
-        
-        Make the roadmap practical, realistic, and actionable.'''
-
-        implementation_roadmap_prompt = "Please give me an implementation roadmap as JSON."
-        implementation_roadmap_response = openAI.get_text_prediction(implementation_roadmap_system_prompt, implementation_roadmap_prompt)
-        implementation_roadmap = clean_and_parse_json(implementation_roadmap_response)
-        
-        if not implementation_roadmap:
-            print("Warning: Could not parse implementation roadmap, using default values")
-            implementation_roadmap = {
-                "launch_timeline": [],
-                "budget_estimates": [],
-                "vendor_recommendations": [],
-                "quality_assurance": []
-            }
 
         # ========== Generate Digital Specifications ==========
         digital_specs_system_prompt = f'''You are a technical specifications expert. Here is a list of questions we asked the user and here are the answers they gave: >>>
@@ -1687,7 +1597,6 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
                 "brand_guidelines": brand_guidelines,
                 "marketing_templates": marketing_templates,
                 "business_strategy": business_strategy,
-                "implementation_roadmap": implementation_roadmap,
                 "digital_specifications": digital_specifications
             }
         }
