@@ -111,3 +111,5 @@ def get_image_url(public_id, transformation=None):
     except Exception as e:
         print(f"Error generating image URL: {e}")
         return None 
+    
+    
