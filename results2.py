@@ -1534,60 +1534,6 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
                 }
             }
 
-        # ========== Generate Business Strategy Documents ==========
-        business_strategy_system_prompt = f'''You are a business strategy expert. Here is a list of questions we asked the user and here are the answers they gave: >>>
-        {question_and_answers} 
-        <<<. Generate business strategy documents in the following JSON structure:
-        {{
-            "competitive_analysis": [
-                {{
-                    "competitor_name": "string",
-                    "strengths": ["string"],
-                    "weaknesses": ["string"],
-                    "market_position": "string",
-                    "differentiation_opportunities": ["string"]
-                }}
-            ],
-            "swot_analysis": {{
-                "strengths": ["string"],
-                "weaknesses": ["string"],
-                "opportunities": ["string"],
-                "threats": ["string"]
-            }},
-            "target_audience_profiles": [
-                {{
-                    "persona_name": "string",
-                    "demographics": "string",
-                    "psychographics": "string",
-                    "pain_points": ["string"],
-                    "motivations": ["string"],
-                    "buying_behavior": "string"
-                }}
-            ],
-            "market_positioning": {{
-                "positioning_statement": "string",
-                "value_proposition": "string",
-                "competitive_advantages": ["string"],
-                "market_gaps": ["string"]
-            }}
-        }}
-        
-        Make the analysis thorough, data-driven, and actionable.'''
-
-        business_strategy_prompt = "Please give me business strategy documents as JSON."
-        business_strategy_response = openAI.get_text_prediction(business_strategy_system_prompt, business_strategy_prompt)
-        business_strategy = clean_and_parse_json(business_strategy_response)
-        
-        if not business_strategy:
-            print("Warning: Could not parse business strategy, using default values")
-            business_strategy = {
-                "competitive_analysis": [],
-                "swot_analysis": {"strengths": [], "weaknesses": [], "opportunities": [], "threats": []},
-                "target_audience_profiles": [],
-                "market_positioning": {"positioning_statement": "", "value_proposition": "", "competitive_advantages": [], "market_gaps": []}
-            }
-
-
         # ================================== Prepare results object  ==================================
 
         # Extract brand identity information from previously generated data
@@ -1628,8 +1574,7 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             },
             "premium_assets": {
                 "brand_guidelines": brand_guidelines,
-                "copywriting_framework": copywriting_framework,
-                "business_strategy": business_strategy
+                "copywriting_framework": copywriting_framework
             }
         }
         
