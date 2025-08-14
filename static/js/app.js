@@ -122,7 +122,6 @@
           list.innerHTML = `<div class="empty">No brands yet. Click Create Brand to start.</div>`;
           return;
         }
-        // Prefer most recent brand first if multiple
         (res.brands || []).forEach((b) => {
           const el = document.createElement('div');
           el.className = 'item';
@@ -133,23 +132,11 @@
             </div>
             <div class="actions">
               <a class="btn" href="#/brand/${b.id}">Open</a>
-              <button class="btn" data-action="rename">Rename</button>
-              <button class="btn" data-action="delete">Delete</button>
             </div>`;
           list.appendChild(el);
-
-          el.querySelector('[data-action="rename"]').addEventListener('click', async () => {
-            const name = prompt('New brand name:', b.name || '');
-            if (name == null) return;
-            try { await API.updateBrand(b.id, 'name', name.trim()); UI.toast('Renamed'); viewDashboard(); } catch (e) { UI.toast('Rename failed'); }
-          });
-          el.querySelector('[data-action="delete"]').addEventListener('click', async () => {
-            if (!confirm('Delete this brand? This cannot be undone.')) return;
-            try { await API.deleteBrand(b.id); UI.toast('Deleted'); viewDashboard(); } catch (e) { UI.toast('Delete failed'); }
-          });
         });
       } catch (_) {
-        // As a guard, do not break the page
+        // do nothing
       }
     })();
   }
@@ -166,7 +153,6 @@
         <button id="createBtn" class="btn primary">Create Brand</button>
       </div>`;
 
-    // Show existing brand (if any) and provide a quick open action
     (async () => {
       try {
         const res = await API.listBrands(user.userId);
@@ -192,31 +178,24 @@
     btn.addEventListener('click', async () => {
       btn.disabled = true; const prev = btn.textContent; btn.textContent = 'Creating...';
       try {
-        // Pre-check: if a brand already exists, go straight to wizard (avoid error toast)
         const existing = await API.listBrands(user.userId);
         if (existing?.brands?.length) {
           location.hash = `#/wizard/${existing.brands[0].id}`;
           return;
         }
-
-        // Otherwise, attempt to create
         const res = await API.createBrand(user.userId);
         if (res?.success && res.brand?.id) {
           UI.toast('Brand created');
           location.hash = `#/wizard/${res.brand.id}`;
           return;
         }
-
-        // Fallback: check again in case brand now exists
         const after = await API.listBrands(user.userId);
         if (after?.brands?.length) {
           location.hash = `#/wizard/${after.brands[0].id}`;
           return;
         }
-
         UI.toast(res?.message || 'Failed to create brand');
       } catch (_) {
-        // On error, check for existing brand and route there
         try {
           const list = await API.listBrands(user.userId);
           if (list?.brands?.length) {
@@ -231,7 +210,6 @@
     });
   }
 
-  // Wizard for step-by-step Q&A on brand creation
   function viewWizard(brandId) {
     const user = getUser();
     const sections = [
@@ -254,8 +232,8 @@
     ];
     const sectionOffsets = { 1: 0, 2: 5, 3: 7, 4: 8 };
     let sIdx = 0;
-    let qIdx = 0; // 0-based within section
-    const cache = {}; // key `${section}-${q}` -> text
+    let qIdx = 0;
+    const cache = {};
 
     function globalIndex(sectionId, qOneBased) {
       return sectionOffsets[sectionId] + (qOneBased - 1);
@@ -269,7 +247,7 @@
       const total = 10;
       const textKey = `${section.id}-${qOne}`;
       const saved = cache[textKey] || '';
-      const showSuggest = gIdx !== 0; // all except the very first global question
+      const showSuggest = gIdx !== 0;
 
       root.innerHTML = `
         <div class="card">
@@ -314,7 +292,15 @@
           cache[textKey] = ans.value;
           try {
             const res = await API.getSuggestions({ userId: user.userId, brandId, section: section.id, question: qOne });
-            const opts = (res?.suggestions?.options) || [];
+            const host = tabView.querySelector('#suggestions');
+            const normalize = (data) => {
+              if (!data) return [];
+              if (Array.isArray(data)) return data;
+              if (typeof data === 'string') { try { const j = JSON.parse(data); return Array.isArray(j) ? j : [data]; } catch (_) { return [data]; } }
+              if (data.options && Array.isArray(data.options)) return data.options;
+              return [];
+            };
+            const opts = normalize(res?.suggestions);
             if (!opts.length) { UI.toast('No suggestions'); return; }
             opts.forEach(o => {
               const b = document.createElement('button');
@@ -330,7 +316,6 @@
         const val = (ans.value || '').trim();
         feedback.textContent = '';
         if (!val) { feedback.textContent = 'Please enter an answer.'; return; }
-        // Validate & save via backend
         const btn = document.getElementById('nextBtn');
         btn.disabled = true; btn.textContent = 'Validating...';
         try {
@@ -345,7 +330,6 @@
             feedback.textContent = msg;
           }
         } catch (e) {
-          // try to read server response JSON if available
           feedback.textContent = 'Validation failed. Please refine your answer.';
         } finally {
           btn.disabled = false; btn.textContent = 'Validate & Next';
@@ -390,13 +374,6 @@
               </div>
               <div style="height:10px"></div>
               <button id="payBtn" class="btn primary">Pay Now</button>
-              <div style="height:8px"></div>
-              <div class="grid cols-2">
-                <input id="renameInput" placeholder="Rename brand" value="${brand.name || ''}" />
-                <button id="renameBtn" class="btn">Save name</button>
-              </div>
-              <div style="height:8px"></div>
-              <button id="deleteBtn" class="btn">Delete brand</button>
             </div>
             <div class="card">
               <div class="title">PDF</div>
@@ -408,17 +385,10 @@
         tabView.querySelector('#payBtn').addEventListener('click', async ()=>{
           try { await API.setPaid(brandId); UI.toast('Marked as paid'); switchTab('overview'); } catch(e){ UI.toast('Failed to set paid'); }
         });
-        tabView.querySelector('#renameBtn').addEventListener('click', async ()=>{
-          const newName = tabView.querySelector('#renameInput').value;
-          try { await API.updateBrand(brandId, 'name', newName.trim()); UI.toast('Name updated'); switchTab('overview'); } catch(e){ UI.toast('Rename failed'); }
-        });
-        tabView.querySelector('#deleteBtn').addEventListener('click', async ()=>{
-          if (!confirm('Delete this brand? This cannot be undone.')) return;
-          try { await API.deleteBrand(brandId); UI.toast('Brand deleted'); location.hash = '#/dashboard'; } catch(e){ UI.toast('Delete failed'); }
-        });
       }
       if (name === 'qa') {
-        const full = await API.getFullBrand(brandId).catch(()=>null);
+        const resp = await API.getFullBrand(brandId).catch(()=>null);
+        const full = resp?.full_brand || resp; // support current and legacy shapes
         const answerId = full?.brand?.answerid || full?.brand?.answerId;
         tabView.innerHTML = `
           <div class="grid cols-2">
@@ -457,10 +427,25 @@
         tabView.querySelector('#suggestBtn').addEventListener('click', async ()=>{
           const section = Number(tabView.querySelector('#section').value);
           const q = Number(tabView.querySelector('#question').value);
-          try { const res = await API.getSuggestions({ userId: uid, brandId, section, question: q });
+          try {
+            const res = await API.getSuggestions({ userId: uid, brandId, section, question: q });
             const host = tabView.querySelector('#suggestions'); host.innerHTML='';
-            const make = (t)=>{ const b=document.createElement('button'); b.className='btn'; b.textContent=t; b.addEventListener('click',()=>{ tabView.querySelector('#answer').value=t;}); return b; };
-            (res.suggestions.options||[]).forEach(s=> host.appendChild(make(s)) );
+            const normalize = (data) => {
+              if (!data) return [];
+              if (Array.isArray(data)) return data;
+              if (typeof data === 'string') { try { const j = JSON.parse(data); return Array.isArray(j) ? j : [data]; } catch (_) { return [data]; } }
+              if (data.options && Array.isArray(data.options)) return data.options;
+              return [];
+            };
+            const opts = normalize(res?.suggestions);
+            if (!opts.length) { UI.toast('No suggestions'); return; }
+            opts.forEach(o => {
+              const b = document.createElement('button');
+              b.className = 'btn';
+              b.textContent = o;
+              b.addEventListener('click', () => { tabView.querySelector('#answer').value = o; });
+              host.appendChild(b);
+            });
           } catch(e){ UI.toast('No suggestions'); }
         });
         tabView.querySelector('#saveBtn').addEventListener('click', async ()=>{
@@ -477,7 +462,7 @@
         async function loadImages(){
           const grid = tabView.querySelector('#imgGrid');
           grid.innerHTML='';
-          try { const res = await API.listImages(answerId); (res||[]).forEach(img=>{
+          try { const res = await API.listImages(answerId, uid); (res||[]).forEach(img=>{
             const card = document.createElement('div'); card.className='card';
             card.innerHTML = `<img src="${img.cloudinary_url}" alt="" style="max-width:100%; border-radius:8px" />`;
             grid.appendChild(card);
@@ -529,7 +514,8 @@
         });
       }
       if (name === 'assets') {
-        const full = await API.getFullBrand(brandId).catch(()=>null);
+        const resp = await API.getFullBrand(brandId).catch(()=>null);
+        const full = resp?.full_brand || resp;
         tabView.innerHTML = `<div class="card"><div class="title">Assets</div><pre style="white-space:pre-wrap">${full?JSON.stringify(full,null,2):'No assets yet.'}</pre></div>`;
       }
     };

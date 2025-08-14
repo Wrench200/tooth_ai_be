@@ -20,8 +20,6 @@
     listBrands: (userId) => post('/user_brands', { userId }),
     getBrand: (brandId) => post('/brand', { brandId }),
     getFullBrand: (brandId) => get(`/get_full_brand/${encodeURIComponent(brandId)}`),
-    updateBrand: (brandId, propertyName, newValue) => post('/update_brand', { brandId, propertyName, newValue }),
-    deleteBrand: (brandId) => post('/delete_brand', { brandId }),
 
     // q&a
     sendAnswer: (payload) => postSoft('/send_answer', payload),
@@ -34,8 +32,8 @@
 
     // images
     generateImage: (payload) => post('/generate_and_upload_image', payload),
-    listImages: (answerId) => post('/get_all_images', { answerId }),
-    deleteImage: (answerId, section, question) => post('/delete_image', { answerId, section, question }),
+    listImages: (answerId, userId) => post('/get_all_images', { answerId, userId }),
+    deleteImage: (answerId, section, question, userId) => post('/delete_image', { answerId, section, question, userId }),
 
     // payment simulation
     setPaid: (brandId) => post('/update_brand_payment_status', { brandId, paymentStatus: true }),
