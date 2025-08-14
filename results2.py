@@ -1300,7 +1300,14 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
 
             '''
         )
-        prompt = "Please give me the social media content as JSON in the specified structure."
+        # Add conditional instruction based on whether a website exists
+        has_website = bool(website and isinstance(website, str) and (website.startswith("http://") or website.startswith("https://")))
+        if has_website:
+            website_prompt_tail = f" Ensure \"relevant_marketing_strategies\" includes a strategy to improve the existing website ({website}) focusing on SEO, speed, conversion and lead capture."
+        else:
+            website_prompt_tail = " Ensure \"relevant_marketing_strategies\" includes a strategy to create a professional website (credibility, discovery, lead capture) and place it among the top strategies."
+
+        prompt = f"Please give me the social media content as JSON in the specified structure.{website_prompt_tail}"
         response = openAI.get_text_prediction(system_prompt, prompt)
         print('response', response)
         
@@ -1316,6 +1323,21 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             ready_made_posts = []
             ad_copies = []
             relevant_marketing_strategies = []
+
+        # Post-parse safeguard: enforce website recommendation
+        try:
+            text_blob = " ".join([s for s in relevant_marketing_strategies if isinstance(s, str)]).lower()
+            mentions_site = any(k in text_blob for k in ["website", "site", "landing page", "landing-page", "web page"])
+            if not has_website and not mentions_site:
+                relevant_marketing_strategies.append(
+                    "Create a professional website as your always-on hub for credibility, discovery (SEO), and lead capture; ensure clear value proposition, fast load times, mobile-first design, and a simple contact/WhatsApp CTA."
+                )
+            if has_website and not mentions_site:
+                relevant_marketing_strategies.append(
+                    "Improve your website: fix Core Web Vitals, implement on-page SEO (title/meta/H1), add clear CTAs and lead capture (forms/WhatsApp), and track conversions to continuously optimize."
+                )
+        except Exception as _:
+            pass
 
         # ========== Generate Premium Brand Guidelines ==========
         brand_guidelines_system_prompt = f'''You are a brand identity expert. Here is a list of questions we asked the user and here are the answers they gave: >>>
