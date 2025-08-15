@@ -165,7 +165,7 @@ class BrandPDF(FPDF):
                         tmp_img.write(response.content)
                         tmp_img.flush()
                         tmp_img_path = tmp_img.name
-                    self.image(tmp_img_path, w=40)
+                    self.image(tmp_img_path, w=self.w - self.l_margin - self.r_margin)
                     os.remove(tmp_img_path)
                 except Exception as e:
                     print(f"Error loading image {url}: {e}")
@@ -296,14 +296,14 @@ class BrandPDF(FPDF):
             self.multi_cell(circle_diameter, 7, color.get('color_name', ''), align='C')
         # Move below the circles for the description (if any)
         if description:
-            self.set_y(y + circle_diameter + 30)
+            self.set_y(y + circle_diameter + 15)
             self.set_font('DejaVu', '', 12)
             self.set_text_color(40, 40, 40)
             self.multi_cell(0, 8, description, align='C')
-            self.ln(10)
+            self.ln(5)
         else:
-            self.set_y(y + circle_diameter + 30)
-            self.ln(10)
+            self.set_y(y + circle_diameter + 15)
+            self.ln(5)
 
     def add_recommended_logo(self, logo_url, description=None):
         self.add_sub_section_title("Recommended Logo")
@@ -314,7 +314,7 @@ class BrandPDF(FPDF):
                     tmp_img.write(response.content)
                     tmp_img.flush()
                     tmp_img_path = tmp_img.name
-                self.image(tmp_img_path, w=60)
+                self.image(tmp_img_path, w=self.w - self.l_margin - self.r_margin)
                 os.remove(tmp_img_path)
             except Exception as e:
                 print(f"Error loading recommended logo {logo_url}: {e}")
