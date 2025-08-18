@@ -1411,79 +1411,80 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             }
 
         # ========== Generate Copywriting Framework ==========
-        copywriting_framework_system_prompt = f'''You are a senior copywriting strategist. Here is a list of questions we asked the user and the answers they gave: >>>
-        {question_and_answers}
-        <<<. Based on this, produce a copywriting framework that guides how to write and market to the brand's target audience, using their fears, dreams, desires, and aspirations.
+        # copywriting_framework_system_prompt = f'''You are a senior copywriting strategist. Here is a list of questions we asked the user and the answers they gave: >>>
+        # {question_and_answers}
+        # <<<. Based on this, produce a copywriting framework that guides how to write and market to the brand's target audience, using their fears, dreams, desires, and aspirations.
 
-        Output ONLY valid JSON matching EXACTLY this structure:
-        {{
-          "persona_snapshot": {{
-            "demographics": "string",
-            "psychographics": "string",
-            "fears": ["string"],
-            "desires": ["string"],
-            "aspirations": ["string"],
-            "awareness_stage": "problem|solution|product|most_aware"
-          }},
-          "message_pillars": {{
-            "problem_narrative": "string",
-            "desired_transformation": "string",
-            "differentiators": ["string"],
-            "proof_assets": ["string"],
-            "cta_patterns": ["string"]
-          }},
-          "copy_frameworks": [
-            {{"name": "PAS", "when_to_use": "string", "outline": ["string"]}},
-            {{"name": "AIDA", "when_to_use": "string", "outline": ["string"]}},
-            {{"name": "4P", "when_to_use": "string", "outline": ["string"]}},
-            {{"name": "BAB", "when_to_use": "string", "outline": ["string"]}},
-            {{"name": "FAB", "when_to_use": "string", "outline": ["string"]}}
-          ],
-          "writing_guidance": {{
-            "fears": "string",
-            "desires": "string",
-            "dreams": "string",
-            "aspirations": "string"
-          }},
-          "tone_style_rules": {{
-            "reading_level": "string",
-            "formality": "string",
-            "lexicon_use": ["string"],
-            "lexicon_avoid": ["string"],
-            "voice": "string",
-            "cadence": "string"
-          }},
-          "objection_bank": [
-            {{"objection": "string", "reframe": "string", "proof": "string", "risk_reversal": "string"}}
-          ],
-          "hook_bank": [
-            {{"text": "string", "tag": "fear|desire|dream", "awareness_stage": "problem|solution|product|most_aware"}}
-          ],
-          "cta_bank": [
-            {{"text": "string", "friction_level": "low|medium|high"}}
-          ],
-          "channel_adaptation": {{
-            "whatsapp": "string",
-            "instagram": "string",
-            "linkedin": "string",
-            "landing_page": "string",
-            "radio_ooh": "string"
-          }},
-          "asset_recipe": ["string"],
-          "measurement": {{
-            "metrics": ["string"],
-            "ab_tests": ["string"],
-            "iteration_rules": ["string"]
-          }}
-        }}
+        # Output ONLY valid JSON matching EXACTLY this structure:
+        # {{
+        #   "persona_snapshot": {{
+        #     "demographics": "string",
+        #     "psychographics": "string",
+        #     "fears": ["string"],
+        #     "desires": ["string"],
+        #     "aspirations": ["string"],
+        #     "awareness_stage": "problem|solution|product|most_aware"
+        #   }},
+        #   "message_pillars": {{
+        #     "problem_narrative": "string",
+        #     "desired_transformation": "string",
+        #     "differentiators": ["string"],
+        #     "proof_assets": ["string"],
+        #     "cta_patterns": ["string"]
+        #   }},
+        #   "copy_frameworks": [
+        #     {{"name": "PAS", "when_to_use": "string", "outline": ["string"]}},
+        #     {{"name": "AIDA", "when_to_use": "string", "outline": ["string"]}},
+        #     {{"name": "4P", "when_to_use": "string", "outline": ["string"]}},
+        #     {{"name": "BAB", "when_to_use": "string", "outline": ["string"]}},
+        #     {{"name": "FAB", "when_to_use": "string", "outline": ["string"]}}
+        #   ],
+        #   "writing_guidance": {{
+        #     "fears": "string",
+        #     "desires": "string",
+        #     "dreams": "string",
+        #     "aspirations": "string"
+        #   }},
+        #   "tone_style_rules": {{
+        #     "reading_level": "string",
+        #     "formality": "string",
+        #     "lexicon_use": ["string"],
+        #     "lexicon_avoid": ["string"],
+        #     "voice": "string",
+        #     "cadence": "string"
+        #   }},
+        #   "objection_bank": [
+        #     {{"objection": "string", "reframe": "string", "proof": "string", "risk_reversal": "string"}}
+        #   ],
+        #   "hook_bank": [
+        #     {{"text": "string", "tag": "fear|desire|dream", "awareness_stage": "problem|solution|product|most_aware"}}
+        #   ],
+        #   "cta_bank": [
+        #     {{"text": "string", "friction_level": "low|medium|high"}}
+        #   ],
+        #   "channel_adaptation": {{
+        #     "whatsapp": "string",
+        #     "instagram": "string",
+        #     "linkedin": "string",
+        #     "landing_page": "string",
+        #     "radio_ooh": "string"
+        #   }},
+        #   "asset_recipe": ["string"],
+        #   "measurement": {{
+        #     "metrics": ["string"],
+        #     "ab_tests": ["string"],
+        #     "iteration_rules": ["string"]
+        #   }}
+        # }}
 
-        Keep explanations concise and actionable. No extra text or markdown.'''
+        # Keep explanations concise and actionable. No extra text or markdown.'''
 
-        copywriting_framework_prompt = "Generate the copywriting framework as JSON only."
-        copywriting_framework_response = openAI.get_text_prediction(copywriting_framework_system_prompt, copywriting_framework_prompt)
-        copywriting_framework = clean_and_parse_json(copywriting_framework_response)
+        # copywriting_framework_prompt = "Generate the copywriting framework as JSON only."
+        # copywriting_framework_response = openAI.get_text_prediction(copywriting_framework_system_prompt, copywriting_framework_prompt)
+        # copywriting_framework = clean_and_parse_json(copywriting_framework_response)
 
-        if not copywriting_framework:
+        copywriting_framework = ""
+        if copywriting_framework == "":
             print("Warning: Could not parse copywriting framework, using default values")
             copywriting_framework = {
                 "persona_snapshot": {

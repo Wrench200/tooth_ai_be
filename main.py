@@ -267,11 +267,7 @@ class BrandPDF(FPDF):
         # Draw circles for each color
         page_width = self.w - self.l_margin - self.r_margin
         n = len(colors)
-        # Calculate gap so all circles fit on one row
-        if n > 1:
-            gap = max(20, (page_width - n * circle_diameter) // (n - 1))
-        else:
-            gap = 0
+        gap = 5  # Use a fixed gap
         total_width = n * circle_diameter + (n - 1) * gap
         start_x = (self.w - total_width) / 2
         y = self.get_y()
@@ -296,13 +292,13 @@ class BrandPDF(FPDF):
             self.multi_cell(circle_diameter, 7, color.get('color_name', ''), align='C')
         # Move below the circles for the description (if any)
         if description:
-            self.set_y(y + circle_diameter + 15)
+            self.set_y(y + circle_diameter + 5)
             self.set_font('DejaVu', '', 12)
             self.set_text_color(40, 40, 40)
             self.multi_cell(0, 8, description, align='C')
             self.ln(5)
         else:
-            self.set_y(y + circle_diameter + 15)
+            self.set_y(y + circle_diameter + 5)
             self.ln(5)
 
     def add_recommended_logo(self, logo_url, description=None):
@@ -1415,94 +1411,94 @@ def download_brand_pdf(brandId):
             pdf.add_key_value("Positioning Statement", wmd.get('positioning_statement', ''), True)
             pdf.add_key_value("The Difference We Provide", wmd.get('the_difference_we_provide', ''))
         
-        # Business Strategy Section (from brand_assets)
-        if brand_assets and brand_assets.get('premium_assets', {}).get('business_strategy'):
-            business_strategy = brand_assets['premium_assets']['business_strategy']
-            pdf.add_page()
-            pdf.add_section_title("Business Strategy", True, primary_rgb)
+        # # Business Strategy Section (from brand_assets)
+        # if brand_assets and brand_assets.get('premium_assets', {}).get('business_strategy'):
+        #     business_strategy = brand_assets['premium_assets']['business_strategy']
+        #     pdf.add_page()
+        #     pdf.add_section_title("Business Strategy", True, primary_rgb)
             
-            # Market Positioning
-            if business_strategy.get('market_positioning'):
-                positioning = business_strategy['market_positioning']
-                pdf.add_sub_section_title("Market Positioning", True)
-                for key, value in positioning.items():
-                    if isinstance(value, list):
-                        pdf.add_key_value(key.replace('_', ' ').title(), ', '.join(value), True)
-                    else:
-                        pdf.add_key_value(key.replace('_', ' ').title(), str(value), True)
+        #     # Market Positioning
+        #     if business_strategy.get('market_positioning'):
+        #         positioning = business_strategy['market_positioning']
+        #         pdf.add_sub_section_title("Market Positioning", True)
+        #         for key, value in positioning.items():
+        #             if isinstance(value, list):
+        #                 pdf.add_key_value(key.replace('_', ' ').title(), ', '.join(value), True)
+        #             else:
+        #                 pdf.add_key_value(key.replace('_', ' ').title(), str(value), True)
             
-            # SWOT Analysis
-            if business_strategy.get('swot_analysis'):
-                swot = business_strategy['swot_analysis']
-                pdf.add_sub_section_title("SWOT Analysis", True)
-                for category, items in swot.items():
-                    if isinstance(items, list):
-                        pdf.add_key_value(category.title(), ', '.join(items), True)
-                    else:
-                        pdf.add_key_value(category.title(), str(items), True)
+        #     # SWOT Analysis
+        #     if business_strategy.get('swot_analysis'):
+        #         swot = business_strategy['swot_analysis']
+        #         pdf.add_sub_section_title("SWOT Analysis", True)
+        #         for category, items in swot.items():
+        #             if isinstance(items, list):
+        #                 pdf.add_key_value(category.title(), ', '.join(items), True)
+        #             else:
+        #                 pdf.add_key_value(category.title(), str(items), True)
             
-            # Target Audience Profiles
-            if business_strategy.get('target_audience_profiles'):
-                profiles = business_strategy['target_audience_profiles']
-                pdf.add_sub_section_title("Target Audience Profiles", True)
-                for i, profile in enumerate(profiles):
-                    if isinstance(profile, dict):
-                        pdf.add_key_value(f"Persona {i+1}: {profile.get('persona_name', 'Unknown')}", 
-                                        f"Demographics: {profile.get('demographics', 'N/A')} | "
-                                        f"Motivations: {', '.join(profile.get('motivations', []))} | "
-                                        f"Pain Points: {', '.join(profile.get('pain_points', []))}", True)
+        #     # Target Audience Profiles
+        #     if business_strategy.get('target_audience_profiles'):
+        #         profiles = business_strategy['target_audience_profiles']
+        #         pdf.add_sub_section_title("Target Audience Profiles", True)
+        #         for i, profile in enumerate(profiles):
+        #             if isinstance(profile, dict):
+        #                 pdf.add_key_value(f"Persona {i+1}: {profile.get('persona_name', 'Unknown')}",
+        #                                 f"Demographics: {profile.get('demographics', 'N/A')} | "
+        #                                 f"Motivations: {', '.join(profile.get('motivations', []))} | "
+        #                                 f"Pain Points: {', '.join(profile.get('pain_points', []))}", True)
             
-            # Competitive Analysis
-            if business_strategy.get('competitive_analysis'):
-                competitors = business_strategy['competitive_analysis']
-                pdf.add_sub_section_title("Competitive Analysis", True)
-                for i, competitor in enumerate(competitors):
-                    if isinstance(competitor, dict):
-                        comp_name = competitor.get('competitor_name', f'Competitor {i+1}')
-                        strengths = ', '.join(competitor.get('strengths', []))
-                        weaknesses = ', '.join(competitor.get('weaknesses', []))
-                        pdf.add_key_value(f"{comp_name} - Strengths", strengths, True)
-                        pdf.add_key_value(f"{comp_name} - Weaknesses", weaknesses, True)
+        #     # Competitive Analysis
+        #     if business_strategy.get('competitive_analysis'):
+        #         competitors = business_strategy['competitive_analysis']
+        #         pdf.add_sub_section_title("Competitive Analysis", True)
+        #         for i, competitor in enumerate(competitors):
+        #             if isinstance(competitor, dict):
+        #                 comp_name = competitor.get('competitor_name', f'Competitor {i+1}')
+        #                 strengths = ', '.join(competitor.get('strengths', []))
+        #                 weaknesses = ', '.join(competitor.get('weaknesses', []))
+        #                 pdf.add_key_value(f"{comp_name} - Strengths", strengths, True)
+        #                 pdf.add_key_value(f"{comp_name} - Weaknesses", weaknesses, True)
         
-        # Implementation Roadmap Section (from brand_assets)
-        if brand_assets and brand_assets.get('premium_assets', {}).get('implementation_roadmap'):
-            roadmap = brand_assets['premium_assets']['implementation_roadmap']
-            pdf.add_page()
-            pdf.add_section_title("Implementation Roadmap", True, primary_rgb)
+        # # Implementation Roadmap Section (from brand_assets)
+        # if brand_assets and brand_assets.get('premium_assets', {}).get('implementation_roadmap'):
+        #     roadmap = brand_assets['premium_assets']['implementation_roadmap']
+        #     pdf.add_page()
+        #     pdf.add_section_title("Implementation Roadmap", True, primary_rgb)
             
-            # Launch Timeline
-            if roadmap.get('launch_timeline'):
-                timeline = roadmap['launch_timeline']
-                pdf.add_sub_section_title("Launch Timeline", True)
-                for phase in timeline:
-                    if isinstance(phase, dict):
-                        phase_name = phase.get('phase', 'Unknown Phase')
-                        duration = phase.get('duration', 'N/A')
-                        deliverables = ', '.join(phase.get('deliverables', []))
-                        pdf.add_key_value(f"{phase_name} ({duration})", deliverables, True)
+        #     # Launch Timeline
+        #     if roadmap.get('launch_timeline'):
+        #         timeline = roadmap['launch_timeline']
+        #         pdf.add_sub_section_title("Launch Timeline", True)
+        #         for phase in timeline:
+        #             if isinstance(phase, dict):
+        #                 phase_name = phase.get('phase', 'Unknown Phase')
+        #                 duration = phase.get('duration', 'N/A')
+        #                 deliverables = ', '.join(phase.get('deliverables', []))
+        #                 pdf.add_key_value(f"{phase_name} ({duration})", deliverables, True)
             
-            # Budget Estimates
-            if roadmap.get('budget_estimates'):
-                budgets = roadmap['budget_estimates']
-                pdf.add_sub_section_title("Budget Estimates", True)
-                for budget in budgets:
-                    if isinstance(budget, dict):
-                        category = budget.get('category', 'Unknown')
-                        cost = budget.get('estimated_cost', 'N/A')
-                        description = budget.get('description', '')
-                        pdf.add_key_value(f"{category} - {cost}", description, True)
+        #     # Budget Estimates
+        #     if roadmap.get('budget_estimates'):
+        #         budgets = roadmap['budget_estimates']
+        #         pdf.add_sub_section_title("Budget Estimates", True)
+        #         for budget in budgets:
+        #             if isinstance(budget, dict):
+        #                 category = budget.get('category', 'Unknown')
+        #                 cost = budget.get('estimated_cost', 'N/A')
+        #                 description = budget.get('description', '')
+        #                 pdf.add_key_value(f"{category} - {cost}", description, True)
             
-            # Quality Assurance
-            if roadmap.get('quality_assurance'):
-                qa = roadmap['quality_assurance']
-                pdf.add_sub_section_title("Quality Assurance", True)
-                for checkpoint in qa:
-                    if isinstance(checkpoint, dict):
-                        checkpoint_name = checkpoint.get('checkpoint', 'Unknown')
-                        criteria = ', '.join(checkpoint.get('criteria', []))
-                        metrics = ', '.join(checkpoint.get('success_metrics', []))
-                        pdf.add_key_value(f"{checkpoint_name} - Criteria", criteria, True)
-                        pdf.add_key_value(f"{checkpoint_name} - Success Metrics", metrics, True)
+        #     # Quality Assurance
+        #     if roadmap.get('quality_assurance'):
+        #         qa = roadmap['quality_assurance']
+        #         pdf.add_sub_section_title("Quality Assurance", True)
+        #         for checkpoint in qa:
+        #             if isinstance(checkpoint, dict):
+        #                 checkpoint_name = checkpoint.get('checkpoint', 'Unknown')
+        #                 criteria = ', '.join(checkpoint.get('criteria', []))
+        #                 metrics = ', '.join(checkpoint.get('success_metrics', []))
+        #                 pdf.add_key_value(f"{checkpoint_name} - Criteria", criteria, True)
+        #                 pdf.add_key_value(f"{checkpoint_name} - Success Metrics", metrics, True)
 
     # Brand Identity Section
     if brand_identity:
@@ -1932,225 +1928,225 @@ def download_brand_pdf(brandId):
                             print(f"Error loading brand pattern image: {e}")
                             pdf.add_key_value("Error", "Brand pattern image could not be loaded")
         
-        # Copywriting Framework (from brand_assets) with fallback to Marketing Templates
-        if brand_assets and brand_assets.get('premium_assets'):
-            premium_assets = brand_assets['premium_assets']
-            copy_fw = premium_assets.get('copywriting_framework')
-            if copy_fw:
-                pdf.add_page()
-                pdf.add_section_title("Copywriting Framework", True, primary_rgb)
+        # # Copywriting Framework (from brand_assets) with fallback to Marketing Templates
+        # if brand_assets and brand_assets.get('premium_assets'):
+        #     premium_assets = brand_assets['premium_assets']
+        #     copy_fw = premium_assets.get('copywriting_framework')
+        #     if copy_fw:
+        #         pdf.add_page()
+        #         pdf.add_section_title("Copywriting Framework", True, primary_rgb)
 
-                # Persona Snapshot
-                persona = copy_fw.get('persona_snapshot', {}) if isinstance(copy_fw, dict) else {}
-                if persona:
-                    pdf.add_sub_section_title("Persona Snapshot", True)
-                    pdf.add_key_value("Demographics", persona.get('demographics', ''), True)
-                    pdf.add_key_value("Psychographics", persona.get('psychographics', ''), False)
-                    fears_list = persona.get('fears', []) or []
-                    desires_list = persona.get('desires', []) or []
-                    aspirations_list = persona.get('aspirations', []) or []
-                    if fears_list:
-                        pdf.add_key_value("Fears", ', '.join([str(x) for x in fears_list]), False)
-                    if desires_list:
-                        pdf.add_key_value("Desires", ', '.join([str(x) for x in desires_list]), False)
-                    if aspirations_list:
-                        pdf.add_key_value("Aspirations", ', '.join([str(x) for x in aspirations_list]), False)
-                    if persona.get('awareness_stage'):
-                        pdf.add_key_value("Awareness Stage", persona.get('awareness_stage', ''), False)
+        #         # Persona Snapshot
+        #         persona = copy_fw.get('persona_snapshot', {}) if isinstance(copy_fw, dict) else {}
+        #         if persona:
+        #             pdf.add_sub_section_title("Persona Snapshot", True)
+        #             pdf.add_key_value("Demographics", persona.get('demographics', ''), True)
+        #             pdf.add_key_value("Psychographics", persona.get('psychographics', ''), False)
+        #             fears_list = persona.get('fears', []) or []
+        #             desires_list = persona.get('desires', []) or []
+        #             aspirations_list = persona.get('aspirations', []) or []
+        #             if fears_list:
+        #                 pdf.add_key_value("Fears", ', '.join([str(x) for x in fears_list]), False)
+        #             if desires_list:
+        #                 pdf.add_key_value("Desires", ', '.join([str(x) for x in desires_list]), False)
+        #             if aspirations_list:
+        #                 pdf.add_key_value("Aspirations", ', '.join([str(x) for x in aspirations_list]), False)
+        #             if persona.get('awareness_stage'):
+        #                 pdf.add_key_value("Awareness Stage", persona.get('awareness_stage', ''), False)
 
-                # Message Pillars
-                pillars = copy_fw.get('message_pillars', {}) if isinstance(copy_fw, dict) else {}
-                if pillars:
-                    pdf.add_sub_section_title("Message Pillars", True)
-                    pdf.add_key_value("Problem Narrative", pillars.get('problem_narrative', ''), True)
-                    pdf.add_key_value("Desired Transformation", pillars.get('desired_transformation', ''), False)
-                    if pillars.get('differentiators'):
-                        pdf.add_key_value("Differentiators", ', '.join(pillars.get('differentiators', [])), False)
-                    if pillars.get('proof_assets'):
-                        pdf.add_key_value("Proof Assets", ', '.join(pillars.get('proof_assets', [])), False)
-                    if pillars.get('cta_patterns'):
-                        pdf.add_key_value("CTA Patterns", ', '.join(pillars.get('cta_patterns', [])), False)
+        #         # Message Pillars
+        #         pillars = copy_fw.get('message_pillars', {}) if isinstance(copy_fw, dict) else {}
+        #         if pillars:
+        #             pdf.add_sub_section_title("Message Pillars", True)
+        #             pdf.add_key_value("Problem Narrative", pillars.get('problem_narrative', ''), True)
+        #             pdf.add_key_value("Desired Transformation", pillars.get('desired_transformation', ''), False)
+        #             if pillars.get('differentiators'):
+        #                 pdf.add_key_value("Differentiators", ', '.join(pillars.get('differentiators', [])), False)
+        #             if pillars.get('proof_assets'):
+        #                 pdf.add_key_value("Proof Assets", ', '.join(pillars.get('proof_assets', [])), False)
+        #             if pillars.get('cta_patterns'):
+        #                 pdf.add_key_value("CTA Patterns", ', '.join(pillars.get('cta_patterns', [])), False)
 
-                # Copy Frameworks
-                frameworks = copy_fw.get('copy_frameworks', []) if isinstance(copy_fw, dict) else []
-                if frameworks:
-                    pdf.add_sub_section_title("Copy Frameworks", True)
-                    for fw in frameworks:
-                        if isinstance(fw, dict):
-                            name = fw.get('name', 'Framework')
-                            when = fw.get('when_to_use', '')
-                            outline = fw.get('outline', []) or []
-                            pdf.add_key_value(f"{name} - When to use", when, True)
-                            if outline:
-                                pdf.add_key_value(f"{name} - Outline", ', '.join([str(x) for x in outline]), False)
+        #         # Copy Frameworks
+        #         frameworks = copy_fw.get('copy_frameworks', []) if isinstance(copy_fw, dict) else []
+        #         if frameworks:
+        #             pdf.add_sub_section_title("Copy Frameworks", True)
+        #             for fw in frameworks:
+        #                 if isinstance(fw, dict):
+        #                     name = fw.get('name', 'Framework')
+        #                     when = fw.get('when_to_use', '')
+        #                     outline = fw.get('outline', []) or []
+        #                     pdf.add_key_value(f"{name} - When to use", when, True)
+        #                     if outline:
+        #                         pdf.add_key_value(f"{name} - Outline", ', '.join([str(x) for x in outline]), False)
 
-                # Writing Guidance
-                guidance = copy_fw.get('writing_guidance', {}) if isinstance(copy_fw, dict) else {}
-                if guidance:
-                    pdf.add_sub_section_title("Writing Guidance", True)
-                    for k in ["fears", "desires", "dreams", "aspirations"]:
-                        if guidance.get(k):
-                            pdf.add_key_value(k.capitalize(), guidance.get(k, ''), True)
+        #         # Writing Guidance
+        #         guidance = copy_fw.get('writing_guidance', {}) if isinstance(copy_fw, dict) else {}
+        #         if guidance:
+        #             pdf.add_sub_section_title("Writing Guidance", True)
+        #             for k in ["fears", "desires", "dreams", "aspirations"]:
+        #                 if guidance.get(k):
+        #                     pdf.add_key_value(k.capitalize(), guidance.get(k, ''), True)
 
-                # Tone & Style Rules
-                ts = copy_fw.get('tone_style_rules', {}) if isinstance(copy_fw, dict) else {}
-                if ts:
-                    pdf.add_sub_section_title("Tone & Style Rules", True)
-                    pdf.add_key_value("Reading Level", ts.get('reading_level', ''), True)
-                    pdf.add_key_value("Formality", ts.get('formality', ''), False)
-                    if ts.get('lexicon_use'):
-                        pdf.add_key_value("Lexicon (Use)", ', '.join(ts.get('lexicon_use', [])), False)
-                    if ts.get('lexicon_avoid'):
-                        pdf.add_key_value("Lexicon (Avoid)", ', '.join(ts.get('lexicon_avoid', [])), False)
-                    pdf.add_key_value("Voice", ts.get('voice', ''), False)
-                    pdf.add_key_value("Cadence", ts.get('cadence', ''), False)
+        #         # Tone & Style Rules
+        #         ts = copy_fw.get('tone_style_rules', {}) if isinstance(copy_fw, dict) else {}
+        #         if ts:
+        #             pdf.add_sub_section_title("Tone & Style Rules", True)
+        #             pdf.add_key_value("Reading Level", ts.get('reading_level', ''), True)
+        #             pdf.add_key_value("Formality", ts.get('formality', ''), False)
+        #             if ts.get('lexicon_use'):
+        #                 pdf.add_key_value("Lexicon (Use)", ', '.join(ts.get('lexicon_use', [])), False)
+        #             if ts.get('lexicon_avoid'):
+        #                 pdf.add_key_value("Lexicon (Avoid)", ', '.join(ts.get('lexicon_avoid', [])), False)
+        #             pdf.add_key_value("Voice", ts.get('voice', ''), False)
+        #             pdf.add_key_value("Cadence", ts.get('cadence', ''), False)
 
-                # Objection Handling
-                objections = copy_fw.get('objection_bank', []) if isinstance(copy_fw, dict) else []
-                if objections:
-                    pdf.add_sub_section_title("Objection Handling", True)
-                    for i, obj in enumerate(objections):
-                        if isinstance(obj, dict):
-                            pdf.add_key_value(f"Objection {i+1}", obj.get('objection', ''), True)
-                            if obj.get('reframe'):
-                                pdf.add_key_value("Reframe", obj.get('reframe', ''), False)
-                            if obj.get('proof'):
-                                pdf.add_key_value("Proof", obj.get('proof', ''), False)
-                            if obj.get('risk_reversal'):
-                                pdf.add_key_value("Risk Reversal", obj.get('risk_reversal', ''), False)
+        #         # Objection Handling
+        #         objections = copy_fw.get('objection_bank', []) if isinstance(copy_fw, dict) else []
+        #         if objections:
+        #             pdf.add_sub_section_title("Objection Handling", True)
+        #             for i, obj in enumerate(objections):
+        #                 if isinstance(obj, dict):
+        #                     pdf.add_key_value(f"Objection {i+1}", obj.get('objection', ''), True)
+        #                     if obj.get('reframe'):
+        #                         pdf.add_key_value("Reframe", obj.get('reframe', ''), False)
+        #                     if obj.get('proof'):
+        #                         pdf.add_key_value("Proof", obj.get('proof', ''), False)
+        #                     if obj.get('risk_reversal'):
+        #                         pdf.add_key_value("Risk Reversal", obj.get('risk_reversal', ''), False)
 
-                # Hook Bank
-                hooks = copy_fw.get('hook_bank', []) if isinstance(copy_fw, dict) else []
-                if hooks:
-                    pdf.add_sub_section_title("Hook Bank", True)
-                    for i, hook in enumerate(hooks):
-                        if isinstance(hook, dict):
-                            text = hook.get('text', '')
-                            tag = hook.get('tag', '')
-                            stage = hook.get('awareness_stage', '')
-                            label = f"Hook {i+1}"
-                            details = ", ".join([v for v in [tag, stage] if v])
-                            pdf.add_key_value(label, text, True)
-                            if details:
-                                pdf.add_key_value("Details", details, False)
+        #         # Hook Bank
+        #         hooks = copy_fw.get('hook_bank', []) if isinstance(copy_fw, dict) else []
+        #         if hooks:
+        #             pdf.add_sub_section_title("Hook Bank", True)
+        #             for i, hook in enumerate(hooks):
+        #                 if isinstance(hook, dict):
+        #                     text = hook.get('text', '')
+        #                     tag = hook.get('tag', '')
+        #                     stage = hook.get('awareness_stage', '')
+        #                     label = f"Hook {i+1}"
+        #                     details = ", ".join([v for v in [tag, stage] if v])
+        #                     pdf.add_key_value(label, text, True)
+        #                     if details:
+        #                         pdf.add_key_value("Details", details, False)
 
-                # CTA Bank
-                ctas = copy_fw.get('cta_bank', []) if isinstance(copy_fw, dict) else []
-                if ctas:
-                    pdf.add_sub_section_title("CTA Bank", True)
-                    for i, cta in enumerate(ctas):
-                        if isinstance(cta, dict):
-                            text = cta.get('text', '')
-                            fl = cta.get('friction_level', '')
-                            pdf.add_key_value(f"CTA {i+1}", text, True)
-                            if fl:
-                                pdf.add_key_value("Friction", fl, False)
+        #         # CTA Bank
+        #         ctas = copy_fw.get('cta_bank', []) if isinstance(copy_fw, dict) else []
+        #         if ctas:
+        #             pdf.add_sub_section_title("CTA Bank", True)
+        #             for i, cta in enumerate(ctas):
+        #                 if isinstance(cta, dict):
+        #                     text = cta.get('text', '')
+        #                     fl = cta.get('friction_level', '')
+        #                     pdf.add_key_value(f"CTA {i+1}", text, True)
+        #                     if fl:
+        #                         pdf.add_key_value("Friction", fl, False)
 
-                # Channel Adaptation
-                channels = copy_fw.get('channel_adaptation', {}) if isinstance(copy_fw, dict) else {}
-                if channels:
-                    pdf.add_sub_section_title("Channel Adaptation", True)
-                    mapping = {
-                        'whatsapp': 'WhatsApp',
-                        'instagram': 'Instagram',
-                        'linkedin': 'LinkedIn',
-                        'landing_page': 'Landing Page',
-                        'radio_ooh': 'Radio/OOH'
-                    }
-                    for key, label in mapping.items():
-                        if channels.get(key):
-                            pdf.add_key_value(label, channels.get(key, ''), True)
+        #         # Channel Adaptation
+        #         channels = copy_fw.get('channel_adaptation', {}) if isinstance(copy_fw, dict) else {}
+        #         if channels:
+        #             pdf.add_sub_section_title("Channel Adaptation", True)
+        #             mapping = {
+        #                 'whatsapp': 'WhatsApp',
+        #                 'instagram': 'Instagram',
+        #                 'linkedin': 'LinkedIn',
+        #                 'landing_page': 'Landing Page',
+        #                 'radio_ooh': 'Radio/OOH'
+        #             }
+        #             for key, label in mapping.items():
+        #                 if channels.get(key):
+        #                     pdf.add_key_value(label, channels.get(key, ''), True)
 
-                # Asset Recipe
-                recipe = copy_fw.get('asset_recipe', []) if isinstance(copy_fw, dict) else []
-                if recipe:
-                    pdf.add_sub_section_title("Asset Recipe", True)
-                    for i, step in enumerate(recipe):
-                        pdf.add_key_value(f"Step {i+1}", str(step), True)
+        #         # Asset Recipe
+        #         recipe = copy_fw.get('asset_recipe', []) if isinstance(copy_fw, dict) else []
+        #         if recipe:
+        #             pdf.add_sub_section_title("Asset Recipe", True)
+        #             for i, step in enumerate(recipe):
+        #                 pdf.add_key_value(f"Step {i+1}", str(step), True)
 
-                # Measurement
-                meas = copy_fw.get('measurement', {}) if isinstance(copy_fw, dict) else {}
-                if meas:
-                    pdf.add_sub_section_title("Measurement", True)
-                    if meas.get('metrics'):
-                        pdf.add_key_value("Metrics", ', '.join([str(x) for x in meas.get('metrics', [])]), True)
-                    if meas.get('ab_tests'):
-                        pdf.add_key_value("A/B Tests", ', '.join([str(x) for x in meas.get('ab_tests', [])]), False)
-                    if meas.get('iteration_rules'):
-                        pdf.add_key_value("Iteration Rules", ', '.join([str(x) for x in meas.get('iteration_rules', [])]), False)
-            elif premium_assets.get('marketing_templates'):
-                # Backward-compatible rendering for legacy marketing templates
-                templates = premium_assets['marketing_templates']
-                pdf.add_page()
-                pdf.add_section_title("Marketing Templates", True, primary_rgb)
+        #         # Measurement
+        #         meas = copy_fw.get('measurement', {}) if isinstance(copy_fw, dict) else {}
+        #         if meas:
+        #             pdf.add_sub_section_title("Measurement", True)
+        #             if meas.get('metrics'):
+        #                 pdf.add_key_value("Metrics", ', '.join([str(x) for x in meas.get('metrics', [])]), True)
+        #             if meas.get('ab_tests'):
+        #                 pdf.add_key_value("A/B Tests", ', '.join([str(x) for x in meas.get('ab_tests', [])]), False)
+        #             if meas.get('iteration_rules'):
+        #                 pdf.add_key_value("Iteration Rules", ', '.join([str(x) for x in meas.get('iteration_rules', [])]), False)
+        #     elif premium_assets.get('marketing_templates'):
+        #         # Backward-compatible rendering for legacy marketing templates
+        #         templates = premium_assets['marketing_templates']
+        #         pdf.add_page()
+        #         pdf.add_section_title("Marketing Templates", True, primary_rgb)
                 
-                # Landing Page Copy
-                if templates.get('landing_page_copy'):
-                    landing = templates['landing_page_copy']
-                    pdf.add_sub_section_title("Landing Page Copy", True)
-                    pdf.add_key_value("Hero Headline", landing.get('hero_headline', ''), True)
-                    pdf.add_key_value("Hero Subheadline", landing.get('hero_subheadline', ''), True)
-                    pdf.add_key_value("Call to Action", landing.get('call_to_action', ''), True)
+        #         # Landing Page Copy
+        #         if templates.get('landing_page_copy'):
+        #             landing = templates['landing_page_copy']
+        #             pdf.add_sub_section_title("Landing Page Copy", True)
+        #             pdf.add_key_value("Hero Headline", landing.get('hero_headline', ''), True)
+        #             pdf.add_key_value("Hero Subheadline", landing.get('hero_subheadline', ''), True)
+        #             pdf.add_key_value("Call to Action", landing.get('call_to_action', ''), True)
                     
-                    if landing.get('benefits'):
-                        pdf.add_key_value("Benefits", ', '.join(landing['benefits']), True)
+        #             if landing.get('benefits'):
+        #                 pdf.add_key_value("Benefits", ', '.join(landing['benefits']), True)
                     
-                    if landing.get('features'):
-                        pdf.add_key_value("Features", ', '.join(landing['features']), True)
+        #             if landing.get('features'):
+        #                 pdf.add_key_value("Features", ', '.join(landing['features']), True)
                     
-                    if landing.get('testimonials'):
-                        pdf.add_key_value("Testimonials", '', True)
-                        for i, testimonial in enumerate(landing['testimonials']):
-                            pdf.add_key_value(f"Testimonial {i+1}", testimonial, False)
+        #             if landing.get('testimonials'):
+        #                 pdf.add_key_value("Testimonials", '', True)
+        #                 for i, testimonial in enumerate(landing['testimonials']):
+        #                     pdf.add_key_value(f"Testimonial {i+1}", testimonial, False)
                 
-                # Email Templates
-                if templates.get('email_templates'):
-                    emails = templates['email_templates']
-                    pdf.add_sub_section_title("Email Templates", True)
-                    for i, email in enumerate(emails):
-                        if isinstance(email, dict):
-                            template_name = email.get('template_name', f'Email Template {i+1}')
-                            subject = email.get('subject_line', '')
-                            greeting = email.get('greeting', '')
-                            body = email.get('body', '')
-                            closing = email.get('closing', '')
-                            signature = email.get('signature', '')
+        #         # Email Templates
+        #         if templates.get('email_templates'):
+        #             emails = templates['email_templates']
+        #             pdf.add_sub_section_title("Email Templates", True)
+        #             for i, email in enumerate(emails):
+        #                 if isinstance(email, dict):
+        #                     template_name = email.get('template_name', f'Email Template {i+1}')
+        #                     subject = email.get('subject_line', '')
+        #                     greeting = email.get('greeting', '')
+        #                     body = email.get('body', '')
+        #                     closing = email.get('closing', '')
+        #                     signature = email.get('signature', '')
                             
-                            pdf.add_key_value(f"{template_name} - Subject", subject, True)
-                            pdf.add_key_value(f"{template_name} - Greeting", greeting, False)
-                            pdf.add_key_value(f"{template_name} - Body", body, False)
-                            pdf.add_key_value(f"{template_name} - Closing", f"{closing} {signature}", False)
+        #                     pdf.add_key_value(f"{template_name} - Subject", subject, True)
+        #                     pdf.add_key_value(f"{template_name} - Greeting", greeting, False)
+        #                     pdf.add_key_value(f"{template_name} - Body", body, False)
+        #                     pdf.add_key_value(f"{template_name} - Closing", f"{closing} {signature}", False)
                 
-                # Brochure Content
-                if templates.get('brochure_content'):
-                    brochure = templates['brochure_content']
-                    pdf.add_sub_section_title("Brochure Content", True)
-                    for i, section in enumerate(brochure):
-                        if isinstance(section, dict):
-                            section_title = section.get('section_title', f'Section {i+1}')
-                            content = section.get('content', '')
-                            call_to_action = section.get('call_to_action', '')
+        #         # Brochure Content
+        #         if templates.get('brochure_content'):
+        #             brochure = templates['brochure_content']
+        #             pdf.add_sub_section_title("Brochure Content", True)
+        #             for i, section in enumerate(brochure):
+        #                 if isinstance(section, dict):
+        #                     section_title = section.get('section_title', f'Section {i+1}')
+        #                     content = section.get('content', '')
+        #                     call_to_action = section.get('call_to_action', '')
                             
-                            pdf.add_key_value(f"{section_title}", content, True)
-                            if call_to_action:
-                                pdf.add_key_value(f"{section_title} - CTA", call_to_action, False)
+        #                     pdf.add_key_value(f"{section_title}", content, True)
+        #                     if call_to_action:
+        #                         pdf.add_key_value(f"{section_title} - CTA", call_to_action, False)
                 
-                # Presentation Templates
-                if templates.get('presentation_templates'):
-                    presentations = templates['presentation_templates']
-                    pdf.add_sub_section_title("Presentation Templates", True)
-                    for i, slide in enumerate(presentations):
-                        if isinstance(slide, dict):
-                            slide_title = slide.get('slide_title', f'Slide {i+1}')
-                            content = slide.get('content', '')
-                            key_points = ', '.join(slide.get('key_points', []))
-                            visual_suggestions = slide.get('visual_suggestions', '')
+        #         # Presentation Templates
+        #         if templates.get('presentation_templates'):
+        #             presentations = templates['presentation_templates']
+        #             pdf.add_sub_section_title("Presentation Templates", True)
+        #             for i, slide in enumerate(presentations):
+        #                 if isinstance(slide, dict):
+        #                     slide_title = slide.get('slide_title', f'Slide {i+1}')
+        #                     content = slide.get('content', '')
+        #                     key_points = ', '.join(slide.get('key_points', []))
+        #                     visual_suggestions = slide.get('visual_suggestions', '')
                             
-                            pdf.add_key_value(f"{slide_title}", content, True)
-                            if key_points:
-                                pdf.add_key_value(f"{slide_title} - Key Points", key_points, False)
-                            if visual_suggestions:
-                                pdf.add_key_value(f"{slide_title} - Visual Suggestions", visual_suggestions, False)
+        #                     pdf.add_key_value(f"{slide_title}", content, True)
+        #                     if key_points:
+        #                         pdf.add_key_value(f"{slide_title} - Key Points", key_points, False)
+        #                     if visual_suggestions:
+        #                         pdf.add_key_value(f"{slide_title} - Visual Suggestions", visual_suggestions, False)
         
         # Social Media Content Section (from brand_assets)
         if brand_assets and brand_assets.get('social_media_content'):
