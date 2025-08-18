@@ -800,7 +800,7 @@ def generate_results(userId, brandId):
 
 
 
-def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumbers, registrationNumber, website, brandLogo, others = {}):
+def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumbers, registrationNumber, website, brandLogo, others = {}, custom_colors = None):
     images_dir = 'images'
     try:
         user = db.get_user(userId)
@@ -832,10 +832,8 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
         previous_questions = questions.get_previous_questions(11)
         previous_answers = db.get_previous_answers(answers["answerId"], 11)
         question_and_answers = " ".join([f"Question: {q} Answer: {a}." for q, a in zip(previous_questions, previous_answers)])
+        
         # Parse previously generated brand identity
-        # brand_identity_data is not defined yet at this point in the function.
-        # To fix this, we need to parse it from the brand object before using it.
-        # Let's parse brand_identity_data from brand["brand_identity"] if it exists, else use an empty dict.
         if brand.get("brand_identity"):
             try:
                 brand_identity_data = json.loads(brand["brand_identity"]) if isinstance(brand["brand_identity"], str) else brand["brand_identity"]
@@ -844,8 +842,31 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
                 brand_identity_data = {}
         else:
             brand_identity_data = {}
-        previously_generated_brand_identity = brand_identity_data
         
+        # Override colors with custom colors if provided
+        if custom_colors and isinstance(custom_colors, dict):
+            print(f"Using custom colors: {custom_colors}")
+            # Create a modified brand identity with custom colors
+            modified_brand_identity = brand_identity_data.copy()
+            
+            # Update primary colors if provided
+            if custom_colors.get('primary_colors'):
+                modified_brand_identity['primary_colors'] = custom_colors['primary_colors']
+                print(f"Updated primary colors: {custom_colors['primary_colors']}")
+            
+            # Update secondary colors if provided
+            if custom_colors.get('secondary_colors'):
+                modified_brand_identity['secondary_colors'] = custom_colors['secondary_colors']
+                print(f"Updated secondary colors: {custom_colors['secondary_colors']}")
+            
+            # Update brand colors if provided
+            if custom_colors.get('brand_colors'):
+                modified_brand_identity['brand_colors'] = custom_colors['brand_colors']
+                print(f"Updated brand colors: {custom_colors['brand_colors']}")
+            
+            previously_generated_brand_identity = modified_brand_identity
+        else:
+            previously_generated_brand_identity = brand_identity_data
         
         # print(question_and_answers)
         
@@ -1055,6 +1076,8 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
         )
 
         # ========== Generate Social Media Content ==========
+        print("Generating social media content...")
+        
         social_media_json_structure = {
             "ready_made_posts": [
                 "string"
@@ -1308,11 +1331,16 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             website_prompt_tail = " Ensure \"relevant_marketing_strategies\" includes a strategy to create a professional website (credibility, discovery, lead capture) and place it among the top strategies."
 
         prompt = f"Please give me the social media content as JSON in the specified structure.{website_prompt_tail}"
-        response = openAI.get_text_prediction(system_prompt, prompt)
-        print('response', response)
         
-        # Use the existing clean_and_parse_json function to handle malformed JSON
-        social_media_content = clean_and_parse_json(response)
+        try:
+            response = openAI.get_text_prediction(system_prompt, prompt)
+            print(f'Social media content response received: {len(str(response))} characters')
+            
+            # Use the existing clean_and_parse_json function to handle malformed JSON
+            social_media_content = clean_and_parse_json(response)
+        except Exception as e:
+            print(f"Error generating social media content: {e}")
+            social_media_content = None
         
         if social_media_content:
             ready_made_posts = social_media_content.get("ready_made_posts", [])
@@ -1340,6 +1368,8 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             pass
 
         # ========== Generate Premium Brand Guidelines ==========
+        print("Generating brand guidelines...")
+        
         brand_guidelines_system_prompt = f'''You are a brand identity expert. Here is a list of questions we asked the user and here are the answers they gave: >>>
         {question_and_answers} 
         <<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>
@@ -1398,8 +1428,14 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
         Make the guidelines comprehensive, professional, and actionable. Include specific rules and examples.'''
 
         brand_guidelines_prompt = "Please give me comprehensive brand guidelines as JSON."
-        brand_guidelines_response = openAI.get_text_prediction(brand_guidelines_system_prompt, brand_guidelines_prompt)
-        brand_guidelines = clean_and_parse_json(brand_guidelines_response)
+        
+        try:
+            brand_guidelines_response = openAI.get_text_prediction(brand_guidelines_system_prompt, brand_guidelines_prompt)
+            print(f"Brand guidelines response received: {len(str(brand_guidelines_response))} characters")
+            brand_guidelines = clean_and_parse_json(brand_guidelines_response)
+        except Exception as e:
+            print(f"Error generating brand guidelines: {e}")
+            brand_guidelines = None
         
         if not brand_guidelines:
             print("Warning: Could not parse brand guidelines, using default values")
@@ -1409,130 +1445,196 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
                 "brand_voice": {"tone": "", "personality_traits": [], "communication_style": "", "do_not_use": []},
                 "visual_hierarchy": []
             }
+        
+        print("Brand guidelines generation completed.")
 
         # ========== Generate Copywriting Framework ==========
+        print("Generating copywriting framework...")
+        
+        # Simplified copywriting framework generation with better error handling
         copywriting_framework_system_prompt = f'''You are a senior copywriting strategist. Here is a list of questions we asked the user and the answers they gave: >>>
         {question_and_answers}
-        <<<. Based on this, produce a copywriting framework that guides how to write and market to the brand's target audience, using their fears, dreams, desires, and aspirations.
+        <<<. Based on this, produce a copywriting framework that guides how to write and market to the brand's target audience.
 
-        Output ONLY valid JSON matching EXACTLY this structure:
-        {{
-          "persona_snapshot": {{
-            "demographics": "string",
-            "psychographics": "string",
-            "fears": ["string"],
-            "desires": ["string"],
-            "aspirations": ["string"],
-            "awareness_stage": "problem|solution|product|most_aware"
-          }},
-          "message_pillars": {{
-            "problem_narrative": "string",
-            "desired_transformation": "string",
-            "differentiators": ["string"],
-            "proof_assets": ["string"],
-            "cta_patterns": ["string"]
-          }},
-          "copy_frameworks": [
-            {{"name": "PAS", "when_to_use": "string", "outline": ["string"]}},
-            {{"name": "AIDA", "when_to_use": "string", "outline": ["string"]}},
-            {{"name": "4P", "when_to_use": "string", "outline": ["string"]}},
-            {{"name": "BAB", "when_to_use": "string", "outline": ["string"]}},
-            {{"name": "FAB", "when_to_use": "string", "outline": ["string"]}}
-          ],
-          "writing_guidance": {{
-            "fears": "string",
-            "desires": "string",
-            "dreams": "string",
-            "aspirations": "string"
-          }},
-          "tone_style_rules": {{
-            "reading_level": "string",
-            "formality": "string",
-            "lexicon_use": ["string"],
-            "lexicon_avoid": ["string"],
-            "voice": "string",
-            "cadence": "string"
-          }},
-          "objection_bank": [
-            {{"objection": "string", "reframe": "string", "proof": "string", "risk_reversal": "string"}}
-          ],
-          "hook_bank": [
-            {{"text": "string", "tag": "fear|desire|dream", "awareness_stage": "problem|solution|product|most_aware"}}
-          ],
-          "cta_bank": [
-            {{"text": "string", "friction_level": "low|medium|high"}}
-          ],
-          "channel_adaptation": {{
-            "whatsapp": "string",
-            "instagram": "string",
-            "linkedin": "string",
-            "landing_page": "string",
-            "radio_ooh": "string"
-          }},
-          "asset_recipe": ["string"],
-          "measurement": {{
-            "metrics": ["string"],
-            "ab_tests": ["string"],
-            "iteration_rules": ["string"]
-          }}
-        }}
+        Generate a JSON object with these sections:
+        1. persona_snapshot: demographics, psychographics, fears, desires, aspirations, awareness_stage
+        2. message_pillars: problem_narrative, desired_transformation, differentiators, proof_assets, cta_patterns
+        3. copy_frameworks: array of copy frameworks (PAS, AIDA, 4P, BAB, FAB)
+        4. writing_guidance: fears, desires, dreams, aspirations
+        5. tone_style_rules: reading_level, formality, lexicon_use, lexicon_avoid, voice, cadence
+        6. objection_bank: array of objections with reframes
+        7. hook_bank: array of hooks with tags
+        8. cta_bank: array of CTAs with friction levels
+        9. channel_adaptation: whatsapp, instagram, linkedin, landing_page, radio_ooh
+        10. asset_recipe: array of steps
+        11. measurement: metrics, ab_tests, iteration_rules
 
-        Keep explanations concise and actionable. No extra text or markdown.'''
+        Return ONLY valid JSON. No markdown, no extra text.'''
 
         copywriting_framework_prompt = "Generate the copywriting framework as JSON only."
-        copywriting_framework_response = openAI.get_text_prediction(copywriting_framework_system_prompt, copywriting_framework_prompt)
-        copywriting_framework = clean_and_parse_json(copywriting_framework_response)
-
-        if not copywriting_framework:
-            print("Warning: Could not parse copywriting framework, using default values")
+        
+        try:
+            copywriting_framework_response = openAI.get_text_prediction(copywriting_framework_system_prompt, copywriting_framework_prompt)
+            print(f"Copywriting framework response received: {len(str(copywriting_framework_response))} characters")
+            
+            # Try to parse the response
+            copywriting_framework = clean_and_parse_json(copywriting_framework_response)
+            
+            if not copywriting_framework:
+                print("Warning: Could not parse copywriting framework, trying alternative approach...")
+                
+                # Try to extract JSON from the response manually
+                response_str = str(copywriting_framework_response)
+                if '{' in response_str and '}' in response_str:
+                    start = response_str.find('{')
+                    end = response_str.rfind('}') + 1
+                    json_str = response_str[start:end]
+                    
+                    try:
+                        copywriting_framework = json.loads(json_str)
+                        print("Successfully parsed JSON using manual extraction")
+                    except json.JSONDecodeError as e:
+                        print(f"Manual JSON extraction failed: {e}")
+                        copywriting_framework = None
+                
+                if not copywriting_framework:
+                    print("Creating fallback copywriting framework...")
+                    # Generate a basic framework based on the brand data
+                    copywriting_framework = {
+                        "persona_snapshot": {
+                            "demographics": "Based on brand analysis",
+                            "psychographics": "Values and lifestyle patterns",
+                            "fears": ["Not achieving goals", "Missing opportunities"],
+                            "desires": ["Success", "Recognition", "Growth"],
+                            "aspirations": ["Building something meaningful"],
+                            "awareness_stage": "problem"
+                        },
+                        "message_pillars": {
+                            "problem_narrative": "Addressing key challenges in the market",
+                            "desired_transformation": "Helping customers achieve their goals",
+                            "differentiators": ["Unique approach", "Proven results"],
+                            "proof_assets": ["Customer testimonials", "Case studies"],
+                            "cta_patterns": ["Start your journey", "Get started today"]
+                        },
+                        "copy_frameworks": [
+                            {"name": "PAS", "when_to_use": "Problem awareness", "outline": ["Problem", "Agitation", "Solution"]},
+                            {"name": "AIDA", "when_to_use": "General marketing", "outline": ["Attention", "Interest", "Desire", "Action"]},
+                            {"name": "4P", "when_to_use": "Product promotion", "outline": ["Picture", "Promise", "Prove", "Push"]}
+                        ],
+                        "writing_guidance": {
+                            "fears": "Address concerns with empathy",
+                            "desires": "Highlight benefits and outcomes",
+                            "dreams": "Connect with aspirations",
+                            "aspirations": "Show path to success"
+                        },
+                        "tone_style_rules": {
+                            "reading_level": "High school",
+                            "formality": "Professional but approachable",
+                            "lexicon_use": ["innovative", "solutions", "results"],
+                            "lexicon_avoid": ["jargon", "complex terms"],
+                            "voice": "Authoritative yet friendly",
+                            "cadence": "Clear and concise"
+                        },
+                        "objection_bank": [
+                            {"objection": "It's too expensive", "reframe": "Investment in your future", "proof": "ROI data", "risk_reversal": "Money-back guarantee"}
+                        ],
+                        "hook_bank": [
+                            {"text": "Transform your business today", "tag": "desire", "awareness_stage": "solution"}
+                        ],
+                        "cta_bank": [
+                            {"text": "Get Started Now", "friction_level": "low"},
+                            {"text": "Schedule a Consultation", "friction_level": "medium"}
+                        ],
+                        "channel_adaptation": {
+                            "whatsapp": "Personal, conversational tone",
+                            "instagram": "Visual, engaging content",
+                            "linkedin": "Professional, thought leadership",
+                            "landing_page": "Clear value proposition",
+                            "radio_ooh": "Memorable, action-oriented"
+                        },
+                        "asset_recipe": [
+                            "Define target audience",
+                            "Create compelling headlines",
+                            "Develop supporting content",
+                            "Add clear CTAs",
+                            "Test and optimize"
+                        ],
+                        "measurement": {
+                            "metrics": ["Conversion rate", "Engagement rate", "Click-through rate"],
+                            "ab_tests": ["Headline variations", "CTA button colors"],
+                            "iteration_rules": ["Test one variable at a time", "Run tests for statistical significance"]
+                        }
+                    }
+        except Exception as e:
+            print(f"Error generating copywriting framework: {e}")
+            print("Using default copywriting framework...")
             copywriting_framework = {
                 "persona_snapshot": {
-                    "demographics": "",
-                    "psychographics": "",
-                    "fears": [],
-                    "desires": [],
-                    "aspirations": [],
+                    "demographics": "Target audience based on brand analysis",
+                    "psychographics": "Values and lifestyle patterns",
+                    "fears": ["Not achieving goals", "Missing opportunities"],
+                    "desires": ["Success", "Recognition", "Growth"],
+                    "aspirations": ["Building something meaningful"],
                     "awareness_stage": "problem"
                 },
                 "message_pillars": {
-                    "problem_narrative": "",
-                    "desired_transformation": "",
-                    "differentiators": [],
-                    "proof_assets": [],
-                    "cta_patterns": []
+                    "problem_narrative": "Addressing key challenges in the market",
+                    "desired_transformation": "Helping customers achieve their goals",
+                    "differentiators": ["Unique approach", "Proven results"],
+                    "proof_assets": ["Customer testimonials", "Case studies"],
+                    "cta_patterns": ["Start your journey", "Get started today"]
                 },
-                "copy_frameworks": [],
+                "copy_frameworks": [
+                    {"name": "PAS", "when_to_use": "Problem awareness", "outline": ["Problem", "Agitation", "Solution"]},
+                    {"name": "AIDA", "when_to_use": "General marketing", "outline": ["Attention", "Interest", "Desire", "Action"]},
+                    {"name": "4P", "when_to_use": "Product promotion", "outline": ["Picture", "Promise", "Prove", "Push"]}
+                ],
                 "writing_guidance": {
-                    "fears": "",
-                    "desires": "",
-                    "dreams": "",
-                    "aspirations": ""
+                    "fears": "Address concerns with empathy",
+                    "desires": "Highlight benefits and outcomes",
+                    "dreams": "Connect with aspirations",
+                    "aspirations": "Show path to success"
                 },
                 "tone_style_rules": {
-                    "reading_level": "",
-                    "formality": "",
-                    "lexicon_use": [],
-                    "lexicon_avoid": [],
-                    "voice": "",
-                    "cadence": ""
+                    "reading_level": "High school",
+                    "formality": "Professional but approachable",
+                    "lexicon_use": ["innovative", "solutions", "results"],
+                    "lexicon_avoid": ["jargon", "complex terms"],
+                    "voice": "Authoritative yet friendly",
+                    "cadence": "Clear and concise"
                 },
-                "objection_bank": [],
-                "hook_bank": [],
-                "cta_bank": [],
+                "objection_bank": [
+                    {"objection": "It's too expensive", "reframe": "Investment in your future", "proof": "ROI data", "risk_reversal": "Money-back guarantee"}
+                ],
+                "hook_bank": [
+                    {"text": "Transform your business today", "tag": "desire", "awareness_stage": "solution"}
+                ],
+                "cta_bank": [
+                    {"text": "Get Started Now", "friction_level": "low"},
+                    {"text": "Schedule a Consultation", "friction_level": "medium"}
+                ],
                 "channel_adaptation": {
-                    "whatsapp": "",
-                    "instagram": "",
-                    "linkedin": "",
-                    "landing_page": "",
-                    "radio_ooh": ""
+                    "whatsapp": "Personal, conversational tone",
+                    "instagram": "Visual, engaging content",
+                    "linkedin": "Professional, thought leadership",
+                    "landing_page": "Clear value proposition",
+                    "radio_ooh": "Memorable, action-oriented"
                 },
-                "asset_recipe": [],
+                "asset_recipe": [
+                    "Define target audience",
+                    "Create compelling headlines",
+                    "Develop supporting content",
+                    "Add clear CTAs",
+                    "Test and optimize"
+                ],
                 "measurement": {
-                    "metrics": [],
-                    "ab_tests": [],
-                    "iteration_rules": []
+                    "metrics": ["Conversion rate", "Engagement rate", "Click-through rate"],
+                    "ab_tests": ["Headline variations", "CTA button colors"],
+                    "iteration_rules": ["Test one variable at a time", "Run tests for statistical significance"]
                 }
             }
+        
+        print("Copywriting framework generation completed.")
 
         # ================================== Prepare results object  ==================================
 
@@ -1579,9 +1681,12 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
         }
         
         # Save to database
+        print("Saving brand assets to database...")
         db.create_brand_assets(brandId, userId, results["full_brand_identity"], results["social_media_content"], results["premium_assets"])
         
-        
+        print("✅ Full brand generation completed successfully!")
+        print(f"Generated assets for brand ID: {brandId}")
+        print(f"User ID: {userId}")
         
         return results
     except Exception as e:

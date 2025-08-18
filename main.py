@@ -41,118 +41,288 @@ def remove_emojis(text):
     return emoji_pattern.sub(r'', text)
 
 class BrandPDF(FPDF):
+    def __init__(self):
+        super().__init__()
+        self.set_auto_page_break(auto=True, margin=15)
+        self.set_margins(20, 20, 20)
+        
+        # Add fonts first before setting them
+        self.add_font('DejaVu', '', UNICODE_FONT_PATH)
+        self.add_font('DejaVu', 'B', UNICODE_FONT_BOLD_PATH)
+        self.add_font('DejaVu', 'I', UNICODE_FONT_ITALIC_PATH)
+        self.add_font('DejaVu', 'BI', UNICODE_FONT_BOLD_ITALIC_PATH)
+        
+        # Now set the default font
+        self.set_font('DejaVu', '', 12)
+        
     def header(self):
-        pass
+        # Add header with page number
+        self.set_font('DejaVu', '', 8)
+        self.set_text_color(128, 128, 128)
+        self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'R')
+        self.ln(15)
+        
+    def footer(self):
+        # Add footer
+        self.set_y(-15)
+        self.set_font('DejaVu', '', 8)
+        self.set_text_color(128, 128, 128)
+        self.cell(0, 10, 'Brand Style Guide', 0, 0, 'C')
+        
     def hex_to_rgb(self, hex_color):
         hex_color = hex_color.lstrip('#')
         return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
     
     def add_cover(self, brand_name, brand_tagline, primary_colors=None, secondary_colors=None):
         self.add_page()
-        # Gradient background (vertical from primary to secondary)
+        
+        # Get primary color for styling
         hex_primary = primary_colors[0].get('hex_value', '#1E90FF') if primary_colors else '#1E90FF'
-        hex_secondary = secondary_colors[0].get('hex_value', '#0099CC') if secondary_colors else '#0099CC'
-        r1, g1, b1 = int(hex_primary[1:3], 16), int(hex_primary[3:5], 16), int(hex_primary[5:7], 16)
-        r2, g2, b2 = int(hex_secondary[1:3], 16), int(hex_secondary[3:5], 16), int(hex_secondary[5:7], 16)
-        steps = 20
-        for i in range(steps):
-            r = int(r1 + (r2 - r1) * i / steps)
-            g = int(g1 + (g2 - g1) * i / steps)
-            b = int(b1 + (b2 - b1) * i / steps)
-            self.set_fill_color(r, g, b)
-            y = i * (self.h / steps)
-            self.rect(0, y, self.w, self.h / steps + 1, style='F')
-        # Fonts
-        self.add_font('DejaVu', '', UNICODE_FONT_PATH)
-        self.add_font('DejaVu', 'B', UNICODE_FONT_BOLD_PATH)
-        self.add_font('DejaVu', 'I', UNICODE_FONT_ITALIC_PATH)
-        self.add_font('DejaVu', 'BI', UNICODE_FONT_BOLD_ITALIC_PATH)
-        # Centered 'Brand Blueprint'
-        self.set_text_color(255, 255, 255)
-        self.set_font('DejaVu', '', 20)
-        self.set_y(self.h * 0.25)
-        self.cell(0, 10, 'Brand Blueprint', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
-        # White underline
-        y_underline = self.get_y() + 0.4
-        self.set_draw_color(255, 255, 255)
-        self.set_line_width(0.7)
-        self.line(self.w * 0.37, y_underline, self.w * 0.638, y_underline)
-        # 'For: {brand_name}'
-        self.set_y(y_underline + 8)
-        self.set_font('DejaVu', 'B', 28)
-        self.cell(0, 14, f'{brand_name}', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
-        # Tagline (italic, smaller, white)
-        self.set_y(self.get_y() + 2)
-        self.set_font('DejaVu', 'I', 14)
-        self.set_text_color(255, 255, 255)
-        self.cell(0, 12, f'"{brand_tagline}"', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+        primary_rgb = self.hex_to_rgb(hex_primary)
+        
+        # Create a modern cover design
+        # Top accent bar
+        self.set_fill_color(*primary_rgb)
+        self.rect(0, 0, self.w, 40, style='F')
+        
+        # Main content area
+        self.set_y(60)
+        
+        # Brand Style Guide title
+        self.set_font('DejaVu', 'B', 36)
+        self.set_text_color(*primary_rgb)
+        self.cell(0, 20, '', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+        self.cell(0, 20, 'BRAND GUIDE', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+        
+        # Brand name
+        self.set_y(140)
+        self.set_font('DejaVu', 'B', 24)
+        self.set_text_color(50, 50, 50)
+        self.cell(0, 15, brand_name.upper(), new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+        
+        # Tagline
+        if brand_tagline:
+            self.set_font('DejaVu', 'I', 14)
+            self.set_text_color(100, 100, 100)
+            self.cell(0, 10, f'"{brand_tagline}"', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+        
+        # Date
+        self.set_y(200)
+        self.set_font('DejaVu', '', 10)
+        self.set_text_color(150, 150, 150)
+        from datetime import datetime
+        self.cell(0, 10, f'Generated on {datetime.now().strftime("%B %d, %Y")}', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+        
+        # Bottom accent
+        self.set_y(self.h - 60)
+        self.set_fill_color(*primary_rgb)
+        self.rect(0, self.h - 60, self.w, 60, style='F')
+        
         self.set_text_color(0, 0, 0)
 
     def add_section_title(self, title, emphasize=False, color=None):
-       self.add_font('DejaVu', 'B', UNICODE_FONT_PATH)
-       self.set_font('DejaVu', 'B', 18)
-       if color:
-        self.set_text_color(*color)
-       else:
-        self.set_text_color(40, 40, 120) if emphasize else self.set_text_color(0, 0, 0)
-       self.cell(0, 12, remove_emojis(title), new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
-       self.set_text_color(0, 0, 0)
-       self.ln(4)
-       self.set_y(self.get_y() + 10)
+        # Add page break for new sections
+        self.add_page()
+        
+        # Section number (dynamic counter)
+        if not hasattr(self, '_section_counter'):
+            self._section_counter = 0
+        self._section_counter += 1
+        section_number = f"{self._section_counter:02d}"
+        
+        # Section title with modern styling
+        self.set_font('DejaVu', 'B', 24)
+        if color:
+            self.set_text_color(*color)
+        else:
+            self.set_text_color(50, 50, 50)
+        
+        # Add section number
+        self.set_font('DejaVu', '', 12)
+        self.set_text_color(150, 150, 150)
+        self.cell(0, 8, f'SECTION {section_number}', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='L')
+        
+        # Main title
+        self.set_font('DejaVu', 'B', 24)
+        if color:
+            self.set_text_color(*color)
+        else:
+            self.set_text_color(50, 50, 50)
+        self.cell(0, 15, remove_emojis(title).upper(), new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='L')
+        
+        # Underline
+        self.set_draw_color(200, 200, 200)
+        self.set_line_width(0.5)
+        self.line(self.l_margin, self.get_y(), self.w - self.r_margin, self.get_y())
+        
+        self.ln(15)
+        self.set_text_color(0, 0, 0)
 
     def add_sub_section_title(self, title, emphasize=False):
-        self.add_font('DejaVu', 'B', UNICODE_FONT_BOLD_PATH)
-        self.set_font('DejaVu', 'B', 18 if emphasize else 14)
-        self.set_text_color(40, 40, 120) if emphasize else self.set_text_color(0, 0, 0)
-        self.cell(0, 12, remove_emojis(title), new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='L')
+        self.ln(10)
+        self.set_font('DejaVu', 'B', 16 if emphasize else 14)
+        self.set_text_color(70, 70, 70)
+        self.cell(0, 10, remove_emojis(title), new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='L')
+        
+        # Small accent line
+        self.set_draw_color(220, 220, 220)
+        self.set_line_width(0.3)
+        self.line(self.l_margin, self.get_y(), self.l_margin + 30, self.get_y())
+        
+        self.ln(8)
         self.set_text_color(0, 0, 0)
-        self.ln(4)
-        self.set_y(self.get_y() + 4)
 
     def add_key_value(self, key, value, emphasize=False):
-        self.add_font('DejaVu', '', UNICODE_FONT_PATH)
-        self.set_font('DejaVu', 'B', 12 if emphasize else 11)
-        self.set_fill_color(230, 230, 230)  # Light gray
-        import re
-        value_str = str(value).strip()
-        value_str = re.sub(r'\n+', '\n', value_str)
-        self.set_font('DejaVu', 'B', 12)
-        # Estimate lines for value
-        cell_width = self.w - self.l_margin - self.r_margin
-        lines = 0
-        for paragraph in value_str.split('\n'):
-            if not paragraph:
-                lines += 1
-                continue
-            string_width = self.get_string_width(remove_emojis(paragraph))
-            lines += max(1, int(string_width / cell_width) + 1)
-        key_height = 8
-        gap_height = 3
-        value_height = lines * 6  # 6 is the height used in multi_cell
-        total_height = key_height + gap_height + value_height + 6  # 6 for bottom ln
-        if self.get_y() + total_height > self.h - self.b_margin:
+        # Check if we need a page break
+        if self.get_y() > self.h - 50:
             self.add_page()
-        self.cell(0, 8, remove_emojis(f"{key}"), new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
-        self.ln(3)
-        self.set_font('DejaVu', '', 12)
-        self.multi_cell(0, 6, remove_emojis(value_str))
-        self.ln(6)
+        
+        # Key styling
+        self.set_font('DejaVu', 'B', 12 if emphasize else 11)
+        self.set_text_color(50, 50, 50)
+        
+        # Create a modern key-value layout
+        key_width = 60
+        value_width = self.w - self.l_margin - self.r_margin - key_width - 10
+        
+        # Key with background
+        self.set_fill_color(245, 245, 245)
+        self.cell(key_width, 8, remove_emojis(f"{key}"), border=0, fill=True, align='L')
+        
+        # Value
+        self.set_font('DejaVu', '', 11)
+        self.set_text_color(80, 80, 80)
+        self.set_fill_color(255, 255, 255)
+        
+        value_str = str(value).strip()
+        import re
+        value_str = re.sub(r'\n+', '\n', value_str)
+        
+        # Handle multi-line values
+        if '\n' in value_str or len(value_str) > 80:
+            self.cell(0, 8, '', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            self.multi_cell(0, 6, remove_emojis(value_str))
+        else:
+            self.cell(value_width, 8, remove_emojis(value_str), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        
+        self.ln(8)
+        self.set_text_color(0, 0, 0)
 
     def add_color_palette(self, colors, title):
-        self.add_section_title(title)
-        for color in colors:
+        self.add_sub_section_title(title)
+        
+        # Create a modern color palette layout
+        colors_per_row = 2
+        color_box_size = 40
+        spacing = 20
+        
+        for i, color in enumerate(colors):
+            if i % colors_per_row == 0:
+                self.ln(5)
+            
             hex_val = color.get('hex_value', '#000000')
+            color_name = color.get('color_name', '')
+            description = color.get('description', '')
+            
             try:
                 r = int(hex_val[1:3], 16)
                 g = int(hex_val[3:5], 16)
                 b = int(hex_val[5:7], 16)
             except Exception:
                 r, g, b = 0, 0, 0
+            
+            # Calculate position
+            x_pos = self.l_margin + (i % colors_per_row) * (color_box_size + spacing + 80)
+            y_pos = self.get_y()
+            
+            # Color box
             self.set_fill_color(r, g, b)
-            self.cell(20, 10, '', 0, 0, '', True)
-            self.set_font('DejaVu', '', 12)
-            self.cell(0, 10, remove_emojis(f"{color.get('color_name', '')} ({hex_val}) - {color.get('description', '')}"), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-        self.ln(2)
+            self.rect(x_pos, y_pos, color_box_size, color_box_size, style='F')
+            
+            # Color info
+            self.set_xy(x_pos + color_box_size + 10, y_pos)
+            self.set_font('DejaVu', 'B', 11)
+            self.set_text_color(50, 50, 50)
+            self.cell(70, 6, color_name, new_x=XPos.RIGHT, new_y=YPos.TOP)
+            
+            self.set_font('DejaVu', '', 10)
+            self.set_text_color(100, 100, 100)
+            self.cell(70, 6, hex_val, new_x=XPos.RIGHT, new_y=YPos.TOP)
+            
+            # Description
+            if description:
+                self.set_font('DejaVu', '', 9)
+                self.set_text_color(150, 150, 150)
+                self.multi_cell(70, 4, description)
+            
+            # Move to next row if needed
+            if (i + 1) % colors_per_row == 0:
+                self.ln(color_box_size + 10)
+        
+        self.ln(10)
+
+    def add_info_box(self, title, content, color=None):
+        """Add a modern info box for important information"""
+        if color is None:
+            color = (240, 248, 255)  # Light blue default
+        
+        # Box background
+        self.set_fill_color(*color)
+        self.rect(self.l_margin, self.get_y(), self.w - self.l_margin - self.r_margin, 0, style='F')
+        
+        # Title
+        self.set_font('DejaVu', 'B', 12)
+        self.set_text_color(50, 50, 50)
+        self.cell(0, 8, title, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='L')
+        
+        # Content
+        self.set_font('DejaVu', '', 10)
+        self.set_text_color(80, 80, 80)
+        self.multi_cell(0, 6, content)
+        
+        self.ln(8)
+
+    def add_application_image(self, image_url, image_name):
+        """Add an application image (business card, letterhead, etc.) with proper margin handling"""
+        if image_url and not image_url.startswith('Error:'):
+            try:
+                response = requests.get(image_url)
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
+                    tmp_img.write(response.content)
+                    tmp_img.flush()
+                    tmp_img_path = tmp_img.name
+                
+                # Calculate optimal size while maintaining aspect ratio and respecting margins
+                from PIL import Image
+                with Image.open(tmp_img_path) as img:
+                    img_width, img_height = img.size
+                    aspect_ratio = img_width / img_height
+                    
+                    # Calculate available space within margins
+                    available_width = self.w - self.l_margin - self.r_margin
+                    available_height = self.h - self.t_margin - self.b_margin - 80  # Leave space for title and spacing
+                    
+                    # Calculate maximum size that fits within margins
+                    if aspect_ratio > (available_width / available_height):
+                        # Image is wider than available space, fit to width
+                        display_width = available_width
+                        display_height = available_width / aspect_ratio
+                    else:
+                        # Image is taller than available space, fit to height
+                        display_height = available_height
+                        display_width = available_height * aspect_ratio
+                    
+                    # Center the image horizontally within margins
+                    x = self.l_margin + (available_width - display_width) / 2
+                    y = self.get_y() + 20  # Add some spacing after title
+                    
+                    self.image(tmp_img_path, x=x, y=y, w=display_width, h=display_height)
+                
+                os.remove(tmp_img_path)
+                
+            except Exception as e:
+                print(f"Error loading {image_name} image: {e}")
+                self.add_key_value("Error", f"{image_name} image could not be loaded")
 
     def add_logo_images(self, logos):
         self.add_sub_section_title("Logos")
@@ -176,21 +346,84 @@ class BrandPDF(FPDF):
             self.multi_cell(0, 8, remove_emojis(logo.get('description', '')))
             self.ln(4)
 
+    def add_brand_logo(self, logo_url, brand_name=""):
+        """Add the main brand logo from the brand field"""
+        self.add_sub_section_title("Brand Logo")
+        
+        if logo_url and logo_url.strip():
+            try:
+                response = requests.get(logo_url)
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp_img:
+                    tmp_img.write(response.content)
+                    tmp_img.flush()
+                    tmp_img_path = tmp_img.name
+                
+                # Create a centered logo display with background
+                logo_width = min(self.w - self.l_margin - self.r_margin - 40, 120)  # Max 120mm width
+                
+                # Add background box for logo
+                self.set_fill_color(250, 250, 250)
+                self.rect(self.l_margin, self.get_y(), self.w - self.l_margin - self.r_margin, logo_width + 20, style='F')
+                
+                # Center the logo
+                x_pos = (self.w - logo_width) / 2
+                y_pos = self.get_y() + 10
+                
+                self.image(tmp_img_path, x=x_pos, y=y_pos, w=logo_width)
+                os.remove(tmp_img_path)
+                
+                # Logo information
+                self.set_y(y_pos + logo_width + 15)
+                self.set_font('DejaVu', 'B', 12)
+                self.set_text_color(50, 50, 50)
+                self.cell(0, 8, f"{brand_name} Official Logo", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+                
+                self.set_font('DejaVu', '', 10)
+                self.set_text_color(100, 100, 100)
+                self.multi_cell(0, 6, "This is the official brand logo for use across all brand materials, marketing collateral, and digital platforms.", align='C')
+                
+                self.ln(10)
+                
+            except Exception as e:
+                print(f"Error loading brand logo {logo_url}: {e}")
+                self.set_font('DejaVu', '', 10)
+                self.set_text_color(150, 150, 150)
+                self.cell(0, 8, '[Brand logo could not be loaded]', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+                self.ln(2)
+                self.multi_cell(0, 6, f"Logo URL: {logo_url}", align='C')
+                self.ln(4)
+        else:
+            self.set_font('DejaVu', '', 10)
+            self.set_text_color(150, 150, 150)
+            self.cell(0, 8, 'No brand logo available', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+            self.ln(4)
+
     def add_typography(self, typography):
         self.add_sub_section_title("Typography")
         import os
         font_dir = FONT_DIR
+        
         for font in typography:
+            # Check if we need a page break
+            if self.get_y() > self.h - 80:
+                self.add_page()
+            
             font_family = font.get('font_family', 'DejaVu')
             font_weight = font.get('font_weight', '').lower()
             font_size = font.get('font_size', '16px')
+            
+            # Parse and limit font size to prevent overflow
             font_size_num = 16
             try:
                 font_size_num = int(''.join([c for c in font_size if c.isdigit()]))
+                # Limit font size to prevent overflow (max 24pt for display)
+                font_size_num = min(font_size_num, 24)
             except Exception:
                 font_size_num = 16
+            
             line_height = font.get('line_height', '')
             description = font.get('description', '')
+            
             # Try to register the font if available
             font_file = None
             font_style = ''
@@ -200,35 +433,72 @@ class BrandPDF(FPDF):
                 font_style = 'I'
             elif font_weight in ['bolditalic', 'bi', 'ib']:
                 font_style = 'BI'
+            
             # Try to find a matching font file in fonts dir
             font_file_candidates = [
                 os.path.join(font_dir, f"{font_family.replace(' ', '')}-{font_style}.ttf"),
                 os.path.join(font_dir, f"{font_family.replace(' ', '')}.ttf"),
                 os.path.join(font_dir, f"{font_family}.ttf"),
             ]
+            
             for candidate in font_file_candidates:
                 if os.path.exists(candidate):
                     font_file = candidate
                     break
+            
+            # Create a modern typography display
+            # Font name header
+            self.set_font('DejaVu', 'B', 14)
+            self.set_text_color(50, 50, 50)
+            self.cell(0, 10, f"{font_family} {font_weight.title()}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            
+            # Sample text with the actual font (if available)
+            sample_text = "The quick brown fox jumps over the lazy dog. 1234567890"
+            
+            # Check if we have enough space for the sample text
+            sample_height = font_size_num * 0.4 + 10  # Sample text height + margin
+            if self.get_y() + sample_height > self.h - 60:
+                self.add_page()
+            
             if font_file:
                 try:
                     self.add_font(font_family, font_style, font_file)
+                    self.set_font(font_family, font_style, font_size_num)
+                    self.set_text_color(80, 80, 80)
+                    self.cell(0, font_size_num * 0.4, sample_text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                    self.ln(2)  # Add small spacing after sample text
                 except Exception:
-                    pass
-                self.set_font(font_family, font_style, font_size_num)
+                    # Fallback to DejaVu
+                    self.set_font('DejaVu', font_style, font_size_num)
+                    self.set_text_color(80, 80, 80)
+                    self.cell(0, font_size_num * 0.4, sample_text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                    self.ln(2)  # Add small spacing after sample text
             else:
                 # Fallback to DejaVu
                 self.set_font('DejaVu', font_style, font_size_num)
-            # Font name in its style
-            self.cell(0, 10, f"{font_family} {font_weight.title()}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-            # Sample text
-            sample_text = "The quick brown fox jumps over the lazy dog. 1234567890"
-            self.cell(0, 10, sample_text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                self.set_text_color(80, 80, 80)
+                self.cell(0, font_size_num * 0.4, sample_text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                self.ln(2)  # Add small spacing after sample text
+            
             # Font details
-            self.set_font('DejaVu', '', 11)
-            self.cell(0, 8, f"Size: {font_size}   |   Line Height: {line_height}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-            self.multi_cell(0, 8, remove_emojis(description))
-            self.ln(4)
+            self.set_font('DejaVu', '', 10)
+            self.set_text_color(100, 100, 100)
+            self.cell(0, 6, f"Size: {font_size}   |   Line Height: {line_height}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            self.ln(2)  # Add spacing after details
+            
+            # Description
+            if description:
+                self.set_font('DejaVu', '', 9)
+                self.set_text_color(150, 150, 150)
+                self.multi_cell(0, 5, remove_emojis(description))
+                self.ln(2)  # Add spacing after description
+            
+            # Add separator line between fonts
+            self.set_draw_color(220, 220, 220)
+            self.set_line_width(0.2)
+            self.line(self.l_margin, self.get_y(), self.w - self.r_margin, self.get_y())
+            
+            self.ln(10)  # Add more spacing between font samples
 
     def add_content_calendar(self, calendar_entries, max_entries=5):
         self.add_section_title("Content Calendar Sample")
@@ -1028,6 +1298,34 @@ def get_final_results():
         website = data.get('website', '')
         brand_logo = data.get('brandLogo', '')
         others = data.get('others', {})
+        custom_colors = data.get('customColors', None)
+        
+        # Validate custom colors format if provided
+        if custom_colors is not None:
+            if not isinstance(custom_colors, dict):
+                return jsonify({
+                    'success': False,
+                    'message': 'customColors must be a dictionary object',
+                    'results': None
+                }), 400
+            
+            # Validate color structure
+            valid_color_keys = ['primary_colors', 'secondary_colors', 'brand_colors']
+            for key in custom_colors.keys():
+                if key not in valid_color_keys:
+                    return jsonify({
+                        'success': False,
+                        'message': f'Invalid color key: {key}. Valid keys are: {", ".join(valid_color_keys)}',
+                        'results': None
+                    }), 400
+                
+                # Validate that color values are lists
+                if not isinstance(custom_colors[key], list):
+                    return jsonify({
+                        'success': False,
+                        'message': f'Color values must be lists. {key} is not a list.',
+                        'results': None
+                    }), 400
         
         # Verify the brand belongs to the user
         brand = db.get_brand(brand_id)
@@ -1050,7 +1348,8 @@ def get_final_results():
             registration_number, 
             website, 
             brand_logo, 
-            others
+            others,
+            custom_colors
         )
         
         if response and 'error' in response:
@@ -1339,10 +1638,39 @@ def download_brand_pdf(brandId):
 
     primary_colors = brand_identity.get('primary_colors') if brand_identity else None
     secondary_colors = brand_identity.get('secondary_colors') if brand_identity else None
-    logos = brand_identity.get('logos') if brand_identity else None
+    brand_logo_url = brand.get('logo', '')  # Get logo from brand field
     pdf = BrandPDF()
     pdf.add_cover(brand_name, brand_tagline, primary_colors, secondary_colors)
-    pdf.add_page()  # Start all other content on a new page after the cover
+    
+    # Add table of contents
+    pdf.add_page()
+    pdf.set_font('DejaVu', 'B', 24)
+    pdf.set_text_color(50, 50, 50)
+    pdf.cell(0, 15, 'TABLE OF CONTENTS', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+    pdf.ln(20)
+    
+    # TOC items
+    toc_items = [
+        "Brand Communication",
+        "Brand Strategy", 
+        "Brand Identity",
+        "Color Palette",
+        "Typography",
+        "Brand Logo",
+        "Brand Guidelines",
+        "Digital Specifications",
+        "Brand Applications",
+        "Social Media Content"
+    ]
+    
+    pdf.set_font('DejaVu', '', 12)
+    for i, item in enumerate(toc_items, 1):
+        pdf.set_text_color(70, 70, 70)
+        pdf.cell(0, 8, f"{i:02d}. {item}", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='L')
+        pdf.ln(2)
+    
+    pdf.ln(20)
+    
     primary_hex = None
     if primary_colors and isinstance(primary_colors, list) and len(primary_colors) > 0:
      primary_hex = primary_colors[0].get('hex_value', '#1E90FF')
@@ -1352,8 +1680,18 @@ def download_brand_pdf(brandId):
     # Brand Communication Section
     if brand_communication:
         pdf.add_section_title("Brand Communication", True, primary_rgb)
+        
+        # Brand overview info box
+        brand_name = brand_communication.get('brand_name', '')
+        brand_tagline = brand_communication.get('brand_tagline', '')
+        
+        if brand_name or brand_tagline:
+            overview_content = f"Brand: {brand_name}\nTagline: {brand_tagline}"
+            pdf.add_info_box("Brand Overview", overview_content, (248, 250, 252))
+        
         pdf.add_key_value("Brand Name", brand_communication.get('brand_name', ''), True)
         pdf.add_key_value("Brand Tagline", brand_communication.get('brand_tagline', ''), True)
+        
         pcm = brand_communication.get('primary_core_message', {})
         if pcm:
             pdf.add_sub_section_title("Primary Core Message")
@@ -1365,7 +1703,7 @@ def download_brand_pdf(brandId):
 
     # Brand Strategy Section
     if brand_strategy:
-        pdf.add_page()
+        
         pdf.add_section_title("Brand Strategy", True, primary_rgb)
         bs = brand_strategy.get('brand_substance', {})
         if bs:
@@ -1415,98 +1753,97 @@ def download_brand_pdf(brandId):
             pdf.add_key_value("Positioning Statement", wmd.get('positioning_statement', ''), True)
             pdf.add_key_value("The Difference We Provide", wmd.get('the_difference_we_provide', ''))
         
-        # Business Strategy Section (from brand_assets)
-        if brand_assets and brand_assets.get('premium_assets', {}).get('business_strategy'):
-            business_strategy = brand_assets['premium_assets']['business_strategy']
-            pdf.add_page()
-            pdf.add_section_title("Business Strategy", True, primary_rgb)
+        # # Business Strategy Section (from brand_assets)
+        # if brand_assets and brand_assets.get('premium_assets', {}).get('business_strategy'):
+        #     business_strategy = brand_assets['premium_assets']['business_strategy']
+        #     pdf.add_page()
+        #     pdf.add_section_title("Business Strategy", True, primary_rgb)
             
-            # Market Positioning
-            if business_strategy.get('market_positioning'):
-                positioning = business_strategy['market_positioning']
-                pdf.add_sub_section_title("Market Positioning", True)
-                for key, value in positioning.items():
-                    if isinstance(value, list):
-                        pdf.add_key_value(key.replace('_', ' ').title(), ', '.join(value), True)
-                    else:
-                        pdf.add_key_value(key.replace('_', ' ').title(), str(value), True)
+        #     # Market Positioning
+        #     if business_strategy.get('market_positioning'):
+        #         positioning = business_strategy['market_positioning']
+        #         pdf.add_sub_section_title("Market Positioning", True)
+        #         for key, value in positioning.items():
+        #             if isinstance(value, list):
+        #                 pdf.add_key_value(key.replace('_', ' ').title(), ', '.join(value), True)
+        #             else:
+        #                 pdf.add_key_value(key.replace('_', ' ').title(), str(value), True)
             
-            # SWOT Analysis
-            if business_strategy.get('swot_analysis'):
-                swot = business_strategy['swot_analysis']
-                pdf.add_sub_section_title("SWOT Analysis", True)
-                for category, items in swot.items():
-                    if isinstance(items, list):
-                        pdf.add_key_value(category.title(), ', '.join(items), True)
-                    else:
-                        pdf.add_key_value(category.title(), str(items), True)
+        #     # SWOT Analysis
+        #     if business_strategy.get('swot_analysis'):
+        #         swot = business_strategy['swot_analysis']
+        #         pdf.add_sub_section_title("SWOT Analysis", True)
+        #         for category, items in swot.items():
+        #             if isinstance(items, list):
+        #                 pdf.add_key_value(category.title(), ', '.join(items), True)
+        #             else:
+        #                 pdf.add_key_value(category.title(), str(items), True)
             
-            # Target Audience Profiles
-            if business_strategy.get('target_audience_profiles'):
-                profiles = business_strategy['target_audience_profiles']
-                pdf.add_sub_section_title("Target Audience Profiles", True)
-                for i, profile in enumerate(profiles):
-                    if isinstance(profile, dict):
-                        pdf.add_key_value(f"Persona {i+1}: {profile.get('persona_name', 'Unknown')}", 
-                                        f"Demographics: {profile.get('demographics', 'N/A')} | "
-                                        f"Motivations: {', '.join(profile.get('motivations', []))} | "
-                                        f"Pain Points: {', '.join(profile.get('pain_points', []))}", True)
+        #     # Target Audience Profiles
+        #     if business_strategy.get('target_audience_profiles'):
+        #         profiles = business_strategy['target_audience_profiles']
+        #         pdf.add_sub_section_title("Target Audience Profiles", True)
+        #         for i, profile in enumerate(profiles):
+        #             if isinstance(profile, dict):
+        #                 pdf.add_key_value(f"Persona {i+1}: {profile.get('persona_name', 'Unknown')}", 
+        #                                 f"Demographics: {profile.get('demographics', 'N/A')} | "
+        #                                 f"Motivations: {', '.join(profile.get('motivations', []))} | "
+        #                                 f"Pain Points: {', '.join(profile.get('pain_points', []))}", True)
             
-            # Competitive Analysis
-            if business_strategy.get('competitive_analysis'):
-                competitors = business_strategy['competitive_analysis']
-                pdf.add_sub_section_title("Competitive Analysis", True)
-                for i, competitor in enumerate(competitors):
-                    if isinstance(competitor, dict):
-                        comp_name = competitor.get('competitor_name', f'Competitor {i+1}')
-                        strengths = ', '.join(competitor.get('strengths', []))
-                        weaknesses = ', '.join(competitor.get('weaknesses', []))
-                        pdf.add_key_value(f"{comp_name} - Strengths", strengths, True)
-                        pdf.add_key_value(f"{comp_name} - Weaknesses", weaknesses, True)
+        #     # Competitive Analysis
+        #     if business_strategy.get('competitive_analysis'):
+        #         competitors = business_strategy['competitive_analysis']
+        #         pdf.add_sub_section_title("Competitive Analysis", True)
+        #         for i, competitor in enumerate(competitors):
+        #             if isinstance(competitor, dict):
+        #                 comp_name = competitor.get('competitor_name', f'Competitor {i+1}')
+        #                 strengths = ', '.join(competitor.get('strengths', []))
+        #                 weaknesses = ', '.join(competitor.get('weaknesses', []))
+        #                 pdf.add_key_value(f"{comp_name} - Strengths", strengths, True)
+        #                 pdf.add_key_value(f"{comp_name} - Weaknesses", weaknesses, True)
         
-        # Implementation Roadmap Section (from brand_assets)
-        if brand_assets and brand_assets.get('premium_assets', {}).get('implementation_roadmap'):
-            roadmap = brand_assets['premium_assets']['implementation_roadmap']
-            pdf.add_page()
-            pdf.add_section_title("Implementation Roadmap", True, primary_rgb)
+        # # Implementation Roadmap Section (from brand_assets)
+        # if brand_assets and brand_assets.get('premium_assets', {}).get('implementation_roadmap'):
+        #     roadmap = brand_assets['premium_assets']['implementation_roadmap']
+        #     pdf.add_page()
+        #     pdf.add_section_title("Implementation Roadmap", True, primary_rgb)
             
-            # Launch Timeline
-            if roadmap.get('launch_timeline'):
-                timeline = roadmap['launch_timeline']
-                pdf.add_sub_section_title("Launch Timeline", True)
-                for phase in timeline:
-                    if isinstance(phase, dict):
-                        phase_name = phase.get('phase', 'Unknown Phase')
-                        duration = phase.get('duration', 'N/A')
-                        deliverables = ', '.join(phase.get('deliverables', []))
-                        pdf.add_key_value(f"{phase_name} ({duration})", deliverables, True)
+        #     # Launch Timeline
+        #     if roadmap.get('launch_timeline'):
+        #         timeline = roadmap['launch_timeline']
+        #         pdf.add_sub_section_title("Launch Timeline", True)
+        #         for phase in timeline:
+        #             if isinstance(phase, dict):
+        #                 phase_name = phase.get('phase', 'Unknown Phase')
+        #                 duration = phase.get('duration', 'N/A')
+        #                 deliverables = ', '.join(phase.get('deliverables', []))
+        #                 pdf.add_key_value(f"{phase_name} ({duration})", deliverables, True)
             
-            # Budget Estimates
-            if roadmap.get('budget_estimates'):
-                budgets = roadmap['budget_estimates']
-                pdf.add_sub_section_title("Budget Estimates", True)
-                for budget in budgets:
-                    if isinstance(budget, dict):
-                        category = budget.get('category', 'Unknown')
-                        cost = budget.get('estimated_cost', 'N/A')
-                        description = budget.get('description', '')
-                        pdf.add_key_value(f"{category} - {cost}", description, True)
+        #     # Budget Estimates
+        #     if roadmap.get('budget_estimates'):
+        #         budgets = roadmap['budget_estimates']
+        #         pdf.add_sub_section_title("Budget Estimates", True)
+        #         for budget in budgets:
+        #             if isinstance(budget, dict):
+        #                 category = budget.get('category', 'Unknown')
+        #                 cost = budget.get('estimated_cost', 'N/A')
+        #                 description = budget.get('description', '')
+        #                 pdf.add_key_value(f"{category} - {cost}", description, True)
             
-            # Quality Assurance
-            if roadmap.get('quality_assurance'):
-                qa = roadmap['quality_assurance']
-                pdf.add_sub_section_title("Quality Assurance", True)
-                for checkpoint in qa:
-                    if isinstance(checkpoint, dict):
-                        checkpoint_name = checkpoint.get('checkpoint', 'Unknown')
-                        criteria = ', '.join(checkpoint.get('criteria', []))
-                        metrics = ', '.join(checkpoint.get('success_metrics', []))
-                        pdf.add_key_value(f"{checkpoint_name} - Criteria", criteria, True)
-                        pdf.add_key_value(f"{checkpoint_name} - Success Metrics", metrics, True)
+        #     # Quality Assurance
+        #     if roadmap.get('quality_assurance'):
+        #         qa = roadmap['quality_assurance']
+        #         pdf.add_sub_section_title("Quality Assurance", True)
+        #         for checkpoint in qa:
+        #             if isinstance(checkpoint, dict):
+        #                 checkpoint_name = checkpoint.get('checkpoint', 'Unknown')
+        #                 criteria = ', '.join(checkpoint.get('criteria', []))
+        #                 metrics = ', '.join(checkpoint.get('success_metrics', []))
+        #                 pdf.add_key_value(f"{checkpoint_name} - Criteria", criteria, True)
+        #                 pdf.add_key_value(f"{checkpoint_name} - Success Metrics", metrics, True)
 
     # Brand Identity Section
     if brand_identity:
-        pdf.add_page()
         pdf.add_section_title("Brand Identity", True, primary_rgb)
         pdf.add_key_value("About The Brand", brand_identity.get('about_the_brand', ''), True)
         # If you want to use the new color section for primary colors:
@@ -1538,15 +1875,20 @@ def download_brand_pdf(brandId):
         pdf.add_page()
         if brand_identity.get('typography'):
             pdf.add_typography(brand_identity['typography'])
-        # Logos
+        # Brand Logo
         pdf.add_page()
-        if brand_identity.get('logos'):
-            pdf.add_logo_images(brand_identity['logos'])
+        if brand_logo_url:
+            pdf.add_brand_logo(brand_logo_url, brand_name)
+        else:
+            pdf.add_sub_section_title("Brand Logo")
+            pdf.set_font('DejaVu', '', 10)
+            pdf.cell(0, 8, 'No brand logo available', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            pdf.ln(4)
         
         # Brand Guidelines Section (from brand_assets)
         if brand_assets and brand_assets.get('premium_assets', {}).get('brand_guidelines'):
             guidelines = brand_assets['premium_assets']['brand_guidelines']
-            pdf.add_page()
+           
             pdf.add_section_title("Brand Guidelines", True, primary_rgb)
             
             # Brand Voice
@@ -1607,55 +1949,55 @@ def download_brand_pdf(brandId):
                         pdf.add_key_value(f"{element_name} ({priority})", guidelines_text, True)
         
         # Digital Specifications Section (from brand_assets)
-        if brand_assets and brand_assets.get('premium_assets', {}).get('digital_specifications'):
-            digital_specs = brand_assets['premium_assets']['digital_specifications']
-            pdf.add_page()
-            pdf.add_section_title("Digital Specifications", True, primary_rgb)
+        # if brand_assets and brand_assets.get('premium_assets', {}).get('digital_specifications'):
+        #     digital_specs = brand_assets['premium_assets']['digital_specifications']
+        #     pdf.add_page()
+        #     pdf.add_section_title("Digital Specifications", True, primary_rgb)
             
-            # Color Profiles
-            if digital_specs.get('color_profiles'):
-                profiles = digital_specs['color_profiles']
-                pdf.add_sub_section_title("Color Profiles", True)
-                for profile in profiles:
-                    if isinstance(profile, dict):
-                        profile_type = profile.get('profile_type', 'Unknown')
-                        color_values = profile.get('color_values', 'N/A')
-                        usage = profile.get('usage_context', 'N/A')
-                        pdf.add_key_value(f"{profile_type} Profile", f"{color_values} | {usage}", True)
+        #     # Color Profiles
+        #     if digital_specs.get('color_profiles'):
+        #         profiles = digital_specs['color_profiles']
+        #         pdf.add_sub_section_title("Color Profiles", True)
+        #         for profile in profiles:
+        #             if isinstance(profile, dict):
+        #                 profile_type = profile.get('profile_type', 'Unknown')
+        #                 color_values = profile.get('color_values', 'N/A')
+        #                 usage = profile.get('usage_context', 'N/A')
+        #                 pdf.add_key_value(f"{profile_type} Profile", f"{color_values} | {usage}", True)
             
-            # Digital Specifications
-            if digital_specs.get('digital_specifications'):
-                specs = digital_specs['digital_specifications']
-                pdf.add_sub_section_title("Platform Specifications", True)
-                for spec in specs:
-                    if isinstance(spec, dict):
-                        platform = spec.get('platform', 'Unknown')
-                        dimensions = spec.get('dimensions', 'N/A')
-                        format_type = spec.get('format', 'N/A')
-                        file_size = spec.get('file_size', 'N/A')
-                        pdf.add_key_value(f"{platform} ({dimensions})", f"Format: {format_type} | Size: {file_size}", True)
+        #     # Digital Specifications
+        #     if digital_specs.get('digital_specifications'):
+        #         specs = digital_specs['digital_specifications']
+        #         pdf.add_sub_section_title("Platform Specifications", True)
+        #         for spec in specs:
+        #             if isinstance(spec, dict):
+        #                 platform = spec.get('platform', 'Unknown')
+        #                 dimensions = spec.get('dimensions', 'N/A')
+        #                 format_type = spec.get('format', 'N/A')
+        #                 file_size = spec.get('file_size', 'N/A')
+        #                 pdf.add_key_value(f"{platform} ({dimensions})", f"Format: {format_type} | Size: {file_size}", True)
             
-            # File Format Guidelines
-            if digital_specs.get('file_format_guidelines'):
-                formats = digital_specs['file_format_guidelines']
-                pdf.add_sub_section_title("File Format Guidelines", True)
-                for format_guide in formats:
-                    if isinstance(format_guide, dict):
-                        format_type = format_guide.get('format', 'Unknown')
-                        use_case = format_guide.get('use_case', 'N/A')
-                        specs = format_guide.get('specifications', 'N/A')
-                        pdf.add_key_value(f"{format_type} Format", f"{use_case} | {specs}", True)
+        #     # File Format Guidelines
+        #     if digital_specs.get('file_format_guidelines'):
+        #         formats = digital_specs['file_format_guidelines']
+        #         pdf.add_sub_section_title("File Format Guidelines", True)
+        #         for format_guide in formats:
+        #             if isinstance(format_guide, dict):
+        #                 format_type = format_guide.get('format', 'Unknown')
+        #                 use_case = format_guide.get('use_case', 'N/A')
+        #                 specs = format_guide.get('specifications', 'N/A')
+        #                 pdf.add_key_value(f"{format_type} Format", f"{use_case} | {specs}", True)
             
-            # Print Specifications
-            if digital_specs.get('print_specifications'):
-                print_specs = digital_specs['print_specifications']
-                pdf.add_sub_section_title("Print Specifications", True)
-                for print_spec in print_specs:
-                    if isinstance(print_spec, dict):
-                        resolution = print_spec.get('resolution', 'N/A')
-                        color_mode = print_spec.get('color_mode', 'N/A')
-                        material = print_spec.get('material', 'N/A')
-                        pdf.add_key_value(f"Print Specs", f"Resolution: {resolution} | Color: {color_mode} | Material: {material}", True)
+        #     # Print Specifications
+        #     if digital_specs.get('print_specifications'):
+        #         print_specs = digital_specs['print_specifications']
+        #         pdf.add_sub_section_title("Print Specifications", True)
+        #         for print_spec in print_specs:
+        #             if isinstance(print_spec, dict):
+        #                 resolution = print_spec.get('resolution', 'N/A')
+        #                 color_mode = print_spec.get('color_mode', 'N/A')
+        #                 material = print_spec.get('material', 'N/A')
+        #                 pdf.add_key_value(f"Print Specs", f"Resolution: {resolution} | Color: {color_mode} | Material: {material}", True)
 
 
     # Brand Applications Section
@@ -1666,496 +2008,67 @@ def download_brand_pdf(brandId):
             business_cards = full_brand_identity.get('business_cards', [])
             if business_cards:
                 for i, card in enumerate(business_cards):
-                    pdf.add_page()
+                   
                     # Add title for business card
                     pdf.add_section_title("Business Card", True, primary_rgb)
                     image_url = card.get('image_url')
-                    if image_url and not image_url.startswith('Error:'):
-                        try:
-                            response = requests.get(image_url)
-                            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
-                                tmp_img.write(response.content)
-                                tmp_img.flush()
-                                tmp_img_path = tmp_img.name
-                            # Calculate optimal size while maintaining aspect ratio
-                            from PIL import Image
-                            with Image.open(tmp_img_path) as img:
-                                img_width, img_height = img.size
-                                aspect_ratio = img_width / img_height
-                                
-                                # Calculate maximum size that fits the page (accounting for title space)
-                                page_width = pdf.w
-                                page_height = pdf.h - 50  # Leave space for title
-                                page_aspect = page_width / page_height
-                                
-                                if aspect_ratio > page_aspect:
-                                    # Image is wider than page, fit to width
-                                    display_width = page_width
-                                    display_height = page_width / aspect_ratio
-                                    x = 0
-                                    y = 50 + (page_height - display_height) / 2  # Start below title
-                                else:
-                                    # Image is taller than page, fit to height
-                                    display_height = page_height
-                                    display_width = page_height * aspect_ratio
-                                    x = (page_width - display_width) / 2
-                                    y = 50  # Start below title
-                                
-                                pdf.image(tmp_img_path, x=x, y=y, w=display_width, h=display_height)
-                            os.remove(tmp_img_path)
-                        except Exception as e:
-                            print(f"Error loading business card image: {e}")
-                            pdf.add_key_value("Error", "Business card image could not be loaded")
+                    pdf.add_application_image(image_url, "Business Card")
             
             # Letterheads
             letterheads = full_brand_identity.get('letterheads', [])
             if letterheads:
                 for i, letterhead in enumerate(letterheads):
-                    pdf.add_page()
+                    
                     # Add title for letterhead
                     pdf.add_section_title("Letterhead", True, primary_rgb)
                     image_url = letterhead.get('image_url')
-                    if image_url and not image_url.startswith('Error:'):
-                        try:
-                            response = requests.get(image_url)
-                            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
-                                tmp_img.write(response.content)
-                                tmp_img.flush()
-                                tmp_img_path = tmp_img.name
-                            # Calculate optimal size while maintaining aspect ratio
-                            from PIL import Image
-                            with Image.open(tmp_img_path) as img:
-                                img_width, img_height = img.size
-                                aspect_ratio = img_width / img_height
-                                
-                                # Calculate maximum size that fits the page (accounting for title space)
-                                page_width = pdf.w
-                                page_height = pdf.h - 50  # Leave space for title
-                                page_aspect = page_width / page_height
-                                
-                                if aspect_ratio > page_aspect:
-                                    # Image is wider than page, fit to width
-                                    display_width = page_width
-                                    display_height = page_width / aspect_ratio
-                                    x = 0
-                                    y = 50 + (page_height - display_height) / 2  # Start below title
-                                else:
-                                    # Image is taller than page, fit to height
-                                    display_height = page_height
-                                    display_width = page_height * aspect_ratio
-                                    x = (page_width - display_width) / 2
-                                    y = 50  # Start below title
-                                
-                                pdf.image(tmp_img_path, x=x, y=y, w=display_width, h=display_height)
-                            os.remove(tmp_img_path)
-                        except Exception as e:
-                            print(f"Error loading letterhead image: {e}")
-                            pdf.add_key_value("Error", "Letterhead image could not be loaded")
+                    pdf.add_application_image(image_url, "Letterhead")
             
             # T-Shirt Mockups
             t_shirt_mockups = full_brand_identity.get('t_shirt_mockups', [])
             if t_shirt_mockups:
                 for i, tshirt in enumerate(t_shirt_mockups):
-                    pdf.add_page()
+                    
                     # Add title for t-shirt mockup
                     pdf.add_section_title("T-Shirt Mockup", True, primary_rgb)
                     image_url = tshirt.get('image_url')
-                    if image_url and not image_url.startswith('Error:'):
-                        try:
-                            response = requests.get(image_url)
-                            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
-                                tmp_img.write(response.content)
-                                tmp_img.flush()
-                                tmp_img_path = tmp_img.name
-                            # Calculate optimal size while maintaining aspect ratio
-                            from PIL import Image
-                            with Image.open(tmp_img_path) as img:
-                                img_width, img_height = img.size
-                                aspect_ratio = img_width / img_height
-                                
-                                # Calculate maximum size that fits the page (accounting for title space)
-                                page_width = pdf.w
-                                page_height = pdf.h - 50  # Leave space for title
-                                page_aspect = page_width / page_height
-                                
-                                if aspect_ratio > page_aspect:
-                                    # Image is wider than page, fit to width
-                                    display_width = page_width
-                                    display_height = page_width / aspect_ratio
-                                    x = 0
-                                    y = 50 + (page_height - display_height) / 2  # Start below title
-                                else:
-                                    # Image is taller than page, fit to height
-                                    display_height = page_height
-                                    display_width = page_height * aspect_ratio
-                                    x = (page_width - display_width) / 2
-                                    y = 50  # Start below title
-                                
-                                pdf.image(tmp_img_path, x=x, y=y, w=display_width, h=display_height)
-                            os.remove(tmp_img_path)
-                        except Exception as e:
-                            print(f"Error loading t-shirt mockup image: {e}")
-                            pdf.add_key_value("Error", "T-shirt mockup image could not be loaded")
+                    pdf.add_application_image(image_url, "T-Shirt Mockup")
             
             # Cap Mockups
             cap_mockups = full_brand_identity.get('cap_mockups', [])
             if cap_mockups:
                 for i, cap in enumerate(cap_mockups):
-                    pdf.add_page()
+                    
                     # Add title for cap mockup
                     pdf.add_section_title("Cap Mockup", True, primary_rgb)
                     image_url = cap.get('image_url')
-                    if image_url and not image_url.startswith('Error:'):
-                        try:
-                            response = requests.get(image_url)
-                            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
-                                tmp_img.write(response.content)
-                                tmp_img.flush()
-                                tmp_img_path = tmp_img.name
-                            # Calculate optimal size while maintaining aspect ratio
-                            from PIL import Image
-                            with Image.open(tmp_img_path) as img:
-                                img_width, img_height = img.size
-                                aspect_ratio = img_width / img_height
-                                
-                                # Calculate maximum size that fits the page (accounting for title space)
-                                page_width = pdf.w
-                                page_height = pdf.h - 50  # Leave space for title
-                                page_aspect = page_width / page_height
-                                
-                                if aspect_ratio > page_aspect:
-                                    # Image is wider than page, fit to width
-                                    display_width = page_width
-                                    display_height = page_width / aspect_ratio
-                                    x = 0
-                                    y = 50 + (page_height - display_height) / 2  # Start below title
-                                else:
-                                    # Image is taller than page, fit to height
-                                    display_height = page_height
-                                    display_width = page_height * aspect_ratio
-                                    x = (page_width - display_width) / 2
-                                    y = 50  # Start below title
-                                
-                                pdf.image(tmp_img_path, x=x, y=y, w=display_width, h=display_height)
-                            os.remove(tmp_img_path)
-                        except Exception as e:
-                            print(f"Error loading cap mockup image: {e}")
-                            pdf.add_key_value("Error", "Cap mockup image could not be loaded")
+                    pdf.add_application_image(image_url, "Cap Mockup")
             
             # Signboards
             signboards = full_brand_identity.get('signboards', [])
             if signboards:
                 for i, signboard in enumerate(signboards):
-                    pdf.add_page()
+                    
                     # Add title for signboard
                     pdf.add_section_title("Signboard", True, primary_rgb)
                     image_url = signboard.get('image_url')
-                    if image_url and not image_url.startswith('Error:'):
-                        try:
-                            response = requests.get(image_url)
-                            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
-                                tmp_img.write(response.content)
-                                tmp_img.flush()
-                                tmp_img_path = tmp_img.name
-                            # Calculate optimal size while maintaining aspect ratio
-                            from PIL import Image
-                            with Image.open(tmp_img_path) as img:
-                                img_width, img_height = img.size
-                                aspect_ratio = img_width / img_height
-                                
-                                # Calculate maximum size that fits the page (accounting for title space)
-                                page_width = pdf.w
-                                page_height = pdf.h - 50  # Leave space for title
-                                page_aspect = page_width / page_height
-                                
-                                if aspect_ratio > page_aspect:
-                                    # Image is wider than page, fit to width
-                                    display_width = page_width
-                                    display_height = page_width / aspect_ratio
-                                    x = 0
-                                    y = 50 + (page_height - display_height) / 2  # Start below title
-                                else:
-                                    # Image is taller than page, fit to height
-                                    display_height = page_height
-                                    display_width = page_height * aspect_ratio
-                                    x = (page_width - display_width) / 2
-                                    y = 50  # Start below title
-                                
-                                pdf.image(tmp_img_path, x=x, y=y, w=display_width, h=display_height)
-                            os.remove(tmp_img_path)
-                        except Exception as e:
-                            print(f"Error loading signboard image: {e}")
-                            pdf.add_key_value("Error", "Signboard image could not be loaded")
+                    pdf.add_application_image(image_url, "Signboard")
             
             # Brand Patterns
             brand_patterns = full_brand_identity.get('brand_patterns', [])
             if brand_patterns:
                 for i, pattern in enumerate(brand_patterns):
-                    pdf.add_page()
+                    
                     # Add title for brand pattern
                     pdf.add_section_title("Brand Pattern", True, primary_rgb)
                     image_url = pattern.get('image_url')
-                    if image_url and not image_url.startswith('Error:'):
-                        try:
-                            response = requests.get(image_url)
-                            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
-                                tmp_img.write(response.content)
-                                tmp_img.flush()
-                                tmp_img_path = tmp_img.name
-                            # Calculate optimal size while maintaining aspect ratio
-                            from PIL import Image
-                            with Image.open(tmp_img_path) as img:
-                                img_width, img_height = img.size
-                                aspect_ratio = img_width / img_height
-                                
-                                # Calculate maximum size that fits the page (accounting for title space)
-                                page_width = pdf.w
-                                page_height = pdf.h - 50  # Leave space for title
-                                page_aspect = page_width / page_height
-                                
-                                if aspect_ratio > page_aspect:
-                                    # Image is wider than page, fit to width
-                                    display_width = page_width
-                                    display_height = page_width / aspect_ratio
-                                    x = 0
-                                    y = 50 + (page_height - display_height) / 2  # Start below title
-                                else:
-                                    # Image is taller than page, fit to height
-                                    display_height = page_height
-                                    display_width = page_height * aspect_ratio
-                                    x = (page_width - display_width) / 2
-                                    y = 50  # Start below title
-                                
-                                pdf.image(tmp_img_path, x=x, y=y, w=display_width, h=display_height)
-                            os.remove(tmp_img_path)
-                        except Exception as e:
-                            print(f"Error loading brand pattern image: {e}")
-                            pdf.add_key_value("Error", "Brand pattern image could not be loaded")
+                    pdf.add_application_image(image_url, "Brand Pattern")
         
-        # Copywriting Framework (from brand_assets) with fallback to Marketing Templates
-        if brand_assets and brand_assets.get('premium_assets'):
-            premium_assets = brand_assets['premium_assets']
-            copy_fw = premium_assets.get('copywriting_framework')
-            if copy_fw:
-                pdf.add_page()
-                pdf.add_section_title("Copywriting Framework", True, primary_rgb)
-
-                # Persona Snapshot
-                persona = copy_fw.get('persona_snapshot', {}) if isinstance(copy_fw, dict) else {}
-                if persona:
-                    pdf.add_sub_section_title("Persona Snapshot", True)
-                    pdf.add_key_value("Demographics", persona.get('demographics', ''), True)
-                    pdf.add_key_value("Psychographics", persona.get('psychographics', ''), False)
-                    fears_list = persona.get('fears', []) or []
-                    desires_list = persona.get('desires', []) or []
-                    aspirations_list = persona.get('aspirations', []) or []
-                    if fears_list:
-                        pdf.add_key_value("Fears", ', '.join([str(x) for x in fears_list]), False)
-                    if desires_list:
-                        pdf.add_key_value("Desires", ', '.join([str(x) for x in desires_list]), False)
-                    if aspirations_list:
-                        pdf.add_key_value("Aspirations", ', '.join([str(x) for x in aspirations_list]), False)
-                    if persona.get('awareness_stage'):
-                        pdf.add_key_value("Awareness Stage", persona.get('awareness_stage', ''), False)
-
-                # Message Pillars
-                pillars = copy_fw.get('message_pillars', {}) if isinstance(copy_fw, dict) else {}
-                if pillars:
-                    pdf.add_sub_section_title("Message Pillars", True)
-                    pdf.add_key_value("Problem Narrative", pillars.get('problem_narrative', ''), True)
-                    pdf.add_key_value("Desired Transformation", pillars.get('desired_transformation', ''), False)
-                    if pillars.get('differentiators'):
-                        pdf.add_key_value("Differentiators", ', '.join(pillars.get('differentiators', [])), False)
-                    if pillars.get('proof_assets'):
-                        pdf.add_key_value("Proof Assets", ', '.join(pillars.get('proof_assets', [])), False)
-                    if pillars.get('cta_patterns'):
-                        pdf.add_key_value("CTA Patterns", ', '.join(pillars.get('cta_patterns', [])), False)
-
-                # Copy Frameworks
-                frameworks = copy_fw.get('copy_frameworks', []) if isinstance(copy_fw, dict) else []
-                if frameworks:
-                    pdf.add_sub_section_title("Copy Frameworks", True)
-                    for fw in frameworks:
-                        if isinstance(fw, dict):
-                            name = fw.get('name', 'Framework')
-                            when = fw.get('when_to_use', '')
-                            outline = fw.get('outline', []) or []
-                            pdf.add_key_value(f"{name} - When to use", when, True)
-                            if outline:
-                                pdf.add_key_value(f"{name} - Outline", ', '.join([str(x) for x in outline]), False)
-
-                # Writing Guidance
-                guidance = copy_fw.get('writing_guidance', {}) if isinstance(copy_fw, dict) else {}
-                if guidance:
-                    pdf.add_sub_section_title("Writing Guidance", True)
-                    for k in ["fears", "desires", "dreams", "aspirations"]:
-                        if guidance.get(k):
-                            pdf.add_key_value(k.capitalize(), guidance.get(k, ''), True)
-
-                # Tone & Style Rules
-                ts = copy_fw.get('tone_style_rules', {}) if isinstance(copy_fw, dict) else {}
-                if ts:
-                    pdf.add_sub_section_title("Tone & Style Rules", True)
-                    pdf.add_key_value("Reading Level", ts.get('reading_level', ''), True)
-                    pdf.add_key_value("Formality", ts.get('formality', ''), False)
-                    if ts.get('lexicon_use'):
-                        pdf.add_key_value("Lexicon (Use)", ', '.join(ts.get('lexicon_use', [])), False)
-                    if ts.get('lexicon_avoid'):
-                        pdf.add_key_value("Lexicon (Avoid)", ', '.join(ts.get('lexicon_avoid', [])), False)
-                    pdf.add_key_value("Voice", ts.get('voice', ''), False)
-                    pdf.add_key_value("Cadence", ts.get('cadence', ''), False)
-
-                # Objection Handling
-                objections = copy_fw.get('objection_bank', []) if isinstance(copy_fw, dict) else []
-                if objections:
-                    pdf.add_sub_section_title("Objection Handling", True)
-                    for i, obj in enumerate(objections):
-                        if isinstance(obj, dict):
-                            pdf.add_key_value(f"Objection {i+1}", obj.get('objection', ''), True)
-                            if obj.get('reframe'):
-                                pdf.add_key_value("Reframe", obj.get('reframe', ''), False)
-                            if obj.get('proof'):
-                                pdf.add_key_value("Proof", obj.get('proof', ''), False)
-                            if obj.get('risk_reversal'):
-                                pdf.add_key_value("Risk Reversal", obj.get('risk_reversal', ''), False)
-
-                # Hook Bank
-                hooks = copy_fw.get('hook_bank', []) if isinstance(copy_fw, dict) else []
-                if hooks:
-                    pdf.add_sub_section_title("Hook Bank", True)
-                    for i, hook in enumerate(hooks):
-                        if isinstance(hook, dict):
-                            text = hook.get('text', '')
-                            tag = hook.get('tag', '')
-                            stage = hook.get('awareness_stage', '')
-                            label = f"Hook {i+1}"
-                            details = ", ".join([v for v in [tag, stage] if v])
-                            pdf.add_key_value(label, text, True)
-                            if details:
-                                pdf.add_key_value("Details", details, False)
-
-                # CTA Bank
-                ctas = copy_fw.get('cta_bank', []) if isinstance(copy_fw, dict) else []
-                if ctas:
-                    pdf.add_sub_section_title("CTA Bank", True)
-                    for i, cta in enumerate(ctas):
-                        if isinstance(cta, dict):
-                            text = cta.get('text', '')
-                            fl = cta.get('friction_level', '')
-                            pdf.add_key_value(f"CTA {i+1}", text, True)
-                            if fl:
-                                pdf.add_key_value("Friction", fl, False)
-
-                # Channel Adaptation
-                channels = copy_fw.get('channel_adaptation', {}) if isinstance(copy_fw, dict) else {}
-                if channels:
-                    pdf.add_sub_section_title("Channel Adaptation", True)
-                    mapping = {
-                        'whatsapp': 'WhatsApp',
-                        'instagram': 'Instagram',
-                        'linkedin': 'LinkedIn',
-                        'landing_page': 'Landing Page',
-                        'radio_ooh': 'Radio/OOH'
-                    }
-                    for key, label in mapping.items():
-                        if channels.get(key):
-                            pdf.add_key_value(label, channels.get(key, ''), True)
-
-                # Asset Recipe
-                recipe = copy_fw.get('asset_recipe', []) if isinstance(copy_fw, dict) else []
-                if recipe:
-                    pdf.add_sub_section_title("Asset Recipe", True)
-                    for i, step in enumerate(recipe):
-                        pdf.add_key_value(f"Step {i+1}", str(step), True)
-
-                # Measurement
-                meas = copy_fw.get('measurement', {}) if isinstance(copy_fw, dict) else {}
-                if meas:
-                    pdf.add_sub_section_title("Measurement", True)
-                    if meas.get('metrics'):
-                        pdf.add_key_value("Metrics", ', '.join([str(x) for x in meas.get('metrics', [])]), True)
-                    if meas.get('ab_tests'):
-                        pdf.add_key_value("A/B Tests", ', '.join([str(x) for x in meas.get('ab_tests', [])]), False)
-                    if meas.get('iteration_rules'):
-                        pdf.add_key_value("Iteration Rules", ', '.join([str(x) for x in meas.get('iteration_rules', [])]), False)
-            elif premium_assets.get('marketing_templates'):
-                # Backward-compatible rendering for legacy marketing templates
-                templates = premium_assets['marketing_templates']
-                pdf.add_page()
-                pdf.add_section_title("Marketing Templates", True, primary_rgb)
-                
-                # Landing Page Copy
-                if templates.get('landing_page_copy'):
-                    landing = templates['landing_page_copy']
-                    pdf.add_sub_section_title("Landing Page Copy", True)
-                    pdf.add_key_value("Hero Headline", landing.get('hero_headline', ''), True)
-                    pdf.add_key_value("Hero Subheadline", landing.get('hero_subheadline', ''), True)
-                    pdf.add_key_value("Call to Action", landing.get('call_to_action', ''), True)
-                    
-                    if landing.get('benefits'):
-                        pdf.add_key_value("Benefits", ', '.join(landing['benefits']), True)
-                    
-                    if landing.get('features'):
-                        pdf.add_key_value("Features", ', '.join(landing['features']), True)
-                    
-                    if landing.get('testimonials'):
-                        pdf.add_key_value("Testimonials", '', True)
-                        for i, testimonial in enumerate(landing['testimonials']):
-                            pdf.add_key_value(f"Testimonial {i+1}", testimonial, False)
-                
-                # Email Templates
-                if templates.get('email_templates'):
-                    emails = templates['email_templates']
-                    pdf.add_sub_section_title("Email Templates", True)
-                    for i, email in enumerate(emails):
-                        if isinstance(email, dict):
-                            template_name = email.get('template_name', f'Email Template {i+1}')
-                            subject = email.get('subject_line', '')
-                            greeting = email.get('greeting', '')
-                            body = email.get('body', '')
-                            closing = email.get('closing', '')
-                            signature = email.get('signature', '')
-                            
-                            pdf.add_key_value(f"{template_name} - Subject", subject, True)
-                            pdf.add_key_value(f"{template_name} - Greeting", greeting, False)
-                            pdf.add_key_value(f"{template_name} - Body", body, False)
-                            pdf.add_key_value(f"{template_name} - Closing", f"{closing} {signature}", False)
-                
-                # Brochure Content
-                if templates.get('brochure_content'):
-                    brochure = templates['brochure_content']
-                    pdf.add_sub_section_title("Brochure Content", True)
-                    for i, section in enumerate(brochure):
-                        if isinstance(section, dict):
-                            section_title = section.get('section_title', f'Section {i+1}')
-                            content = section.get('content', '')
-                            call_to_action = section.get('call_to_action', '')
-                            
-                            pdf.add_key_value(f"{section_title}", content, True)
-                            if call_to_action:
-                                pdf.add_key_value(f"{section_title} - CTA", call_to_action, False)
-                
-                # Presentation Templates
-                if templates.get('presentation_templates'):
-                    presentations = templates['presentation_templates']
-                    pdf.add_sub_section_title("Presentation Templates", True)
-                    for i, slide in enumerate(presentations):
-                        if isinstance(slide, dict):
-                            slide_title = slide.get('slide_title', f'Slide {i+1}')
-                            content = slide.get('content', '')
-                            key_points = ', '.join(slide.get('key_points', []))
-                            visual_suggestions = slide.get('visual_suggestions', '')
-                            
-                            pdf.add_key_value(f"{slide_title}", content, True)
-                            if key_points:
-                                pdf.add_key_value(f"{slide_title} - Key Points", key_points, False)
-                            if visual_suggestions:
-                                pdf.add_key_value(f"{slide_title} - Visual Suggestions", visual_suggestions, False)
-        
+      
         # Social Media Content Section (from brand_assets)
         if brand_assets and brand_assets.get('social_media_content'):
             social_content = brand_assets['social_media_content']
-            pdf.add_page()
+            
             pdf.add_section_title("Social Media Content", True, primary_rgb)
             
             # Ad Copies
@@ -2186,7 +2099,7 @@ def download_brand_pdf(brandId):
                     pdf.add_key_value(f"Strategy {i+1}", strategy, True)
 
     # Final note
-    pdf.add_page()
+   
     pdf.add_section_title("Implementation Guide", True, primary_rgb)
     pdf.add_key_value(
         "Next Steps",
