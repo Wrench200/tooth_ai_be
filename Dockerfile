@@ -20,4 +20,5 @@ EXPOSE 8080
 ENV PORT 8080
 
 # Run main.py when the container launches using gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "main:app"]
+# CMD ["gunicorn", "--bind", "0.0.0.0:8080", "main:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--timeout", "600", "main:app"]
