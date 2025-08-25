@@ -21,7 +21,8 @@ def get_text_prediction(system_prompt, prompt, max_retries=5, backoff_factor=1, 
         print("GEMINI_API_KEY not set in environment.")
         return None
 
-    model = "gemini-2.5-pro"
+    model = "gemini-2.5-flash"
+    # model = "gemini-2.5-pro"
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
     while (answer is None or answer == "") and retries < max_retries:
@@ -67,7 +68,10 @@ def get_text_prediction(system_prompt, prompt, max_retries=5, backoff_factor=1, 
                 "generationConfig": {
                     "temperature": 1,
                     "topP": 1,
-                    "maxOutputTokens": 4096
+                    "maxOutputTokens": 4096,
+                    "thinkingConfig": {
+                        "thinkingBudget": 0
+                    }
                 }
             }
 
