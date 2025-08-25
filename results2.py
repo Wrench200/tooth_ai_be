@@ -406,8 +406,8 @@ def generate_results(userId, brandId):
         about_the_brand = brand_identity_data.get("about_the_brand", "")
         logos_list = brand_identity_data.get("logos", [])
         if logos_list:
-            logo_description_1 = logos_list.get("description", "")
-            logo_prompt1 = logos_list.get("prompt", "")
+            logo_description_1 = logos_list[0].get("description", "")
+            logo_prompt1 = logos_list[0].get("prompt", "")
         else:
             logo_description_1 = ""
             logo_prompt1 = ""
