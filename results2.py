@@ -245,6 +245,14 @@ def _generate_brand_identity(question_and_answers, brand_name, brand_tagline):
             {
                 "prompt": sss,
                 "description": sss
+            },
+            {
+                "prompt": sss,
+                "description": sss
+            },
+            {
+                "prompt": sss,
+                "description": sss
             }
         ],
         "primary_colors": lll (list format sample: {
@@ -407,33 +415,41 @@ def generate_results(userId, brandId):
 
         about_the_brand = brand_identity_data.get("about_the_brand", "")
         logos_list = brand_identity_data.get("logos", [])
-        if logos_list:
-            logo_description_1 = logos_list[0].get("description", "")
-            logo_prompt1 = logos_list[0].get("prompt", "")
-        else:
-            logo_description_1 = ""
-            logo_prompt1 = ""
+        logo_prompt_1 = logos_list[0].get("prompt", "") if len(logos_list) > 0 else ""
+        logo_prompt_2 = logos_list[1].get("prompt", "") if len(logos_list) > 1 else ""
+        logo_prompt_3 = logos_list[2].get("prompt", "") if len(logos_list) > 2 else ""
+        logo_description_1 = logos_list[0].get("description", "") if len(logos_list) > 0 else ""
+        logo_description_2 = logos_list[1].get("description", "") if len(logos_list) > 1 else ""
+        logo_description_3 = logos_list[2].get("description", "") if len(logos_list) > 2 else ""
         primary_colors = brand_identity_data.get("primary_colors", [])
         secondary_colors = brand_identity_data.get("secondary_colors", [])
         typography = brand_identity_data.get("typography", [])
         applications = brand_identity_data.get("applications", [])
-        
-        # Generate logos and upload to Cloudinary
+
+        # Generate 3 logos and upload to Cloudinary in parallel
         try:
-            print("Generating logos and uploading to Cloudinary...")
-            logo_url_1 = imagen.generate_image(logo_prompt1, public_id=f"toothai/{brandId}/logo_1")
-            
-            # Check if any logos failed to generate
-            if not logo_url_1:
-                print("Warning: Logo 1 generation failed, using placeholder")
-                logo_url_1 = "https://via.placeholder.com/400x200?text=Logo+1"
-                
+            print("Generating 3 logos and uploading to Cloudinary...")
+            def generate_logo_url(prompt, idx):
+                url = imagen.generate_image(prompt, public_id=f"toothai/{brandId}/logo_{idx}")
+                if not url:
+                    print(f"Warning: Logo {idx} generation failed, using placeholder")
+                    url = f"https://via.placeholder.com/400x200?text=Logo+{idx}"
+                return url
+            with ThreadPoolExecutor(max_workers=3) as executor:
+                future1 = executor.submit(generate_logo_url, logo_prompt_1, 1)
+                future2 = executor.submit(generate_logo_url, logo_prompt_2, 2)
+                future3 = executor.submit(generate_logo_url, logo_prompt_3, 3)
+                logo_image_url_1 = future1.result()
+                logo_image_url_2 = future2.result()
+                logo_image_url_3 = future3.result()
             print("Logo generation completed successfully")
         except Exception as e:
             print(f"Error during logo generation: {e}")
             print("Using placeholder logos")
-            logo_url_1 = "https://via.placeholder.com/400x200?text=Logo+1"
-            
+            logo_image_url_1 = "https://via.placeholder.com/400x200?text=Logo+1"
+            logo_image_url_2 = "https://via.placeholder.com/400x200?text=Logo+2"
+            logo_image_url_3 = "https://via.placeholder.com/400x200?text=Logo+3"
+
         results = {
             "userId": userId,
             "brandId": brandId,
@@ -484,18 +500,21 @@ def generate_results(userId, brandId):
             },
             "brand_identity": {
                 "about_the_brand": about_the_brand,
-                "logos": [
-                    {
-                        "image_url": logo_url_1,
-                        "description": logo_description_1
-                    }
-                ],
+                "logos": [{
+                    "image_url": logo_image_url_1,
+                    "description": logo_description_1
+                },{
+                    "image_url": logo_image_url_2,
+                    "description": logo_description_2
+                },{
+                    "image_url": logo_image_url_3,
+                    "description": logo_description_3
+                }],
                 "reommended_logo": "",
                 "logo_variants": {},
                 "primary_colors": primary_colors,
                 "secondary_colors": secondary_colors,
                 "typography": typography,
-               
             }
         }
         
