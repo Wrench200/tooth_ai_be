@@ -190,6 +190,7 @@ with get_db_connection() as cursor:
         username TEXT NOT NULL,
         email TEXT UNIQUE NOT NULL,
         password TEXT,
+        phone_number TEXT,
         generated BOOLEAN DEFAULT FALSE,
         google_id TEXT UNIQUE,
         profile_picture TEXT,
@@ -197,8 +198,16 @@ with get_db_connection() as cursor:
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
 ''')
+    
+    # Add phone_number column if it doesn't exist (for existing databases)
+    try:
+        cursor.execute('''
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_number TEXT
+        ''')
+    except Exception as e:
+        print(f"Note: phone_number column may already exist: {e}")
 
-def create_user(username, email, password):
+def create_user(username, email, password, phone_number=None):
     for attempt in range(2):
         try:
             if any(user['email'] == email for user in users):
@@ -210,11 +219,12 @@ def create_user(username, email, password):
                 "username": username,
                 "email": email,
                 "password": password,
+                "phone_number": phone_number,
             }
             users.append(new_user)
             with get_db_connection() as cursor:
-                cursor.execute("INSERT INTO users (userId, username, email, password) VALUES (%s, %s, %s, %s)",
-                           (user_id, username, email, password))
+                cursor.execute("INSERT INTO users (userId, username, email, password, phone_number) VALUES (%s, %s, %s, %s, %s)",
+                           (user_id, username, email, password, phone_number))
             print(f"User {user_id} added.")
             return new_user
         except psycopg2.InterfaceError as e:
@@ -320,6 +330,7 @@ def create_google_user(google_id, email, name, profile_picture):
                 "username": name,
                 "email": email,
                 "password": None,
+                "phone_number": None,
                 "google_id": google_id,
                 "profile_picture": profile_picture,
                 "auth_provider": "google"
@@ -327,9 +338,9 @@ def create_google_user(google_id, email, name, profile_picture):
             
             with get_db_connection() as cursor:
                 cursor.execute("""
-                INSERT INTO users (userId, username, email, password, google_id, profile_picture, auth_provider)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """, (user_id, name, email, None, google_id, profile_picture, "google"))
+                INSERT INTO users (userId, username, email, password, phone_number, google_id, profile_picture, auth_provider)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """, (user_id, name, email, None, None, google_id, profile_picture, "google"))
            
             print(f"Google user {user_id} added.")
             return new_user

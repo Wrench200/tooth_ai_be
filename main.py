@@ -921,7 +921,7 @@ def register_user():
             }), 400
         
         # Validate required fields
-        required_fields = ['userName', 'email', 'password']
+        required_fields = ['userName', 'email', 'password', 'phoneNumber']
         missing_fields = []
         for field in required_fields:
             if field not in data or not data[field]:
@@ -937,6 +937,7 @@ def register_user():
         username = str(data['userName']).strip()
         email = str(data['email']).strip().lower()
         password = str(data['password'])
+        phone_number = str(data['phoneNumber']).strip()
         auth_provider = str(data.get('authProvider', '')).strip()
         
         
@@ -975,6 +976,15 @@ def register_user():
                 'error': 'Password must be less than 128 characters'
             }), 400
         
+        # Validate phone number format
+        import re
+        phone_pattern = re.compile(r'^\+?[\d\s\-\(\)]{7,20}$')
+        if not phone_pattern.match(phone_number):
+            return jsonify({
+                'success': False,
+                'error': 'Invalid phone number format. Please use a valid phone number with country code (e.g., +1234567890)'
+            }), 400
+        
         # Check if user already exists
         try:
             existing_user = db.get_user_from_email(email)
@@ -993,7 +1003,7 @@ def register_user():
         
         # Create user
         try:
-            user = db.create_user(username, email, password)
+            user = db.create_user(username, email, password, phone_number)
         except Exception as e:
             print(f"REGISTER ERROR (db.create_user): {e}")
             traceback.print_exc()
@@ -1029,7 +1039,8 @@ def register_user():
         user_response = {
             'userId': user.get('userid') or user.get('userId'),
             'username': user['username'],
-            'email': user['email']
+            'email': user['email'],
+            'phoneNumber': user.get('phone_number', '')
         }
         
         return jsonify({
@@ -1143,7 +1154,8 @@ def login():
         user_response = {
             'userId': user.get('userid') or user.get('userId'),
             'username': user['username'],
-            'email': user['email']
+            'email': user['email'],
+            'phoneNumber': user.get('phone_number', '')
         }
         
         return jsonify({
@@ -2472,6 +2484,7 @@ def google_auth_callback():
                 'userId': existing_user.get('userid') or existing_user.get('userId'),
                 'username': existing_user['username'],
                 'email': existing_user['email'],
+                'phoneNumber': existing_user.get('phone_number', ''),
                 'profile_picture': existing_user.get('profile_picture'),
                 'auth_provider': existing_user.get('auth_provider', 'google')
             }
@@ -2488,6 +2501,7 @@ def google_auth_callback():
                     'userId': new_user['userId'],
                     'username': new_user['username'],
                     'email': new_user['email'],
+                    'phoneNumber': new_user.get('phone_number', ''),
                     'profile_picture': new_user.get('profile_picture'),
                     'auth_provider': 'google'
                 }
@@ -2538,6 +2552,7 @@ def google_token_auth():
                 'userId': existing_user.get('userid') or existing_user.get('userId'),
                 'username': existing_user['username'],
                 'email': existing_user['email'],
+                'phoneNumber': existing_user.get('phone_number', ''),
                 'profile_picture': existing_user.get('profile_picture'),
                 'auth_provider': existing_user.get('auth_provider', 'google')
             }
@@ -2559,6 +2574,7 @@ def google_token_auth():
                     'userId': new_user['userId'],
                     'username': new_user['username'],
                     'email': new_user['email'],
+                    'phoneNumber': new_user.get('phone_number', ''),
                     'profile_picture': new_user.get('profile_picture'),
                     'auth_provider': 'google'
                 }
