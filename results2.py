@@ -204,7 +204,7 @@ def _generate_differentiators(question_and_answers):
 def _generate_brand_communication(question_and_answers):
     system_prompt = "You are a brand communication expert. here is a list of questions we asked the user and here are the answers they gave: >>>" + question_and_answers + '''<<<. You are supposed to generate the communication for the brand as a json of this format >>> 
     {
-        "brand_name": sss,
+        "brand_name": sss (You MUST use the brand name specified by the user in the answers),
         "brand_tagline": sss,
         "primary_core_message": {
             "who_we_serve": sss,
@@ -334,7 +334,9 @@ def generate_results(userId, brandId):
         
         previous_questions = questions.get_previous_questions(11)
         previous_answers = db.get_previous_answers(answers["answerId"], 11)
-        question_and_answers = " ".join([f"Question: {{q}} Answer: {{a}}." for q, a in zip(previous_questions, previous_answers)])
+        question_and_answers = " ".join([f"Question: {q} Answer: {a}." for q, a in zip(previous_questions, previous_answers)])
+        # print(f"\n\nPrevious Q and A: {question_and_answers}\n\n")
+        # return
         
         brand_strategy_data = {}
         customer_profile_data = {}
@@ -1472,6 +1474,6 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             
 # print("\n\n\n\nFinal result\n\n")
 # print(generate_final_results("24d0c547-8685-4ee9-95a4-b362da16da3c", "96266589-80bb-4f14-aff9-6baf8cc4dffd", "Kum Randy", "myemail@gmail.com", "652932842", "", "www.toothai.com", "https://logomoose.com/wp-content/uploads/2016/01/18.jpg"))
-# print(generate_results("5a0f3b19-60a1-4d1f-9049-857f819a6dcf", "300748a2-bb3f-4660-859e-c4edef6d0b62"))
+print(generate_results("8d554512-9ef0-43e0-acba-f8a4375aeeed", "c8c18af6-f1bf-4143-9fc8-88ea1e0f85e8"))
 
-
+result = ['Sell second handed cars to business people to save cost', 'Businesses would primarily use second-hand vehicles, setting a new standard for corporate fleets.', "Reliable, Affordable, Smart. Reliable because businesses need dependable vehicles, even second-hand ones; Affordable because it helps them save operating costs; Smart because it's a strategic and intelligent decision for modern corporate fleets.", 'Our ideal customer is a business, whether a growing SMB or a larger enterprise, that struggles with the high capital expenditure and ongoing operational costs associated with maintaining a dependable vehicle fleet. We help by providing reliable, affordable, and smart second-hand vehicle solutions that significantly lower their costs and optimize their budget allocations.', "Other used car dealerships sell second-hand vehicles, but our solution is different because we rigorously vet and prepare vehicles specifically for corporate fleet standards, guaranteeing reliability and a smart investment that generic platforms or individual sellers don't provide.", 'Vantage Fleet Solutions. "Vantage Fleet Solutions" reflects the strategic advantage businesses gain through our services. "Vantage" implies a superior position or benefit, highlighting the affordability and smart decision-making in fleet management, while "Fleet Solutions" clearly defines our service area and our goal to provide comprehensive, reliable vehicle options to corporate clients.', 'We promise your second-hand fleet will deliver the reliability of a new one, at a fraction of the cost.', 'Modern and Professional', 'LinkedIn, given our B2B focus on corporate fleet managers and decision-makers.', 'Schedule a consultation to discover how we can optimize their corporate vehicle budget.']
