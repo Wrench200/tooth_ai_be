@@ -143,76 +143,198 @@ def validate_answer(question, answer):
 
 
 
-
-
-
-def generate_image(prompt, images = []):
+def generate_image(prompt, images = [], max_retries=5, backoff_factor=1):
     """
-    Generate an edited image using OpenAI's image edits API with multiple input images.
+    Generate an edited image using Google's image edits API with multiple input images.
     Args:
         prompt (str): The prompt describing the desired edit.
         images (list): List of file paths to images to upload as references.
     Returns:
         str: Path to the saved output image, or error message.
     """
-    import requests
-    from requests_toolbelt.multipart.encoder import MultipartEncoder
-    import os
-    OPENAI_API_KEY = openai_api_key
-    if not OPENAI_API_KEY:
-        return "OPENAI_API_KEY not set in environment."
-    if not images or not isinstance(images, list):
-        return "No images provided."
-    url = "https://api.openai.com/v1/images/edits"
-    fields = {
-        "model": "gpt-image-1",
-        "prompt": prompt,
-    }
-    # Add each image as image[]
+    answer = None
+    retries = 0
+
+    from setup import gemini_api_key
+    import base64
+    import mimetypes
+
+    api_key = gemini_api_key
+    if not api_key:
+        print("GEMINI_API_KEY not set in environment.")
+        return None
+
+    model = "gemini-2.5-flash-image-preview"
+    # model = "gemini-2.5-pro"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+
+    while (answer is None or answer == "") and retries < max_retries:
+        try:
+            parts = []
+            parts.append({"text": prompt})
+
+            # Prepare image inputs as inline_data (supports file paths, data URIs, or URLs)
+            inputs = images
+            if isinstance(inputs, str):
+                inputs = [inputs]
+            if isinstance(inputs, list):
+                for item in inputs:
+                    try:
+                        if isinstance(item, str) and os.path.isfile(item):
+                            mime_type = mimetypes.guess_type(item)[0] or "image/jpeg"
+                            with open(item, "rb") as f:
+                                raw = f.read()
+                            b64_data = base64.b64encode(raw).decode("ascii")
+                            parts.append({"inline_data": {"mime_type": mime_type, "data": b64_data}})
+                        elif isinstance(item, str) and item.startswith("data:") and "," in item:
+                            header, b64 = item.split(",", 1)
+                            mime_type = header.split(";")[0][5:] if header.startswith("data:") else "image/jpeg"
+                            parts.append({"inline_data": {"mime_type": mime_type, "data": b64}})
+                        elif isinstance(item, str) and item.startswith("http"):
+                            resp = requests.get(item, timeout=30)
+                            resp.raise_for_status()
+                            mime_type = resp.headers.get("Content-Type") or "image/jpeg"
+                            b64_data = base64.b64encode(resp.content).decode("ascii")
+                            parts.append({"inline_data": {"mime_type": mime_type, "data": b64_data}})
+                    except Exception as _:
+                        continue
+
+            payload = {
+                # "system_instruction": {
+                #     "parts": [{"text": system_prompt}]
+                # },
+                "contents": [
+                    {
+                        "parts": parts
+                    }
+                ],
+                # "generationConfig": {
+                #     "temperature": 1,
+                #     "topP": 1,
+                #     "maxOutputTokens": 4096,
+                #     "thinkingConfig": {
+                #         "thinkingBudget": 0
+                #     }
+                # }
+            }
+
+            headers_local = {
+                "x-goog-api-key": api_key,
+                "Content-Type": "application/json",
+            }
+
+            response = requests.post(url, headers=headers_local, json=payload, timeout=60)
+            response.raise_for_status()
+            data = response.json()
+            # answer = data
+            # Extract image data from response
+            parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+            image_b64 = None
+            for part in parts:
+                if isinstance(part, dict) and "inlineData" in part:
+                    image_b64 = part["inlineData"].get("data")
+                    break
+            if image_b64:
+                images_dir = "images"
+                if not os.path.exists(images_dir):
+                    os.makedirs(images_dir)
+                out_path = f"{images_dir}/{uuid.uuid4()}.png"
+                with open(out_path, "wb") as f:
+                    f.write(base64.b64decode(image_b64))
+                answer = out_path
+            else:
+                print("No image data found in response.")
+                answer = None
+            
+        except requests.exceptions.RequestException as e:
+            print(f"Request failed: {e}")
+            answer = None
+        except json.JSONDecodeError:
+            print("Failed to decode JSON response.")
+            answer = None
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
+            answer = None
+
+        if answer is None or answer == "":
+            retries += 1
+            sleep_time = backoff_factor * (2 ** (retries - 1))
+            print(f"Retrying in {sleep_time} seconds... (Attempt {retries}/{max_retries})")
+            time.sleep(sleep_time)
+
+    return answer
+
+
+
+
+# def generate_image(prompt, images = []):
+#     """
+#     Generate an edited image using OpenAI's image edits API with multiple input images.
+#     Args:
+#         prompt (str): The prompt describing the desired edit.
+#         images (list): List of file paths to images to upload as references.
+#     Returns:
+#         str: Path to the saved output image, or error message.
+#     """
+#     import requests
+#     from requests_toolbelt.multipart.encoder import MultipartEncoder
+#     import os
+#     OPENAI_API_KEY = openai_api_key
+#     if not OPENAI_API_KEY:
+#         return "OPENAI_API_KEY not set in environment."
+#     if not images or not isinstance(images, list):
+#         return "No images provided."
+#     url = "https://api.openai.com/v1/images/edits"
+#     fields = {
+#         "model": "gpt-image-1",
+#         "prompt": prompt,
+#     }
+#     # Add each image as image[]
     
     
-    image_files = []
-    for img_path in images:
-        if not os.path.isfile(img_path):
-            return f"Image file not found: {img_path}"
-        image_files.append((os.path.basename(img_path), open(img_path, "rb"), "image/png"))
-    if len(image_files) == 1:
-        fields["image[]"] = image_files[0]
-    else:
-        fields["image[]"] = image_files
+#     image_files = []
+#     for img_path in images:
+#         if not os.path.isfile(img_path):
+#             return f"Image file not found: {img_path}"
+#         image_files.append((os.path.basename(img_path), open(img_path, "rb"), "image/png"))
+#     if len(image_files) == 1:
+#         fields["image[]"] = image_files[0]
+#     else:
+#         fields["image[]"] = image_files
         
         
-    m = MultipartEncoder(fields=fields)
-    headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
-        "Content-Type": m.content_type
-    }
-    try:
-        response = requests.post(url, headers=headers, data=m, timeout=500)
-        response.raise_for_status()
-        result = response.json()
-        # Expecting .data[0].b64_json
-        b64 = result.get("data", [{}])[0].get("b64_json")
-        if not b64:
-            return f"No image data returned: {result}"
-        import base64
-        out_path = f"images/{uuid.uuid4()}.png"
-        with open(out_path, "wb") as f:
-            f.write(base64.b64decode(b64))
-        # Close all opened files
-        for _, file_obj, _ in image_files:
-            file_obj.close()
-        return out_path
-    except Exception as e:
-        return f"Error: {e}"
+#     m = MultipartEncoder(fields=fields)
+#     headers = {
+#         "Authorization": f"Bearer {OPENAI_API_KEY}",
+#         "Content-Type": m.content_type
+#     }
+#     try:
+#         response = requests.post(url, headers=headers, data=m, timeout=500)
+#         response.raise_for_status()
+#         result = response.json()
+#         # Expecting .data[0].b64_json
+#         b64 = result.get("data", [{}])[0].get("b64_json")
+#         if not b64:
+#             return f"No image data returned: {result}"
+#         import base64
+#         out_path = f"images/{uuid.uuid4()}.png"
+#         with open(out_path, "wb") as f:
+#             f.write(base64.b64decode(b64))
+#         # Close all opened files
+#         for _, file_obj, _ in image_files:
+#             file_obj.close()
+#         return out_path
+#     except Exception as e:
+#         return f"Error: {e}"
 
 
 
 
 
 
-# print(generate_image("Use this logo to make a tshirt", ["bfaeac80-2cf5-4f46-b8a5-c2ec8883d5c6.jpg"]))
+# print(generate_image("Use this logo to make a tshirt, then make another image with it on a hoodie", ["Picsart_25-08-09_17-53-58-624.png"]))
 
+    
 
 
 
