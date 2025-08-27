@@ -1174,5 +1174,5 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             
             
 # print("\n\n\n\nFinal result\n\n")
-print(generate_final_results("bf286f70-711d-429c-80a6-dfa74e47cb2b", "be3ad5cc-5f4e-45be-aaf0-35439391578e", "Kum Randy", "myemail@gmail.com", "652932842", "", "www.toothai.com", "https://logomoose.com/wp-content/uploads/2016/01/18.jpg"))
+# print(generate_final_results("bf286f70-711d-429c-80a6-dfa74e47cb2b", "be3ad5cc-5f4e-45be-aaf0-35439391578e", "Kum Randy", "myemail@gmail.com", "652932842", "", "www.toothai.com", "https://logomoose.com/wp-content/uploads/2016/01/18.jpg"))
 # print(generate_results("bf286f70-711d-429c-80a6-dfa74e47cb2b", "be3ad5cc-5f4e-45be-aaf0-35439391578e"))

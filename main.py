@@ -19,7 +19,7 @@ from google_oauth import get_google_auth_url, verify_google_token, create_flow
 
 FONT_DIR = os.path.join(os.path.dirname(__file__), 'fonts')
 UNICODE_FONT_PATH = os.path.join(FONT_DIR, 'DejaVuSans.ttf')
-UNICODE_FONT_BOLD_PATH = os.path.join(FONT_DIR, 'DejaVuSans-Bold.ttf')  # Make sure this file exists
+UNICODE_FONT_BOLD_PATH = os.path.join(FONT_DIR, 'DejaVuSans-Bold.ttf')
 UNICODE_FONT_ITALIC_PATH = os.path.join(FONT_DIR, 'DejaVuSans-Oblique.ttf')
 UNICODE_FONT_BOLD_ITALIC_PATH = os.path.join(FONT_DIR, 'DejaVuSans-BoldOblique.ttf')
 
@@ -534,45 +534,44 @@ class BrandPDF(FPDF):
             self.set_font('DejaVu', 'B', 18)
             self.cell(0, 10, subtitle, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align=subtitle_align)
             self.ln(10)
-        # Draw circles for each color
+        # Draw circles for each color in a grid layout
         page_width = self.w - self.l_margin - self.r_margin
-        n = len(colors)
-        # Calculate gap so all circles fit on one row
-        if n > 1:
-            gap = max(20, (page_width - n * circle_diameter) // (n - 1))
-        else:
-            gap = 0
-        total_width = n * circle_diameter + (n - 1) * gap
-        start_x = (self.w - total_width) / 2
+        colors_per_row = 3 if len(colors) > 2 else len(colors)
+        gap = 20
+        x_start = self.l_margin
         y = self.get_y()
-        for i, color in enumerate(colors):
-            x = start_x + i * (circle_diameter + gap)
+        for idx, color in enumerate(colors):
+            row = idx // colors_per_row
+            col = idx % colors_per_row
+            x = x_start + col * (circle_diameter + gap)
+            y_row = y + row * (circle_diameter + 40)
             hex_val = color.get('hex_value', '#000000')
             r = int(hex_val[1:3], 16)
             g = int(hex_val[3:5], 16)
             b = int(hex_val[5:7], 16)
             # Draw circle
             self.set_fill_color(r, g, b)
-            self.ellipse(x, y, circle_diameter, circle_diameter, style='F')
+            self.ellipse(x, y_row, circle_diameter, circle_diameter, style='F')
             # Hex code in center
-            self.set_xy(x, y + circle_diameter / 2 - 6)
+            self.set_xy(x, y_row + circle_diameter / 2 - 6)
             self.set_text_color(255, 255, 255)
             self.set_font('DejaVu', 'B', 14)
             self.cell(circle_diameter, 12, hex_val, align='C', new_x=XPos.RIGHT, new_y=YPos.TOP)
             # Label below
-            self.set_xy(x, y + circle_diameter + 2)
+            self.set_xy(x, y_row + circle_diameter + 2)
             self.set_text_color(40, 40, 40)
             self.set_font('DejaVu', 'B', 12)
             self.multi_cell(circle_diameter, 7, color.get('color_name', ''), align='C')
         # Move below the circles for the description (if any)
+        total_rows = (len(colors) + colors_per_row - 1) // colors_per_row
+        end_y = y + total_rows * (circle_diameter + 40)
+        self.set_y(end_y)
         if description:
-            self.set_y(y + circle_diameter + 15)
             self.set_font('DejaVu', '', 12)
             self.set_text_color(40, 40, 40)
             self.multi_cell(0, 8, description, align='C')
             self.ln(5)
         else:
-            self.set_y(y + circle_diameter + 15)
             self.ln(5)
 
     def add_recommended_logo(self, logo_url, description=None):
@@ -2848,4 +2847,5 @@ def payment_webhook():
 
 if __name__ == '__main__':
     # Run on host 0.0.0.0 to be accessible from outside, port 8080
+    app.run(host='0.0.0.0', port=8080, debug=True)
     app.run(host='0.0.0.0', port=8080, debug=True)
