@@ -585,899 +585,579 @@ def generate_results(userId, brandId):
 
 
 
+
+
 def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumbers, registrationNumber, website, brandLogo, others = {}, custom_colors = None):
     images_dir = 'images'
     try:
+        # ================================== 1. SEQUENTIAL SETUP PHASE ==================================
+        print("Starting final results generation...")
         user = db.get_user(userId)
         brand = db.get_brand(brandId)
-        
-        # Check if brand exists
+
         if not brand:
             return {"error": True, "message": "Brand not found"}
-        
-        # Check payment status
+
         payment_status = db.check_brand_payment_status(brandId)
         if payment_status is None:
             return {"error": True, "message": "Unable to verify payment status"}
         
         if not payment_status:
             return {"error": True, "message": "Payment required. Please complete payment before generating final results."}
-        
-        # Update logo field in brand table if brandLogo is provided
+
         if brandLogo:
             try:
                 db.update_brand(brandId, "logo", brandLogo)
                 print(f"Updated logo for brand {brandId}: {brandLogo}")
             except Exception as e:
                 print(f"Error updating logo: {e}")
-                # Continue with generation even if logo update fails
-        
+
         answers = db.get_answer(brand["answerid"])
-        
         previous_questions = questions.get_previous_questions(11)
         previous_answers = db.get_previous_answers(answers["answerId"], 11)
         question_and_answers = " ".join([f"Question: {q} Answer: {a}." for q, a in zip(previous_questions, previous_answers)])
-        
-        # Parse previously generated brand identity
-        if brand.get("brand_identity"):
-            try:
-                brand_identity_data = json.loads(brand["brand_identity"]) if isinstance(brand["brand_identity"], str) else brand["brand_identity"]
-            except (json.JSONDecodeError, TypeError) as e:
-                print(f"Error parsing brand_identity JSON: {e}")
-                brand_identity_data = {}
-        else:
-            brand_identity_data = {}
-        
-        # Override colors with custom colors if provided
-        if custom_colors and isinstance(custom_colors, dict):
-            print(f"Using custom colors: {custom_colors}")
-            # Create a modified brand identity with custom colors
-            modified_brand_identity = brand_identity_data.copy()
-            
-            # Update primary colors if provided
-            if custom_colors.get('primary_colors'):
-                modified_brand_identity['primary_colors'] = custom_colors['primary_colors']
-                print(f"Updated primary colors: {custom_colors['primary_colors']}")
-            
-            # Update secondary colors if provided
-            if custom_colors.get('secondary_colors'):
-                modified_brand_identity['secondary_colors'] = custom_colors['secondary_colors']
-                print(f"Updated secondary colors: {custom_colors['secondary_colors']}")
-            
-            # Update brand colors if provided
-            if custom_colors.get('brand_colors'):
-                modified_brand_identity['brand_colors'] = custom_colors['brand_colors']
-                print(f"Updated brand colors: {custom_colors['brand_colors']}")
-            
-            previously_generated_brand_identity = modified_brand_identity
-        else:
-            previously_generated_brand_identity = brand_identity_data
-        
-        # print(question_and_answers)
-        
-        
-        
-        # Download the logo once and reuse for all assets
-        logo_local_path = functions.download_image(brandLogo) if brandLogo else None
 
-        def generate_identity_assets(
-            question_and_answers,
-            previously_generated_brand_identity,
-            brandId,
-            system_prompt_template,
-            prompt,
-            expected_count,
-            cloudinary_folder,
-            userName=None,
-            userEmail=None,
-            userPhoneNumbers=None,
-            registrationNumber=None,
-            website=None,
-            brandLogo=None,
-            others=None
-        ):
-            # Add user info to the system prompt for more context
-            user_info = (
-                f"\nUser Info:\n"
-                f"Name: {userName}\n"
-                f"Email: {userEmail}\n"
-                f"Phone Numbers: {userPhoneNumbers}\n"
-                f"Registration Number: {registrationNumber}\n"
-                f"Website: {website}\n"
-                f"Other Info: {others}\n"
-            )
+        try:
+            brand_identity_data = json.loads(brand.get("brand_identity", "{}")) if isinstance(brand.get("brand_identity"), str) else brand.get("brand_identity", {})
+        except (json.JSONDecodeError, TypeError) as e:
+            print(f"Error parsing brand_identity JSON: {e}")
+            brand_identity_data = {}
+
+        previously_generated_brand_identity = brand_identity_data.copy()
+        if custom_colors and isinstance(custom_colors, dict):
+            print(f"Applying custom colors: {custom_colors}")
+            if custom_colors.get('primary_colors'):
+                previously_generated_brand_identity['primary_colors'] = custom_colors['primary_colors']
+            if custom_colors.get('secondary_colors'):
+                previously_generated_brand_identity['secondary_colors'] = custom_colors['secondary_colors']
+            if custom_colors.get('brand_colors'):
+                previously_generated_brand_identity['brand_colors'] = custom_colors['brand_colors']
+
+        # Core dependency: Download the logo once for all image generation tasks
+        logo_local_path = functions.download_image(brandLogo) if brandLogo else None
+        print(f"Logo downloaded to: {logo_local_path}")
+
+        # ================================== 2. HELPER FUNCTION DEFINITIONS ==================================
+
+        def _generate_identity_assets(asset_type, system_prompt_template, prompt_text, count, folder, logo_path):
+            user_info = (f"\nUser Info:\nName: {userName}\nEmail: {userEmail}\nPhone: {userPhoneNumbers}\n"
+                         f"Reg No: {registrationNumber}\nWebsite: {website}\nOther: {others}\n")
             system_prompt = system_prompt_template.format(
                 question_and_answers=question_and_answers,
                 previously_generated_brand_identity=str(previously_generated_brand_identity)
             ) + user_info
-            print("\n\nProcessing section ...")
-            response = openAI.get_text_prediction(system_prompt, prompt)
-            print(f"Raw AI response: {response}")
+            
+            print(f"Generating prompts for {asset_type}...")
+            response = openAI.get_text_prediction(system_prompt, prompt_text)
             try:
                 prompts = json.loads(response.strip())
-                if not isinstance(prompts, list):
-                    prompts = [prompts]
+                if not isinstance(prompts, list): prompts = [prompts]
             except Exception:
                 prompts = [response.strip()]
+
             assets = []
-            for idx, item_prompt in enumerate(prompts[:expected_count]):
+            for idx, item_prompt in enumerate(prompts[:count]):
                 try:
-                    print("Generating image ...")
-                    # Use the already downloaded logo
-                    images = [logo_local_path] if logo_local_path else []
-                    img = openAI.generate_image(item_prompt, images=images)
-                    print(f"Generated image url: {img}")
-                    if img and os.path.isfile(img):
-                        upload_result = cloudinary_utils.upload_image_from_file(
-                            img, folder=f"toothai/{brandId}/{cloudinary_folder}"
-                        )
-                        url = upload_result["secure_url"] if upload_result and "secure_url" in upload_result else img
+                    print(f"Generating image for {asset_type} #{idx+1}...")
+                    images = [logo_path] if logo_path and os.path.exists(logo_path) else []
+                    img_path = openAI.generate_image(item_prompt, images=images)
+                    
+                    if img_path and os.path.isfile(img_path):
+                        upload_result = cloudinary_utils.upload_image_from_file(img_path, folder=f"toothai/{brandId}/{folder}")
+                        url = upload_result.get("secure_url", img_path)
                     else:
-                        url = img
+                        url = f"Error: Image generation failed for {asset_type}."
+                    
                     assets.append({"prompt": item_prompt, "image_url": url})
-                    print(f"Generated: {url}")
+                    print(f"Generated asset: {url}")
                 except Exception as e:
-                    print(f"Error generating {cloudinary_folder} {idx+1}: {e}")
-            print("Section success \n\n")
+                    print(f"Error generating image for {asset_type} #{idx+1}: {e}")
+                    assets.append({"prompt": item_prompt, "image_url": f"Error: {e}"})
             return assets
-
-        # ========== IMAGE GENERATION ENABLED ==========
-        # Usage for each asset type, now passing brandLogo:
-
-        brandPatterns = generate_identity_assets(
-            question_and_answers,
-            previously_generated_brand_identity,
-            brandId,
-            system_prompt_template=(
-                '''You are a brand identity expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
-                "{question_and_answers}"
-                "<<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>"
-                "{previously_generated_brand_identity}"
-                "<<<. Generate 1 unique, visually appealing brand pattern prompt for an AI image generator. The pattern should reflect the brand's personality, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a single detailed prompt. Do not add any extra text or formatting. You MUST respond with a single string prompt. '''
-            ),
-            prompt="Please give me 1 brand pattern prompt.",
-            expected_count=1,
-            cloudinary_folder="brand_patterns",
-            userName=userName,
-            userEmail=userEmail,
-            userPhoneNumbers=userPhoneNumbers,
-            registrationNumber=registrationNumber,
-            website=website,
-            brandLogo=brandLogo,
-            others=others
-        )
-
-        business_cards = generate_identity_assets(
-            question_and_answers,
-            previously_generated_brand_identity,
-            brandId,
-            system_prompt_template=(
-                '''You are a branding expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
-                "{question_and_answers}"
-                "<<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>"
-                "{previously_generated_brand_identity}"
-                "<<<. Generate 1 highly detailed prompt for an AI image generator to create a business card mockup for the brand. The prompt should specify the brand name, tagline, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a single prompt. No extra text. You MUST respond with a single string prompt. '''
-            ),
-            prompt="Please give me 1 business card prompt.",
-            expected_count=1,
-            cloudinary_folder="business_cards",
-            userName=userName,
-            userEmail=userEmail,
-            userPhoneNumbers=userPhoneNumbers,
-            registrationNumber=registrationNumber,
-            website=website,
-            brandLogo=brandLogo,
-            others=others
-        )
-
-        letterheads = generate_identity_assets(
-            question_and_answers,
-            previously_generated_brand_identity,
-            brandId,
-            system_prompt_template=(
-                '''You are a branding expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
-                "{question_and_answers}"
-                "<<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>"
-                "{previously_generated_brand_identity}"
-                "<<<. Generate 1 detailed prompt for an AI image generator to create a letterhead mockup for the brand. Specify brand name, logo, colors, and layout, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a single prompt string. You MUST respond with a list of strings in angle braces, in this format: ["prompt1", "prompt2"]. '''
-            ),
-            prompt="Please give me a letterhead prompt as a string.",
-            expected_count=1,
-            cloudinary_folder="letterheads",
-            userName=userName,
-            userEmail=userEmail,
-            userPhoneNumbers=userPhoneNumbers,
-            registrationNumber=registrationNumber,
-            website=website,
-            brandLogo=brandLogo,
-            others=others
-        )
-
-        tshirt_mockups = generate_identity_assets(
-            question_and_answers,
-            previously_generated_brand_identity,
-            brandId,
-            system_prompt_template=(
-                '''You are a branding expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
-                "{question_and_answers}"
-                "<<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>"
-                "{previously_generated_brand_identity}"
-                "<<<. Generate 1 detailed prompt for an AI image generator to create a t-shirt mockup for the brand. Specify logo placement, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a single prompt. You MUST respond with a single string prompt. '''
-            ),
-            prompt="Please give me 1 t-shirt mockup prompt.",
-            expected_count=1,
-            cloudinary_folder="tshirt_mockups",
-            userName=userName,
-            userEmail=userEmail,
-            userPhoneNumbers=userPhoneNumbers,
-            registrationNumber=registrationNumber,
-            website=website,
-            brandLogo=brandLogo,
-            others=others
-        )
-
-        cap_mockups = generate_identity_assets(
-            question_and_answers,
-            previously_generated_brand_identity,
-            brandId,
-            system_prompt_template=(
-                '''You are a branding expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
-                "{question_and_answers}"
-                "<<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>"
-                "{previously_generated_brand_identity}"
-                "<<<. Generate 1 detailed prompt for an AI image generator to create a cap mockup for the brand. Specify logo placement, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a single prompt string. You MUST respond with a list of strings in angle braces, in this format: ["prompt1", "prompt2"]. '''
-            ),
-            prompt="Please give me a cap mockup prompt as a string.",
-            expected_count=1,
-            cloudinary_folder="cap_mockups",
-            userName=userName,
-            userEmail=userEmail,
-            userPhoneNumbers=userPhoneNumbers,
-            registrationNumber=registrationNumber,
-            website=website,
-            brandLogo=brandLogo,
-            others=others
-        )
-
-        signboards = generate_identity_assets(
-            question_and_answers,
-            previously_generated_brand_identity,
-            brandId,
-            system_prompt_template=(
-                '''You are a branding expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
-                "{question_and_answers}"
-                "<<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>"
-                "{previously_generated_brand_identity}"
-                "<<<. Generate 1 detailed prompt for an AI image generator to create a signboard mockup for the brand. Specify logo, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a single prompt string. You MUST respond with a list of strings in angle braces, in this format: ["prompt1", "prompt2"]. '''
-            ),
-            prompt="Please give me a signboard mockup prompt as a string.",
-            expected_count=1,
-            cloudinary_folder="signboards",
-            userName=userName,
-            userEmail=userEmail,
-            userPhoneNumbers=userPhoneNumbers,
-            registrationNumber=registrationNumber,
-            website=website,
-            brandLogo=brandLogo,
-            others=others
-        )
-
-        # ========== Generate Social Media Content ==========
-        print("Generating social media content...")
-        
-        social_media_json_structure = {
-            "ready_made_posts": [
-                "string"
-            ],
-            "ad_copies": [
-                "string"
-            ],
-            "relevant_marketing_strategies": [
-                "string"
-            ]
-        }
-        system_prompt = (
-            f'''You are a social media content expert. Here is a list of questions we asked the user and here are the answers they gave: >>>
-            {question_and_answers} 
-            <<<. Generate social media content for the brand in the following JSON structure:
-            {json.dumps(social_media_json_structure, indent=2)}
-            - ready_made_posts: 6 objects, each with a 'caption' and a 'design_concept'.\n"
-            "- ad_copies: 3 creative ad copy strings.\n"
-            "- relevant_marketing_strategies: 3 relevant marketing strategies as strings.\n"
-            "Do not add any extra text or formatting. Only output valid JSON.
             
-            This is a sample post:
-            1-  Hello World, Meet Lumirural 🌍✨
-            Say hello to Lumirural — a bold new initiative built to light up lives, one village at a time.
-            In many rural communities, nightfall means silence, stillness, and struggle. No lights to read. No safe path to walk. No way to keep going.
-            We created Lumirural to change that.
-            At [Insert Founder's Name]'s core vision was a simple question:
-            👉 What if every household, no matter how remote, had access to affordable, clean, and reliable light?
-            That question sparked a movement — one that's now empowering families, improving education, and making communities safer through sustainable solar-powered lighting.
-            We're not just selling torches.
-            We're giving people the ability to live, learn, work, and thrive after dark.
-            💛 Follow us to join the journey.
-            🌱 Tell a friend in need.
-            🔦 Let's bring light to where it matters most.
-            #Lumirural #LightingUpLives #SolarForAll #CommunityPower
+        def _generate_social_media_content():
+            social_media_json_structure = {
+                "ready_made_posts": [
+                    "string"
+                ],
+                "ad_copies": [
+                    "string"
+                ],
+                "relevant_marketing_strategies": [
+                    "string"
+                ]
+            }
+            system_prompt = (
+                f'''You are a social media content expert. Here is a list of questions we asked the user and here are the answers they gave: >>>
+                {question_and_answers} 
+                <<<. Generate social media content for the brand in the following JSON structure:
+                {json.dumps(social_media_json_structure, indent=2)}
+                - ready_made_posts: 6 objects, each with a 'caption' and a 'design_concept'.\n"
+                "- ad_copies: 3 creative ad copy strings.\n"
+                "- relevant_marketing_strategies: 3 relevant marketing strategies as strings.\n"
+                "Do not add any extra text or formatting. Only output valid JSON.
+                
+                This is a sample post:
+                1-  Hello World, Meet Lumirural 🌍✨
+                Say hello to Lumirural — a bold new initiative built to light up lives, one village at a time.
+                In many rural communities, nightfall means silence, stillness, and struggle. No lights to read. No safe path to walk. No way to keep going.
+                We created Lumirural to change that.
+                At [Insert Founder's Name]'s core vision was a simple question:
+                👉 What if every household, no matter how remote, had access to affordable, clean, and reliable light?
+                That question sparked a movement — one that's now empowering families, improving education, and making communities safer through sustainable solar-powered lighting.
+                We're not just selling torches.
+                We're giving people the ability to live, learn, work, and thrive after dark.
+                💛 Follow us to join the journey.
+                🌱 Tell a friend in need.
+                🔦 Let's bring light to where it matters most.
+                #Lumirural #LightingUpLives #SolarForAll #CommunityPower
 
-            2- 👥 Meet the Visionaries Behind Lumirural 🔦🌍
-            Behind the scenes of Lumirural is a team passionate about bridging the energy gap in underserved communities across Cameroon and Africa.
-            Led by [Founder Name], [brief title e.g. social entrepreneur, engineer, dreamer], Lumirural was born from a deep desire to make sure that no child studies in darkness, and no family is left behind just because they live off the grid.
-            Alongside [Team Member 1], [Team Member 2], and an ever-growing community of thinkers, doers, and believers, our mission is simple but powerful:
-            Bring light to places the world often overlooks.
-            We believe in sustainable energy.
-            We believe in community power.
-            We believe it's time for rural Africa to shine — literally.
-            ✨ This is just the beginning.
-            Come along, share our story, and let's brighten the future together.
-            #MeetTheTeam #Lumirural #SocialEnergy #FoundersWithPurpose #SolarAfrica
+                2- 👥 Meet the Visionaries Behind Lumirural 🔦🌍
+                Behind the scenes of Lumirural is a team passionate about bridging the energy gap in underserved communities across Cameroon and Africa.
+                Led by [Founder Name], [brief title e.g. social entrepreneur, engineer, dreamer], Lumirural was born from a deep desire to make sure that no child studies in darkness, and no family is left behind just because they live off the grid.
+                Alongside [Team Member 1], [Team Member 2], and an ever-growing community of thinkers, doers, and believers, our mission is simple but powerful:
+                Bring light to places the world often overlooks.
+                We believe in sustainable energy.
+                We believe in community power.
+                We believe it's time for rural Africa to shine — literally.
+                ✨ This is just the beginning.
+                Come along, share our story, and let's brighten the future together.
+                #MeetTheTeam #Lumirural #SocialEnergy #FoundersWithPurpose #SolarAfrica
 
-            3- 💡 No Power. No Progress.
-            That's the Problem Lumirural is Solving.
-            Tired of struggling with darkness in rural homes, kids studying under candlelight, and families closing their day at sunset? So were we.
-            That's why we created Lumirural — to bring affordable, clean, and safe solar-powered light to communities that have been left in the dark for far too long.
-            Every evening, millions of people across Cameroon and Africa are forced to choose between expensive fuel, dangerous kerosene lamps, or complete darkness.
-            We said enough is enough.
-            ✅ With Lumirural, children can study at night
-            ✅ Small shops can stay open after sunset
-            ✅ Women and families can feel safe walking outside
-            ✅ Life doesn't have to stop just because the sun sets
-            We're lighting homes — but more than that, we're lighting hope.
-            Join us as we illuminate the path forward.
-            #TheProblemWeSolve #Lumirural #LightUpAfrica #SolarSolutions #EnergyForAll
-
-
-
-            4- 🔦 A Closer Look at What's Lighting Up Soon 👀
-            Say hello to the tools of transformation — built by Lumirural to power every home, every family, every dream.
-            🌞 Solar Lighting Kits
-            Affordable, durable, and designed for rural realities — our kits include lights, USB ports, and long-lasting solar panels for families, students, and small businesses.
-            📱 Rechargeable Lamps with USB Ports
-            For households with zero access to electricity. Charge your phone. Light your path. All in one.
-            🔋 Power Stations for Community Use
-            Bigger solutions for schools, churches, and health centers — helping entire communities thrive after dark.
-            💼 Pay-as-You-Go Solar Options
-            Energy shouldn't be a luxury. Our flexible payment plans make light accessible to all.
-            From farm to classroom, market to maternity ward, Lumirural is bringing light, safety, and possibility to places the grid forgot.
-            This isn't just electricity —
-            It's dignity, freedom, and a future that stays on after dark.
-            📸 Swipe to see what's coming soon and how you can be part of the change.
-            #Lumirural #OurProducts #SolarSolutions #LightChangesEverything #EnergyForDevelopment
+                3- 💡 No Power. No Progress.
+                That's the Problem Lumirural is Solving.
+                Tired of struggling with darkness in rural homes, kids studying under candlelight, and families closing their day at sunset? So were we.
+                That's why we created Lumirural — to bring affordable, clean, and safe solar-powered light to communities that have been left in the dark for far too long.
+                Every evening, millions of people across Cameroon and Africa are forced to choose between expensive fuel, dangerous kerosene lamps, or complete darkness.
+                We said enough is enough.
+                ✅ With Lumirural, children can study at night
+                ✅ Small shops can stay open after sunset
+                ✅ Women and families can feel safe walking outside
+                ✅ Life doesn't have to stop just because the sun sets
+                We're lighting homes — but more than that, we're lighting hope.
+                Join us as we illuminate the path forward.
+                #TheProblemWeSolve #Lumirural #LightUpAfrica #SolarSolutions #EnergyForAll
 
 
+
+                4- 🔦 A Closer Look at What's Lighting Up Soon 👀
+                Say hello to the tools of transformation — built by Lumirural to power every home, every family, every dream.
+                🌞 Solar Lighting Kits
+                Affordable, durable, and designed for rural realities — our kits include lights, USB ports, and long-lasting solar panels for families, students, and small businesses.
+                📱 Rechargeable Lamps with USB Ports
+                For households with zero access to electricity. Charge your phone. Light your path. All in one.
+                🔋 Power Stations for Community Use
+                Bigger solutions for schools, churches, and health centers — helping entire communities thrive after dark.
+                💼 Pay-as-You-Go Solar Options
+                Energy shouldn't be a luxury. Our flexible payment plans make light accessible to all.
+                From farm to classroom, market to maternity ward, Lumirural is bringing light, safety, and possibility to places the grid forgot.
+                This isn't just electricity —
+                It's dignity, freedom, and a future that stays on after dark.
+                📸 Swipe to see what's coming soon and how you can be part of the change.
+                #Lumirural #OurProducts #SolarSolutions #LightChangesEverything #EnergyForDevelopment
 
 
 
 
-            5- 🛠️ The Work Behind the Light ✨
-            It's been months of late nights, field visits, dusty roads, power cuts, bold ideas, and real conversations.
-            From sketching designs on scrap paper to testing prototypes in remote villages...
-            From team brainstorms under torchlight to meeting families who inspired everything we're building...
-            Here's a sneak peek behind our launch:
-            📸 [Insert photos or videos: packaging, production, team at work, first installations]
-            At Lumirural, we're not just assembling solar kits —
-            We're co-creating a future where every child can read at night, where mothers can cook safely, and where families no longer fear the dark.
-            This journey has been real, raw, and full of purpose.
-            And now, we're ready to shine.
-            Thank you for being part of the story.
-            The lights are coming on — and we're just getting started.
-            #BehindLumirural #MakingOf #StartupJourney #LightInTheDark #SolarAfrica #BTSLaunch
 
-            6- 💬 Real Stories. Real Impact.
-            Here's what people are already saying about Lumirural…
-            🗣️ "Before this light, my children couldn't read after 6pm. Now, they do homework at night — and even help me prepare for market."
-            — Mama Elise, Small Business Owner, Babadjou
-            🗣️ "I used to charge my phone once a week at a shop far away. Now I charge it at home and even make small money letting others charge theirs."
-            — Tata Collins, Farmer, Batibo
-            🗣️ "This isn't just light  it's freedom. It's security. It's dignity."
-            — Community Health Worker, Ndop
-            🌍 From households to health centers, the difference is already being felt — and we're only getting started.
-            Because when you give people light, you give them time, safety, and a fighting chance.
-            ➡️ Want to be part of the change?
-            DM us to get Lumirural in your home or community.
-            #TestimonialTuesday #LumiruralVoices #SolarWorks #ImpactInRealLife #LightForChange
+
+                5- 🛠️ The Work Behind the Light ✨
+                It's been months of late nights, field visits, dusty roads, power cuts, bold ideas, and real conversations.
+                From sketching designs on scrap paper to testing prototypes in remote villages...
+                From team brainstorms under torchlight to meeting families who inspired everything we're building...
+                Here's a sneak peek behind our launch:
+                📸 [Insert photos or videos: packaging, production, team at work, first installations]
+                At Lumirural, we're not just assembling solar kits —
+                We're co-creating a future where every child can read at night, where mothers can cook safely, and where families no longer fear the dark.
+                This journey has been real, raw, and full of purpose.
+                And now, we're ready to shine.
+                Thank you for being part of the story.
+                The lights are coming on — and we're just getting started.
+                #BehindLumirural #MakingOf #StartupJourney #LightInTheDark #SolarAfrica #BTSLaunch
+
+                6- 💬 Real Stories. Real Impact.
+                Here's what people are already saying about Lumirural…
+                🗣️ "Before this light, my children couldn't read after 6pm. Now, they do homework at night — and even help me prepare for market."
+                — Mama Elise, Small Business Owner, Babadjou
+                🗣️ "I used to charge my phone once a week at a shop far away. Now I charge it at home and even make small money letting others charge theirs."
+                — Tata Collins, Farmer, Batibo
+                🗣️ "This isn't just light  it's freedom. It's security. It's dignity."
+                — Community Health Worker, Ndop
+                🌍 From households to health centers, the difference is already being felt — and we're only getting started.
+                Because when you give people light, you give them time, safety, and a fighting chance.
+                ➡️ Want to be part of the change?
+                DM us to get Lumirural in your home or community.
+                #TestimonialTuesday #LumiruralVoices #SolarWorks #ImpactInRealLife #LightForChange
+                
+                
+                
+                
+                
+                Here is a sample marketing strategy:
+                
+                ✅ 1. Community-Based Demonstrations (On-Ground Activation)
+                Why it works: Most of your customers may be unfamiliar with solar tech or skeptical of promises. Seeing is believing.
+                What to do:
+                Partner with local chiefs, churches, health centers, and schools to organize "Light Up" demos.
+
+
+                Showcase how the products work (especially at night).
+
+
+                Let a few community members try it out and speak on their experience.
+
+
+                Offer launch-day discounts or giveaways at the event.
+
+
+                🎯 Trust is built faster in familiar spaces. Leverage community leaders and peer influence.
+
+                ✅ 2. Agent & Micro-Influencer Network in Rural Zones
+                Why it works: Word-of-mouth is gold in rural communities. People trust people they know.
+                What to do:
+                Recruit local sales agents and train them as Lumirural ambassadors. Give them a small commission on each sale.
+
+
+                Encourage satisfied customers to refer others through referral rewards.
+
+
+                Identify local role models (teachers, nurses, pastors) to be informal brand advocates.
+
+
+                🎯 You're not just selling lights, you're selling empowerment — make people part of the mission.
+
+                ✅ 3. WhatsApp-Based Marketing and Ordering
+                Why it works: WhatsApp is the most used digital tool among your target audience — even more than websites or social media.
+                What to do:
+                Create clear, image-rich status flyers with product info and prices.
+
+
+                Allow people to order and ask questions via WhatsApp with automated or human responses.
+
+
+                Use voice notes or short videos (local dialect if possible) to explain product benefits.
+
+
+                🎯 Make it easy to buy, ask, share — all from one app they already use every day.
+
+                ✅ 4. Radio Campaigns + Call-to-Action
+                Why it works: Radio is still the most powerful and accessible form of mass communication in rural Africa.
+                What to do:
+                Run ads on local-language radio stations, especially during evening news or farming programs.
+
+
+                Use testimonials from real users, jingle-style intros, or storytelling formats.
+
+
+                Include a phone number/WhatsApp link for direct purchase or agent sign-up.
+
+
+                🎯 Target the ears that matter most — and give them an action to take.
+
+                ✅ 5. Flexible Payment Plans + Bundle Promotions
+                Why it works: Many potential buyers can afford the product, but not in one go.
+                What to do:
+                Introduce Pay-As-You-Go (PAYG) or small weekly installment models.
+
+
+                Bundle offers: e.g., "Buy 3 lights, get 1 for your neighbor free" or "Mother's Pack: Light + Phone Charger for 5,000 off"
+
+
+                Allow school-based packages for students, supported by PTAs or community sponsors.
+
+
+                🎯 Lower the barrier to entry, especially in price-sensitive zones.
+                
+                
+                
+                
+                
+                
+                Here's a sample Ad:
+                
+                🔋 AD COPY 1: "Let There Be Light — Even Without ENEO"
+                🌞 Tired of being in the dark?
+                Talk to us now:
+                📲 https://wa.me/237XXXXXXXXX
+                Introducing the LUMIrural Home Solar Lighting Kit
+                ✅ Lights up to 3 rooms
+                ✅ USB ports for phone charging
+                ✅ Long-lasting battery
+                ✅ No fuel, no noise, no bills
+                Perfect for homes, kiosks, and village shops.
+                💡 All this for just 25,000 FCFA
+                One-time purchase. Lifetime of peace and Free Delivery
+
+                💡 AD COPY 2: "Own the Sun — We'll Package It for You"
+                Imagine having light every night without paying monthly bills.
+                Let's make it happen:
+                📲 https://wa.me/237XXXXXXXXX
+                The LUMIrural Solar Kit is:
+                ✔️ Rechargeable
+                ✔️ Portable and safe for indoor use
+                ✔️ Includes solar panel + cables + 3 LED bulbs
+                ✔️ Charges your phone and radio too
+                Clean, reliable energy that fits your pocket.
+                🎁 Get yours now at only 22,500 FCFA
+                Limited stock — let's light you up.
+
+                💡 Ad Copy 3:
+                "Your Neighbor Has Light. Why Are You Still in the Dark?"
+                📲 Order yours now: https://wa.me/237XXXXXXXXX
+                The street is talking and it's saying...
+                "Lumirural don land!"
+                ✅ Clean solar energy
+                ✅ Long-lasting bulbs
+                ✅ Phone charging that doesn't depend on "Eneo mood"
+                ✅ No noise, no smoke, just vibes
+                All this brightness for just 15,000 FRS.
+                Even your generator is sweating right now. 😅
+                Don't let darkness shame your compound.
+                We're just one WhatsApp message away.
+                
+                
+                
+                Use these samples as inspiration for the content of the brand.
+
+                '''
+            )
+            has_website = bool(website and isinstance(website, str) and (website.startswith("http://") or website.startswith("https://")))
+            if has_website:
+                website_prompt_tail = f" Ensure \"relevant_marketing_strategies\" includes a strategy to improve the existing website ({website}) focusing on SEO, speed, conversion and lead capture."
+            else:
+                website_prompt_tail = " Ensure \"relevant_marketing_strategies\" includes a strategy to create a professional website (credibility, discovery, lead capture) and place it among the top strategies."
+
+            prompt = f"Please give me the social media content as JSON in the specified structure.{website_prompt_tail}"
             
-            
-            
-            
-            
-            Here is a sample marketing strategy:
-            
-            ✅ 1. Community-Based Demonstrations (On-Ground Activation)
-            Why it works: Most of your customers may be unfamiliar with solar tech or skeptical of promises. Seeing is believing.
-            What to do:
-            Partner with local chiefs, churches, health centers, and schools to organize "Light Up" demos.
-
-
-            Showcase how the products work (especially at night).
-
-
-            Let a few community members try it out and speak on their experience.
-
-
-            Offer launch-day discounts or giveaways at the event.
-
-
-            🎯 Trust is built faster in familiar spaces. Leverage community leaders and peer influence.
-
-            ✅ 2. Agent & Micro-Influencer Network in Rural Zones
-            Why it works: Word-of-mouth is gold in rural communities. People trust people they know.
-            What to do:
-            Recruit local sales agents and train them as Lumirural ambassadors. Give them a small commission on each sale.
-
-
-            Encourage satisfied customers to refer others through referral rewards.
-
-
-            Identify local role models (teachers, nurses, pastors) to be informal brand advocates.
-
-
-            🎯 You're not just selling lights, you're selling empowerment — make people part of the mission.
-
-            ✅ 3. WhatsApp-Based Marketing and Ordering
-            Why it works: WhatsApp is the most used digital tool among your target audience — even more than websites or social media.
-            What to do:
-            Create clear, image-rich status flyers with product info and prices.
-
-
-            Allow people to order and ask questions via WhatsApp with automated or human responses.
-
-
-            Use voice notes or short videos (local dialect if possible) to explain product benefits.
-
-
-            🎯 Make it easy to buy, ask, share — all from one app they already use every day.
-
-            ✅ 4. Radio Campaigns + Call-to-Action
-            Why it works: Radio is still the most powerful and accessible form of mass communication in rural Africa.
-            What to do:
-            Run ads on local-language radio stations, especially during evening news or farming programs.
-
-
-            Use testimonials from real users, jingle-style intros, or storytelling formats.
-
-
-            Include a phone number/WhatsApp link for direct purchase or agent sign-up.
-
-
-            🎯 Target the ears that matter most — and give them an action to take.
-
-            ✅ 5. Flexible Payment Plans + Bundle Promotions
-            Why it works: Many potential buyers can afford the product, but not in one go.
-            What to do:
-            Introduce Pay-As-You-Go (PAYG) or small weekly installment models.
-
-
-            Bundle offers: e.g., "Buy 3 lights, get 1 for your neighbor free" or "Mother's Pack: Light + Phone Charger for 5,000 off"
-
-
-            Allow school-based packages for students, supported by PTAs or community sponsors.
-
-
-            🎯 Lower the barrier to entry, especially in price-sensitive zones.
-            
-            
-            
-            
-            
-            
-            Here's a sample Ad:
-            
-            🔋 AD COPY 1: "Let There Be Light — Even Without ENEO"
-            🌞 Tired of being in the dark?
-            Talk to us now:
-            📲 https://wa.me/237XXXXXXXXX
-            Introducing the LUMIrural Home Solar Lighting Kit
-            ✅ Lights up to 3 rooms
-            ✅ USB ports for phone charging
-            ✅ Long-lasting battery
-            ✅ No fuel, no noise, no bills
-            Perfect for homes, kiosks, and village shops.
-            💡 All this for just 25,000 FCFA
-            One-time purchase. Lifetime of peace and Free Delivery
-
-            💡 AD COPY 2: "Own the Sun — We'll Package It for You"
-            Imagine having light every night without paying monthly bills.
-            Let's make it happen:
-            📲 https://wa.me/237XXXXXXXXX
-            The LUMIrural Solar Kit is:
-            ✔️ Rechargeable
-            ✔️ Portable and safe for indoor use
-            ✔️ Includes solar panel + cables + 3 LED bulbs
-            ✔️ Charges your phone and radio too
-            Clean, reliable energy that fits your pocket.
-            🎁 Get yours now at only 22,500 FCFA
-            Limited stock — let's light you up.
-
-            💡 Ad Copy 3:
-            "Your Neighbor Has Light. Why Are You Still in the Dark?"
-            📲 Order yours now: https://wa.me/237XXXXXXXXX
-            The street is talking and it's saying...
-            "Lumirural don land!"
-            ✅ Clean solar energy
-            ✅ Long-lasting bulbs
-            ✅ Phone charging that doesn't depend on "Eneo mood"
-            ✅ No noise, no smoke, just vibes
-            All this brightness for just 15,000 FRS.
-            Even your generator is sweating right now. 😅
-            Don't let darkness shame your compound.
-            We're just one WhatsApp message away.
-            
-            
-            
-            Use these samples as inspiration for the content of the brand.
-
-            '''
-        )
-        # Add conditional instruction based on whether a website exists
-        has_website = bool(website and isinstance(website, str) and (website.startswith("http://") or website.startswith("https://")))
-        if has_website:
-            website_prompt_tail = f" Ensure \"relevant_marketing_strategies\" includes a strategy to improve the existing website ({website}) focusing on SEO, speed, conversion and lead capture."
-        else:
-            website_prompt_tail = " Ensure \"relevant_marketing_strategies\" includes a strategy to create a professional website (credibility, discovery, lead capture) and place it among the top strategies."
-
-        prompt = f"Please give me the social media content as JSON in the specified structure.{website_prompt_tail}"
-        
-        try:
             response = openAI.get_text_prediction(system_prompt, prompt)
-            print(f'Social media content response received: {len(str(response))} characters')
+            social_media_content = clean_and_parse_json(response) or {}
             
-            # Use the existing clean_and_parse_json function to handle malformed JSON
-            social_media_content = clean_and_parse_json(response)
-        except Exception as e:
-            print(f"Error generating social media content: {e}")
-            social_media_content = None
-        
-        if social_media_content:
-            ready_made_posts = social_media_content.get("ready_made_posts", [])
-            ad_copies = social_media_content.get("ad_copies", [])
-            relevant_marketing_strategies = social_media_content.get("relevant_marketing_strategies", [])
-        else:
-            print("Warning: Could not parse social media content, using default values")
-            ready_made_posts = []
-            ad_copies = []
-            relevant_marketing_strategies = []
+            # Post-parse safeguard: enforce website recommendation
+            try:
+                strategies = social_media_content.get("relevant_marketing_strategies", [])
+                text_blob = " ".join([s for s in strategies if isinstance(s, str)]).lower()
+                mentions_site = any(k in text_blob for k in ["website", "site", "landing page", "landing-page", "web page"])
+                if not has_website and not mentions_site:
+                    strategies.append("Create a professional website as your always-on hub for credibility, discovery (SEO), and lead capture; ensure clear value proposition, fast load times, mobile-first design, and a simple contact/WhatsApp CTA.")
+                if has_website and not mentions_site:
+                    strategies.append("Improve your website: fix Core Web Vitals, implement on-page SEO (title/meta/H1), add clear CTAs and lead capture (forms/WhatsApp), and track conversions to continuously optimize.")
+                social_media_content["relevant_marketing_strategies"] = strategies
+            except Exception as e:
+                print(f"Error during website strategy safeguard: {e}")
 
-        # Post-parse safeguard: enforce website recommendation
-        try:
-            text_blob = " ".join([s for s in relevant_marketing_strategies if isinstance(s, str)]).lower()
-            mentions_site = any(k in text_blob for k in ["website", "site", "landing page", "landing-page", "web page"])
-            if not has_website and not mentions_site:
-                relevant_marketing_strategies.append(
-                    "Create a professional website as your always-on hub for credibility, discovery (SEO), and lead capture; ensure clear value proposition, fast load times, mobile-first design, and a simple contact/WhatsApp CTA."
-                )
-            if has_website and not mentions_site:
-                relevant_marketing_strategies.append(
-                    "Improve your website: fix Core Web Vitals, implement on-page SEO (title/meta/H1), add clear CTAs and lead capture (forms/WhatsApp), and track conversions to continuously optimize."
-                )
-        except Exception as _:
-            pass
-
-        # ========== Generate Premium Brand Guidelines ==========
-        print("Generating brand guidelines...")
-        
-        brand_guidelines_system_prompt = f'''You are a brand identity expert. Here is a list of questions we asked the user and here are the answers they gave: >>>
-        {question_and_answers} 
-        <<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>
-        {previously_generated_brand_identity}
-        <<<. Generate comprehensive brand guidelines in the following JSON structure:
-        {{
-            "style_guide": {{
-                "typography_rules": [
+            return social_media_content
+            
+        def _generate_brand_guidelines():
+            system_prompt = f'''You are a brand identity expert. Here is a list of questions we asked the user and here are the answers they gave: >>>
+            {question_and_answers} 
+            <<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>
+            {previously_generated_brand_identity}
+            <<<. Generate comprehensive brand guidelines in the following JSON structure:
+            {{
+                "style_guide": {{
+                    "typography_rules": [
+                        {{
+                            "font_family": "string",
+                            "usage": "string",
+                            "size_range": "string",
+                            "line_height": "string",
+                            "spacing": "string"
+                        }}
+                    ],
+                    "color_usage": [
+                        {{
+                            "color_name": "string",
+                            "hex_value": "string",
+                            "usage_context": "string",
+                            "do_not_use_for": "string"
+                        }}
+                    ],
+                    "spacing_guidelines": [
+                        {{
+                            "element": "string",
+                            "margin": "string",
+                            "padding": "string",
+                            "description": "string"
+                        }}
+                    ]
+                }},
+                "logo_usage_rules": [
                     {{
-                        "font_family": "string",
-                        "usage": "string",
-                        "size_range": "string",
-                        "line_height": "string",
-                        "spacing": "string"
+                        "rule": "string",
+                        "description": "string",
+                        "examples": "string"
                     }}
                 ],
-                "color_usage": [
-                    {{
-                        "color_name": "string",
-                        "hex_value": "string",
-                        "usage_context": "string",
-                        "do_not_use_for": "string"
-                    }}
-                ],
-                "spacing_guidelines": [
+                "brand_voice": {{
+                    "tone": "string",
+                    "personality_traits": ["string"],
+                    "communication_style": "string",
+                    "do_not_use": ["string"]
+                }},
+                "visual_hierarchy": [
                     {{
                         "element": "string",
-                        "margin": "string",
-                        "padding": "string",
-                        "description": "string"
+                        "priority": "string",
+                        "guidelines": "string"
                     }}
                 ]
-            }},
-            "logo_usage_rules": [
-                {{
-                    "rule": "string",
-                    "description": "string",
-                    "examples": "string"
-                }}
-            ],
-            "brand_voice": {{
-                "tone": "string",
-                "personality_traits": ["string"],
-                "communication_style": "string",
-                "do_not_use": ["string"]
-            }},
-            "visual_hierarchy": [
-                {{
-                    "element": "string",
-                    "priority": "string",
-                    "guidelines": "string"
-                }}
-            ]
-        }}
-        
-        Make the guidelines comprehensive, professional, and actionable. Include specific rules and examples.'''
-
-        brand_guidelines_prompt = "Please give me comprehensive brand guidelines as JSON."
-        
-        try:
-            brand_guidelines_response = openAI.get_text_prediction(brand_guidelines_system_prompt, brand_guidelines_prompt)
-            print(f"Brand guidelines response received: {len(str(brand_guidelines_response))} characters")
-            brand_guidelines = clean_and_parse_json(brand_guidelines_response)
-        except Exception as e:
-            print(f"Error generating brand guidelines: {e}")
-            brand_guidelines = None
-        
-        if not brand_guidelines:
-            print("Warning: Could not parse brand guidelines, using default values")
-            brand_guidelines = {
+            }}
+            
+            Make the guidelines comprehensive, professional, and actionable. Include specific rules and examples.'''
+            prompt = "Please give me comprehensive brand guidelines as JSON."
+            response = openAI.get_text_prediction(system_prompt, prompt)
+            return clean_and_parse_json(response) or {
                 "style_guide": {"typography_rules": [], "color_usage": [], "spacing_guidelines": []},
                 "logo_usage_rules": [],
                 "brand_voice": {"tone": "", "personality_traits": [], "communication_style": "", "do_not_use": []},
                 "visual_hierarchy": []
             }
         
-        print("Brand guidelines generation completed.")
+        def _generate_copywriting_framework():
+            system_prompt = f'''You are a senior copywriting strategist. Here is a list of questions we asked the user and the answers they gave: >>>
+            {question_and_answers}
+            <<<. Based on this, produce a copywriting framework that guides how to write and market to the brand's target audience.
 
-        # ========== Generate Copywriting Framework ==========
-        print("Generating copywriting framework...")
-        
-        # Simplified copywriting framework generation with better error handling
-        copywriting_framework_system_prompt = f'''You are a senior copywriting strategist. Here is a list of questions we asked the user and the answers they gave: >>>
-        {question_and_answers}
-        <<<. Based on this, produce a copywriting framework that guides how to write and market to the brand's target audience.
+            Generate a JSON object with these sections:
+            1. persona_snapshot: demographics, psychographics, fears, desires, aspirations, awareness_stage
+            2. message_pillars: problem_narrative, desired_transformation, differentiators, proof_assets, cta_patterns
+            3. copy_frameworks: array of copy frameworks (PAS, AIDA, 4P, BAB, FAB)
+            4. writing_guidance: fears, desires, dreams, aspirations
+            5. tone_style_rules: reading_level, formality, lexicon_use, lexicon_avoid, voice, cadence
+            6. objection_bank: array of objections with reframes
+            7. hook_bank: array of hooks with tags
+            8. cta_bank: array of CTAs with friction levels
+            9. channel_adaptation: whatsapp, instagram, linkedin, landing_page, radio_ooh
+            10. asset_recipe: array of steps
+            11. measurement: metrics, ab_tests, iteration_rules
 
-        Generate a JSON object with these sections:
-        1. persona_snapshot: demographics, psychographics, fears, desires, aspirations, awareness_stage
-        2. message_pillars: problem_narrative, desired_transformation, differentiators, proof_assets, cta_patterns
-        3. copy_frameworks: array of copy frameworks (PAS, AIDA, 4P, BAB, FAB)
-        4. writing_guidance: fears, desires, dreams, aspirations
-        5. tone_style_rules: reading_level, formality, lexicon_use, lexicon_avoid, voice, cadence
-        6. objection_bank: array of objections with reframes
-        7. hook_bank: array of hooks with tags
-        8. cta_bank: array of CTAs with friction levels
-        9. channel_adaptation: whatsapp, instagram, linkedin, landing_page, radio_ooh
-        10. asset_recipe: array of steps
-        11. measurement: metrics, ab_tests, iteration_rules
-
-        Return ONLY valid JSON. No markdown, no extra text.'''
-
-        copywriting_framework_prompt = "Generate the copywriting framework as JSON only."
-        
-        try:
-            copywriting_framework_response = openAI.get_text_prediction(copywriting_framework_system_prompt, copywriting_framework_prompt)
-            print(f"Copywriting framework response received: {len(str(copywriting_framework_response))} characters")
-            
-            # Try to parse the response
-            copywriting_framework = clean_and_parse_json(copywriting_framework_response)
-            
-            if not copywriting_framework:
-                print("Warning: Could not parse copywriting framework, trying alternative approach...")
-                
-                # Try to extract JSON from the response manually
-                response_str = str(copywriting_framework_response)
-                if '{' in response_str and '}' in response_str:
-                    start = response_str.find('{')
-                    end = response_str.rfind('}') + 1
-                    json_str = response_str[start:end]
-                    
-                    try:
-                        copywriting_framework = json.loads(json_str)
-                        print("Successfully parsed JSON using manual extraction")
-                    except json.JSONDecodeError as e:
-                        print(f"Manual JSON extraction failed: {e}")
-                        copywriting_framework = None
-                
-                if not copywriting_framework:
-                    print("Creating fallback copywriting framework...")
-                    # Generate a basic framework based on the brand data
-                    copywriting_framework = {
-                        "persona_snapshot": {
-                            "demographics": "Based on brand analysis",
-                            "psychographics": "Values and lifestyle patterns",
-                            "fears": ["Not achieving goals", "Missing opportunities"],
-                            "desires": ["Success", "Recognition", "Growth"],
-                            "aspirations": ["Building something meaningful"],
-                            "awareness_stage": "problem"
-                        },
-                        "message_pillars": {
-                            "problem_narrative": "Addressing key challenges in the market",
-                            "desired_transformation": "Helping customers achieve their goals",
-                            "differentiators": ["Unique approach", "Proven results"],
-                            "proof_assets": ["Customer testimonials", "Case studies"],
-                            "cta_patterns": ["Start your journey", "Get started today"]
-                        },
-                        "copy_frameworks": [
-                            {"name": "PAS", "when_to_use": "Problem awareness", "outline": ["Problem", "Agitation", "Solution"]},
-                            {"name": "AIDA", "when_to_use": "General marketing", "outline": ["Attention", "Interest", "Desire", "Action"]},
-                            {"name": "4P", "when_to_use": "Product promotion", "outline": ["Picture", "Promise", "Prove", "Push"]}
-                        ],
-                        "writing_guidance": {
-                            "fears": "Address concerns with empathy",
-                            "desires": "Highlight benefits and outcomes",
-                            "dreams": "Connect with aspirations",
-                            "aspirations": "Show path to success"
-                        },
-                        "tone_style_rules": {
-                            "reading_level": "High school",
-                            "formality": "Professional but approachable",
-                            "lexicon_use": ["innovative", "solutions", "results"],
-                            "lexicon_avoid": ["jargon", "complex terms"],
-                            "voice": "Authoritative yet friendly",
-                            "cadence": "Clear and concise"
-                        },
-                        "objection_bank": [
-                            {"objection": "It's too expensive", "reframe": "Investment in your future", "proof": "ROI data", "risk_reversal": "Money-back guarantee"}
-                        ],
-                        "hook_bank": [
-                            {"text": "Transform your business today", "tag": "desire", "awareness_stage": "solution"}
-                        ],
-                        "cta_bank": [
-                            {"text": "Get Started Now", "friction_level": "low"},
-                            {"text": "Schedule a Consultation", "friction_level": "medium"}
-                        ],
-                        "channel_adaptation": {
-                            "whatsapp": "Personal, conversational tone",
-                            "instagram": "Visual, engaging content",
-                            "linkedin": "Professional, thought leadership",
-                            "landing_page": "Clear value proposition",
-                            "radio_ooh": "Memorable, action-oriented"
-                        },
-                        "asset_recipe": [
-                            "Define target audience",
-                            "Create compelling headlines",
-                            "Develop supporting content",
-                            "Add clear CTAs",
-                            "Test and optimize"
-                        ],
-                        "measurement": {
-                            "metrics": ["Conversion rate", "Engagement rate", "Click-through rate"],
-                            "ab_tests": ["Headline variations", "CTA button colors"],
-                            "iteration_rules": ["Test one variable at a time", "Run tests for statistical significance"]
-                        }
-                    }
-        except Exception as e:
-            print(f"Error generating copywriting framework: {e}")
-            print("Using default copywriting framework...")
-            copywriting_framework = {
-                "persona_snapshot": {
-                    "demographics": "Target audience based on brand analysis",
-                    "psychographics": "Values and lifestyle patterns",
-                    "fears": ["Not achieving goals", "Missing opportunities"],
-                    "desires": ["Success", "Recognition", "Growth"],
-                    "aspirations": ["Building something meaningful"],
-                    "awareness_stage": "problem"
-                },
-                "message_pillars": {
-                    "problem_narrative": "Addressing key challenges in the market",
-                    "desired_transformation": "Helping customers achieve their goals",
-                    "differentiators": ["Unique approach", "Proven results"],
-                    "proof_assets": ["Customer testimonials", "Case studies"],
-                    "cta_patterns": ["Start your journey", "Get started today"]
-                },
-                "copy_frameworks": [
-                    {"name": "PAS", "when_to_use": "Problem awareness", "outline": ["Problem", "Agitation", "Solution"]},
-                    {"name": "AIDA", "when_to_use": "General marketing", "outline": ["Attention", "Interest", "Desire", "Action"]},
-                    {"name": "4P", "when_to_use": "Product promotion", "outline": ["Picture", "Promise", "Prove", "Push"]}
-                ],
-                "writing_guidance": {
-                    "fears": "Address concerns with empathy",
-                    "desires": "Highlight benefits and outcomes",
-                    "dreams": "Connect with aspirations",
-                    "aspirations": "Show path to success"
-                },
-                "tone_style_rules": {
-                    "reading_level": "High school",
-                    "formality": "Professional but approachable",
-                    "lexicon_use": ["innovative", "solutions", "results"],
-                    "lexicon_avoid": ["jargon", "complex terms"],
-                    "voice": "Authoritative yet friendly",
-                    "cadence": "Clear and concise"
-                },
-                "objection_bank": [
-                    {"objection": "It's too expensive", "reframe": "Investment in your future", "proof": "ROI data", "risk_reversal": "Money-back guarantee"}
-                ],
-                "hook_bank": [
-                    {"text": "Transform your business today", "tag": "desire", "awareness_stage": "solution"}
-                ],
-                "cta_bank": [
-                    {"text": "Get Started Now", "friction_level": "low"},
-                    {"text": "Schedule a Consultation", "friction_level": "medium"}
-                ],
-                "channel_adaptation": {
-                    "whatsapp": "Personal, conversational tone",
-                    "instagram": "Visual, engaging content",
-                    "linkedin": "Professional, thought leadership",
-                    "landing_page": "Clear value proposition",
-                    "radio_ooh": "Memorable, action-oriented"
-                },
-                "asset_recipe": [
-                    "Define target audience",
-                    "Create compelling headlines",
-                    "Develop supporting content",
-                    "Add clear CTAs",
-                    "Test and optimize"
-                ],
-                "measurement": {
-                    "metrics": ["Conversion rate", "Engagement rate", "Click-through rate"],
-                    "ab_tests": ["Headline variations", "CTA button colors"],
-                    "iteration_rules": ["Test one variable at a time", "Run tests for statistical significance"]
-                }
+            Return ONLY valid JSON. No markdown, no extra text.'''
+            prompt = "Generate the copywriting framework as JSON only."
+            response = openAI.get_text_prediction(system_prompt, prompt)
+            return clean_and_parse_json(response) or {
+                "persona_snapshot": {}, "message_pillars": {}, "copy_frameworks": [], "writing_guidance": {},
+                "tone_style_rules": {}, "objection_bank": [], "hook_bank": [], "cta_bank": [],
+                "channel_adaptation": {}, "asset_recipe": [], "measurement": {}
             }
-        
-        print("Copywriting framework generation completed.")
 
-        # ================================== Prepare results object  ==================================
-
-        # Extract brand identity information from previously generated data
-        brand_name = brand.get("name", "")
+        # ================================== 3. PARALLEL TASK EXECUTION ==================================
         
-        # Parse brand_identity JSON string if it exists
-        brand_identity_data = {}
-        if brand.get("brand_identity"):
-            try:
-                brand_identity_data = json.loads(brand["brand_identity"]) if isinstance(brand["brand_identity"], str) else brand["brand_identity"]
-            except (json.JSONDecodeError, TypeError) as e:
-                print(f"Error parsing brand_identity JSON: {e}")
-                brand_identity_data = {}
-        
-        brand_identity_description = brand_identity_data.get("brand_identity_description", "")
-        brand_colors = brand_identity_data.get("brand_colors", [])
-        brand_typography = brand_identity_data.get("brand_typography", {})
+        generated_assets = {}
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            future_to_task = {}
 
+            # --- Submit Text and JSON Generation Tasks ---
+            future_to_task[executor.submit(_generate_social_media_content)] = "social_media_content"
+            future_to_task[executor.submit(_generate_brand_guidelines)] = "brand_guidelines"
+            future_to_task[executor.submit(_generate_copywriting_framework)] = "copywriting_framework"
+
+            # --- Submit Image Generation Tasks ---
+            image_task_definitions = {
+                "brand_patterns": {
+                    "sys_prompt": '''You are a brand identity expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
+                    "{question_and_answers}"
+                    "<<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>"
+                    "{previously_generated_brand_identity}"
+                    "<<<. Generate 1 unique, visually appealing brand pattern prompt for an AI image generator. The pattern should reflect the brand's personality, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a single detailed prompt. Do not add any extra text or formatting. You MUST respond with a single string prompt. We will send the prompt together with the logo to the AI model, so make sure to tell the AI to use the uploaded logo. Specify the aspect ratio you think will be good for this mockup.''',
+                    "prompt": "Please give me 1 brand pattern prompt.", "count": 1, "folder": "brand_patterns"
+                },
+                "business_cards": {
+                    "sys_prompt": '''You are a branding expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
+                    "{question_and_answers}"
+                    "<<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>"
+                    "{previously_generated_brand_identity}"
+                    "<<<. Generate 1 highly detailed prompt for an AI image generator to create a business card mockup for the brand. The prompt should specify the brand name, tagline, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a single prompt. No extra text. You MUST respond with a single string prompt. We will send the prompt together with the logo to the AI model, so make sure to tell the AI to use the uploaded logo. Specify the aspect ratio you think will be good for this mockup.''',
+                    "prompt": "Please give me 1 business card prompt.", "count": 1, "folder": "business_cards"
+                },
+                "letterheads": {
+                    "sys_prompt": '''You are a branding expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
+                    "{question_and_answers}"
+                    "<<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>"
+                    "{previously_generated_brand_identity}"
+                    "<<<. Generate 1 detailed prompt for an AI image generator to create a letterhead mockup for the brand. Specify brand name, logo, colors, and layout, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a single prompt string. You MUST respond with a list of strings in angle braces, in this format: ["prompt1", "prompt2"]. We will send the prompt together with the logo to the AI model, so make sure to tell the AI to use the uploaded logo. The prompt should specify that the letterhead is supposed to be A4 size, in portrait orientation. Specify the aspect ratio you think will be good for this mockup.''',
+                    "prompt": "Please give me a letterhead prompt as a string.", "count": 1, "folder": "letterheads"
+                },
+                "tshirt_mockups": {
+                    "sys_prompt": '''You are a branding expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
+                    "{question_and_answers}"
+                    "<<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>"
+                    "{previously_generated_brand_identity}"
+                    "<<<. Generate 1 detailed prompt for an AI image generator to create a t-shirt mockup for the brand. Specify logo placement, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a single prompt. You MUST respond with a single string prompt.  We will send the prompt together with the logo to the AI model, so make sure to tell the AI to use the uploaded logo. Specify the aspect ratio you think will be good for this mockup.''',
+                    "prompt": "Please give me 1 t-shirt mockup prompt.", "count": 1, "folder": "tshirt_mockups"
+                },
+                "cap_mockups": {
+                    "sys_prompt": '''You are a branding expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
+                    "{question_and_answers}"
+                    "<<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>"
+                    "{previously_generated_brand_identity}"
+                    "<<<. Generate 1 detailed prompt for an AI image generator to create a cap mockup for the brand. Specify logo placement, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a single prompt string. You MUST respond with a list of strings in angle braces, in this format: ["prompt1", "prompt2"].  We will send the prompt together with the logo to the AI model, so make sure to tell the AI to use the uploaded logo. Specify the aspect ratio you think will be good for this mockup.''',
+                    "prompt": "Please give me a cap mockup prompt as a string.", "count": 1, "folder": "cap_mockups"
+                },
+                "signboards": {
+                    "sys_prompt": '''You are a branding expert. Here is a list of questions we asked the user and here are the answers they gave: >>>"
+                    "{question_and_answers}"
+                    "<<<. Here is the previously generated brand identity for this brand (including colors, typography, etc): >>>"
+                    "{previously_generated_brand_identity}"
+                    "<<<. Generate 1 detailed prompt for an AI image generator to create a signboard mockup for the brand. Specify logo, colors, and style, and must respect the previously generated brand identity (especially colors, typography, and any other relevant details). Output as a single prompt string. You MUST respond with a list of strings in angle braces, in this format: ["prompt1", "prompt2"].  We will send the prompt together with the logo to the AI model, so make sure to tell the AI to use the uploaded logo. Specify the aspect ratio you think will be good for this mockup.''',
+                    "prompt": "Please give me a signboard mockup prompt as a string.", "count": 1, "folder": "signboards"
+                },
+            }
+            
+            for name, params in image_task_definitions.items():
+                future = executor.submit(_generate_identity_assets, name, params["sys_prompt"], params["prompt"], params["count"], params["folder"], logo_local_path)
+                future_to_task[future] = name
+
+            # --- Collect Results as They Complete ---
+            for future in as_completed(future_to_task):
+                task_name = future_to_task[future]
+                try:
+                    result = future.result()
+                    generated_assets[task_name] = result
+                    print(f"✅ Task '{task_name}' completed successfully.")
+                except Exception as exc:
+                    print(f"❌ Task '{task_name}' generated an exception: {exc}")
+                    generated_assets[task_name] = None if "mockup" in task_name or "card" in task_name or "pattern" in task_name else {}
+        
+        # ================================== 4. SEQUENTIAL FINALIZATION PHASE ==================================
+        
+        print("All tasks completed. Assembling final results...")
+        
+        social_media_content = generated_assets.get("social_media_content", {})
+        
         results = {
             "userId": userId,
             "brandId": brandId,
             "full_brand_identity": {
-                "brand_name": brand_name,
-                "brand_identity_description": brand_identity_description,
-                "brand_patterns": brandPatterns,
-                "brand_colors": brand_colors,
-                "brand_typography": brand_typography,
-                "business_cards": business_cards,
-                "letterheads": letterheads,
-                "t_shirt_mockups": tshirt_mockups,
-                "cap_mockups": cap_mockups,
-                "signboards": signboards,
+                "brand_name": brand.get("name", ""),
+                "brand_identity_description": brand_identity_data.get("about_the_brand", ""),
+                "brand_patterns": generated_assets.get("brand_patterns"),
+                "brand_colors": previously_generated_brand_identity.get("brand_colors", []),
+                "brand_typography": previously_generated_brand_identity.get("typography", {}),
+                "business_cards": generated_assets.get("business_cards"),
+                "letterheads": generated_assets.get("letterheads"),
+                "t_shirt_mockups": generated_assets.get("tshirt_mockups"),
+                "cap_mockups": generated_assets.get("cap_mockups"),
+                "signboards": generated_assets.get("signboards"),
             },
             "social_media_content": {
-                "ready_made_posts": ready_made_posts,
-                "ad_copies": ad_copies,
-                "relevant_marketing_strategies": relevant_marketing_strategies
+                "ready_made_posts": social_media_content.get("ready_made_posts", []),
+                "ad_copies": social_media_content.get("ad_copies", []),
+                "relevant_marketing_strategies": social_media_content.get("relevant_marketing_strategies", [])
             },
             "premium_assets": {
-                "brand_guidelines": brand_guidelines,
-                "copywriting_framework": copywriting_framework
+                "brand_guidelines": generated_assets.get("brand_guidelines"),
+                "copywriting_framework": generated_assets.get("copywriting_framework")
             }
         }
         
-        # Save to database
-        print("Saving brand assets to database...")
+        print("Saving final brand assets to the database...")
         db.create_brand_assets(brandId, userId, results["full_brand_identity"], results["social_media_content"], results["premium_assets"])
         
-        print("✅ Full brand generation completed successfully!")
-        print(f"Generated assets for brand ID: {brandId}")
-        print(f"User ID: {userId}")
-        
+        print(f"✅ Full brand generation completed successfully for brand ID: {brandId}")
         return results
+
     except Exception as e:
-        print(f"Error in generate_results: {e}")
+        print(f"Error in generate_final_results: {e}")
         import traceback
         traceback.print_exc()
         return {"error": True, "message": str(e)}
@@ -1486,13 +1166,13 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
         try:
             if os.path.exists(images_dir):
                 shutil.rmtree(images_dir)
-                print(f"Deleted images directory: {images_dir}")
+                print(f"Cleaned up temporary images directory: {images_dir}")
         except Exception as cleanup_error:
-            print(f"Error deleting images directory: {cleanup_error}")
+            print(f"Error during cleanup of images directory: {cleanup_error}")
             
             
             
             
 # print("\n\n\n\nFinal result\n\n")
-# print(generate_final_results("bf286f70-711d-429c-80a6-dfa74e47cb2b", "be3ad5cc-5f4e-45be-aaf0-35439391578e", "Kum Randy", "myemail@gmail.com", "652932842", "", "www.toothai.com", "https://logomoose.com/wp-content/uploads/2016/01/18.jpg"))
+print(generate_final_results("bf286f70-711d-429c-80a6-dfa74e47cb2b", "be3ad5cc-5f4e-45be-aaf0-35439391578e", "Kum Randy", "myemail@gmail.com", "652932842", "", "www.toothai.com", "https://logomoose.com/wp-content/uploads/2016/01/18.jpg"))
 # print(generate_results("bf286f70-711d-429c-80a6-dfa74e47cb2b", "be3ad5cc-5f4e-45be-aaf0-35439391578e"))
