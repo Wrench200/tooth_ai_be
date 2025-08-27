@@ -657,6 +657,9 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
         
         
         
+        # Download the logo once and reuse for all assets
+        logo_local_path = functions.download_image(brandLogo) if brandLogo else None
+
         def generate_identity_assets(
             question_and_answers,
             previously_generated_brand_identity,
@@ -700,9 +703,8 @@ def generate_final_results(userId, brandId, userName, userEmail, userPhoneNumber
             for idx, item_prompt in enumerate(prompts[:expected_count]):
                 try:
                     print("Generating image ...")
-                    # Pass brandLogo as a list if provided, else empty list
-                    logo = functions.download_image(brandLogo)
-                    images = [logo] if logo else []
+                    # Use the already downloaded logo
+                    images = [logo_local_path] if logo_local_path else []
                     img = openAI.generate_image(item_prompt, images=images)
                     print(f"Generated image url: {img}")
                     if img and os.path.isfile(img):
