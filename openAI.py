@@ -68,7 +68,7 @@ def get_text_prediction(system_prompt, prompt, max_retries=5, backoff_factor=1, 
                 "generationConfig": {
                     "temperature": 1,
                     "topP": 1,
-                    "maxOutputTokens": 4096,
+                    "maxOutputTokens": 50000,
                     # "thinkingConfig": {
                     #     "thinkingBudget": 0
                     # }
