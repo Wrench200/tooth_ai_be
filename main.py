@@ -1595,6 +1595,26 @@ def app_status():
         }), 500
 
 
+@app.route('/admin/stats', methods=['GET'])
+def admin_stats():
+    """Get admin statistics"""
+    try:
+        total_users = db.count_total_users()
+        paid_users = db.count_paid_users()
+        
+        return jsonify({
+            'success': True,
+            'stats': {
+                'total_users': total_users,
+                'paid_users': paid_users
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/download_brand_pdf/<brandId>', methods=['GET'])
 def download_brand_pdf(brandId):
     # Get full brand data including brand assets

@@ -1641,3 +1641,35 @@ def get_full_brand(brand_id):
             print(f"Database error getting full brand: {e}")
             return None
     return None
+
+def count_total_users():
+    """Count the total number of users"""
+    for attempt in range(2):
+        try:
+            with get_db_connection() as cursor:
+                cursor.execute("SELECT COUNT(*) FROM users")
+                count = cursor.fetchone()
+                return count
+        except psycopg2.Error as e:
+            print(f"Database error in count_total_users (attempt {attempt + 1}): {e}")
+            if attempt == 0:
+                reset_connection()
+            else:
+                return 0
+    return 0
+
+def count_paid_users():
+    """Count the number of unique users with a paid brand"""
+    for attempt in range(2):
+        try:
+            with get_db_connection() as cursor:
+                cursor.execute("SELECT COUNT(DISTINCT userId) FROM brands WHERE payment_status = TRUE")
+                count = cursor.fetchone()
+                return count
+        except psycopg2.Error as e:
+            print(f"Database error in count_paid_users (attempt {attempt + 1}): {e}")
+            if attempt == 0:
+                reset_connection()
+            else:
+                return 0
+    return 0

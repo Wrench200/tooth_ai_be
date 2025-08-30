@@ -141,8 +141,8 @@
           <div id="brandList" class="list"></div>
         </div>
         <div class="card">
-          <div class="title">Tips</div>
-          <div class="muted">Answer the questions thoughtfully to get the best brand output.</div>
+          <div class="title">Statistics</div>
+          <div id="stats" class="list"></div>
         </div>
       </div>`;
 
@@ -168,6 +168,28 @@
             </div>`;
           list.appendChild(el);
         });
+      } catch (_) {
+        // do nothing
+      }
+    })();
+
+    (async () => {
+      try {
+        const res = await API.getAdminStats();
+        const stats = root.querySelector('#stats');
+        stats.innerHTML = `
+          <div class="item">
+            <div class="meta">
+              <strong>Total Users</strong>
+              <span class="muted">${res.stats.total_users}</span>
+            </div>
+          </div>
+          <div class="item">
+            <div class="meta">
+              <strong>Paid Users</strong>
+              <span class="muted">${res.stats.paid_users}</span>
+            </div>
+          </div>`;
       } catch (_) {
         // do nothing
       }

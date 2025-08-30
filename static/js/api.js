@@ -37,7 +37,8 @@
 
     // payment simulation
     setPaid: (brandId) => post('/update_brand_payment_status', { brandId, paymentStatus: true }),
-    getPaidStatus: (brandId) => get(`/check_brand_payment_status/${encodeURIComponent(brandId)}`)
+    getPaidStatus: (brandId) => get(`/check_brand_payment_status/${encodeURIComponent(brandId)}`),
+    getAdminStats: () => get('/admin/stats')
   };
 })();
 
