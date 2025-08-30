@@ -47,29 +47,50 @@ def check_keys(data, expected_structure):
 def clean_and_parse_json(raw_response):
     """
     Cleans the raw output from an LLM and parses it into a Python dictionary.
-    Handles responses that are lists of strings or strings with markdown fences.
+    This version is more robust, handling markdown fences and surrounding text.
     """
+    # 1. Handle Empty or None Input
+    # If the response is empty, there's nothing to parse.
     if not raw_response:
-        print("Warning: Received empty or None response")
+        print("Warning: Received empty or None response.")
         return None
-    
-    print(f"Cleaning response of type: {type(raw_response)}")
+
+    # 2. Standardize Input to a Single String
+    # The raw response might be a list of strings, so join them.
     full_string = "".join(raw_response) if isinstance(raw_response, list) else str(raw_response)
-    print(f"Full string length: {len(full_string)}")
-    print(f"First 200 chars: {full_string[:200]}")
-    
-    start_index = full_string.find('{')
-    end_index = full_string.rfind('}')
-    
-    print(f"JSON start index: {start_index}, end index: {end_index}")
-    
-    if start_index == -1 or end_index == -1:
-        print("Warning: Could not find a JSON object in the response.")
-        print(f"Available content: {full_string}")
+
+    # 3. Strip Leading/Trailing Whitespace
+    # This removes any leading or trailing newlines or spaces.
+    cleaned_string = full_string.strip()
+
+    # 4. The Key Improvement: Remove Markdown Fences
+    # Check if the string is wrapped in markdown code fences and remove them.
+    # This is a specific and reliable cleaning step for a known AI output pattern.
+    if cleaned_string.startswith("```json"):
+        cleaned_string = cleaned_string[7:]  # Remove the opening fence "```json"
+    if cleaned_string.startswith("```"):
+        cleaned_string = cleaned_string[3:] # Remove a generic opening fence "```"
+        
+    if cleaned_string.endswith("```"):
+        cleaned_string = cleaned_string[:-3] # Remove the closing fence "```"
+        
+    # Strip whitespace again after removing fences
+    cleaned_string = cleaned_string.strip()
+
+    # 5. Safely Find the JSON Boundaries
+    # Now that the most common extra characters are gone, finding the first '{'
+    # and last '}' is much more reliable.
+    start_index = cleaned_string.find('{')
+    end_index = cleaned_string.rfind('}')
+
+    # 6. Check if a valid JSON object was likely found
+    if start_index == -1 or end_index == -1 or end_index < start_index:
+        print("Warning: Could not find a valid-looking JSON object in the cleaned response.")
+        print(f"Cleaned content was: {cleaned_string}")
         return None
-    
-    json_string = full_string[start_index : end_index + 1]
-    print(f"Extracted JSON string: {json_string[:200]}...")
+
+    # 7. Extract and Parse the JSON String
+    json_string = cleaned_string[start_index : end_index + 1]
     
     try:
         parsed_json = json.loads(json_string)
@@ -77,7 +98,7 @@ def clean_and_parse_json(raw_response):
         return parsed_json
     except json.JSONDecodeError as e:
         print(f"Error decoding JSON after cleaning: {e}")
-        print(f"Problematic JSON string: {json_string}")
+        print(f"Problematic JSON string that failed to parse: {json_string}")
         return None
 
 def _generate_brand_strategy(question_and_answers):
