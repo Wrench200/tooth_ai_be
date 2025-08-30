@@ -1600,13 +1600,15 @@ def admin_stats():
     """Get admin statistics"""
     try:
         total_users = db.count_total_users()
-        paid_users = db.count_paid_users()
+        first_payment_brands = db.count_brands_with_first_payment()
+        premium_payment_brands = db.count_brands_with_premium_payment()
         
         return jsonify({
             'success': True,
             'stats': {
                 'total_users': total_users,
-                'paid_users': paid_users
+                'first_payment_brands': first_payment_brands,
+                'premium_payment_brands': premium_payment_brands
             }
         })
     except Exception as e:

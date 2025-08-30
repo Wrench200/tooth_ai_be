@@ -186,8 +186,14 @@
           </div>
           <div class="item">
             <div class="meta">
-              <strong>Paid Users</strong>
-              <span class="muted">${res.stats.paid_users}</span>
+              <strong>Brands (First Payment)</strong>
+              <span class="muted">${res.stats.first_payment_brands}</span>
+            </div>
+          </div>
+          <div class="item">
+            <div class="meta">
+              <strong>Brands (Premium)</strong>
+              <span class="muted">${res.stats.premium_payment_brands}</span>
             </div>
           </div>`;
       } catch (_) {

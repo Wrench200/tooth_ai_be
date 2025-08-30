@@ -1658,16 +1658,32 @@ def count_total_users():
                 return 0
     return 0
 
-def count_paid_users():
-    """Count the number of unique users with a paid brand"""
+def count_brands_with_first_payment():
+    """Count the number of brands that have made the first payment"""
     for attempt in range(2):
         try:
             with get_db_connection() as cursor:
-                cursor.execute("SELECT COUNT(DISTINCT userId) FROM brands WHERE payment_status = TRUE")
+                cursor.execute("SELECT COUNT(*) FROM brands WHERE payment_status = TRUE")
                 count = cursor.fetchone()
                 return count
         except psycopg2.Error as e:
-            print(f"Database error in count_paid_users (attempt {attempt + 1}): {e}")
+            print(f"Database error in count_brands_with_first_payment (attempt {attempt + 1}): {e}")
+            if attempt == 0:
+                reset_connection()
+            else:
+                return 0
+    return 0
+
+def count_brands_with_premium_payment():
+    """Count the number of brands that have made the premium payment"""
+    for attempt in range(2):
+        try:
+            with get_db_connection() as cursor:
+                cursor.execute("SELECT COUNT(*) FROM brands WHERE premium = TRUE")
+                count = cursor.fetchone()
+                return count
+        except psycopg2.Error as e:
+            print(f"Database error in count_brands_with_premium_payment (attempt {attempt + 1}): {e}")
             if attempt == 0:
                 reset_connection()
             else:
