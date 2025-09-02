@@ -169,6 +169,30 @@ def test_connection():
         print(f"Database connection test: FAILED - {e}")
         return False
 
+def check_table_structure():
+    """Check the current structure of the users table"""
+    try:
+        with get_db_connection() as cursor:
+            cursor.execute("""
+                SELECT column_name, data_type, is_nullable, column_default
+                FROM information_schema.columns 
+                WHERE table_name = 'users' 
+                ORDER BY ordinal_position
+            """)
+            columns = cursor.fetchall()
+            
+            print("\n📊 Current users table structure:")
+            print("-" * 60)
+            for col in columns:
+                nullable = "NULL" if col[2] == "YES" else "NOT NULL"
+                default = f"DEFAULT {col[3]}" if col[3] else ""
+                print(f"{col[0]:<20} {col[1]:<15} {nullable:<10} {default}")
+            
+            return True
+    except Exception as e:
+        print(f"❌ Error checking table structure: {e}")
+        return False
+
 # Test the connection on startup
 test_connection()
 
@@ -191,6 +215,11 @@ with get_db_connection() as cursor:
         email TEXT UNIQUE NOT NULL,
         password TEXT,
         phone_number TEXT,
+        referral_code TEXT UNIQUE,
+        referred_by TEXT,
+        referred_users INT DEFAULT 0,
+        referred_amount INT DEFAULT 0,
+        can_refer BOOLEAN DEFAULT FALSE,
         generated BOOLEAN DEFAULT FALSE,
         google_id TEXT UNIQUE,
         profile_picture TEXT,
@@ -199,13 +228,44 @@ with get_db_connection() as cursor:
     )
 ''')
     
-    # Add phone_number column if it doesn't exist (for existing databases)
-    try:
-        cursor.execute('''
-            ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_number TEXT
-        ''')
-    except Exception as e:
-        print(f"Note: phone_number column may already exist: {e}")
+    # Add missing columns for existing databases
+    columns_to_add = [
+        ('phone_number', 'TEXT'),
+        ('referral_code', 'TEXT UNIQUE'),
+        ('referred_by', 'TEXT'),
+        ('referred_users', 'INT DEFAULT 0'),
+        ('referred_amount', 'INT DEFAULT 0'),
+        ('can_refer', 'BOOLEAN DEFAULT FALSE'),
+        ('generated', 'BOOLEAN DEFAULT FALSE'),
+        ('google_id', 'TEXT UNIQUE'),
+        ('profile_picture', 'TEXT'),
+        ('auth_provider', 'TEXT DEFAULT \'email\''),
+        ('created_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+    ]
+    
+    for column_name, column_def in columns_to_add:
+        try:
+            cursor.execute(f'ALTER TABLE users ADD COLUMN IF NOT EXISTS {column_name} {column_def}')
+            print(f"✅ Added column: {column_name}")
+        except Exception as e:
+            print(f"Note: Column {column_name} may already exist: {e}")
+
+    # Create transactions table for tracking payment transactions
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS transactions (
+            id SERIAL PRIMARY KEY,
+            transaction_id TEXT UNIQUE NOT NULL,
+            userid uuid NOT NULL,
+            brandid uuid NOT NULL,
+            payment_status BOOLEAN DEFAULT FALSE,
+            referral_reward_processed BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (userid) REFERENCES users(userId),
+            FOREIGN KEY (brandid) REFERENCES brands(id)
+        )
+    ''')
+    
+    print("✅ Transactions table ensured")
 
 def create_user(username, email, password, phone_number=None):
     for attempt in range(2):
@@ -1689,3 +1749,56 @@ def count_brands_with_premium_payment():
             else:
                 return 0
     return 0
+
+# ===================== TRANSACTION MANAGEMENT =====================
+
+def create_transaction(transaction_id, userid, brandid):
+    """Create a new transaction record"""
+    try:
+        with get_db_connection() as cursor:
+            cursor.execute('''
+                INSERT INTO transactions (transaction_id, userid, brandid)
+                VALUES (%s, %s, %s)
+            ''', (transaction_id, userid, brandid))
+            return True
+    except Exception as e:
+        print(f"Error creating transaction: {e}")
+        return False
+
+def check_transaction_exists(transaction_id):
+    """Check if a transaction ID already exists"""
+    try:
+        with get_db_connection() as cursor:
+            cursor.execute('SELECT id FROM transactions WHERE transaction_id = %s', (transaction_id,))
+            return cursor.fetchone() is not None
+    except Exception as e:
+        print(f"Error checking transaction: {e}")
+        return False
+
+def mark_transaction_paid(transaction_id, payment_status=True):
+    """Mark a transaction as paid"""
+    try:
+        with get_db_connection() as cursor:
+            cursor.execute('''
+                UPDATE transactions 
+                SET payment_status = %s
+                WHERE transaction_id = %s
+            ''', (payment_status, transaction_id))
+            return cursor.rowcount > 0
+    except Exception as e:
+        print(f"Error marking transaction paid: {e}")
+        return False
+
+def mark_referral_reward_processed(transaction_id):
+    """Mark that referral reward has been processed for this transaction"""
+    try:
+        with get_db_connection() as cursor:
+            cursor.execute('''
+                UPDATE transactions 
+                SET referral_reward_processed = TRUE
+                WHERE transaction_id = %s
+            ''', (transaction_id,))
+            return cursor.rowcount > 0
+    except Exception as e:
+        print(f"Error marking referral reward processed: {e}")
+        return False

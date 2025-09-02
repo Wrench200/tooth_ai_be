@@ -15,6 +15,8 @@ from fpdf import FPDF, XPos, YPos
 import io, requests, os
 import tempfile
 import re
+import secrets
+import string
 from google_oauth import get_google_auth_url, verify_google_token, create_flow
 
 FONT_DIR = os.path.join(os.path.dirname(__file__), 'fonts')
@@ -39,6 +41,68 @@ def remove_emojis(text):
         flags=re.UNICODE
     )
     return emoji_pattern.sub(r'', text)
+
+def generate_referral_code(length=8):
+    """Generate a unique referral code"""
+    characters = string.ascii_uppercase + string.digits
+    while True:
+        code = ''.join(secrets.choice(characters) for _ in range(length))
+        # Check if code already exists in database
+        try:
+            with db.get_db_connection() as cursor:
+                cursor.execute("SELECT COUNT(*) FROM users WHERE referral_code = %s", (code,))
+                if cursor.fetchone()[0] == 0:
+                    return code
+        except:
+            return code
+
+def process_referral(referrer_id, new_user_id):
+    """Process referral and update referral stats"""
+    try:
+        with db.get_db_connection() as cursor:
+            # Update referrer's stats
+            cursor.execute("""
+                UPDATE users 
+                SET referred_users = referred_users + 1,
+                    referred_amount = referred_amount + 1000,
+                    can_refer = TRUE
+                WHERE userId = %s
+            """, (referrer_id,))
+            
+            # Update new user's referred_by field
+            cursor.execute("""
+                UPDATE users 
+                SET referred_by = %s
+                WHERE userId = %s
+            """, (referrer_id, new_user_id))
+            
+            return True
+    except Exception as e:
+        print(f"Error processing referral: {e}")
+        return False
+
+def get_referral_stats(user_id):
+    """Get referral statistics for a user"""
+    try:
+        with db.get_db_connection() as cursor:
+            cursor.execute("""
+                SELECT referral_code, referred_users, referred_amount, can_refer
+                FROM users 
+                WHERE userId = %s
+            """, (user_id,))
+            
+            result = cursor.fetchone()
+            if result:
+                return {
+                    'referral_code': result[0],
+                    'referred_users': result[1] or 0,
+                    'referred_amount': result[2] or 0,
+                    'can_refer': result[3] or False
+                }
+            return None
+    except Exception as e:
+        print(f"Error getting referral stats: {e}")
+        return None
 
 class BrandPDF(FPDF):
     def __init__(self):
@@ -670,7 +734,7 @@ CORS(
     app,
     origins="*",  # Add your frontend URLs
     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "Accept"],
+    allow_headers=["Content-Type", "Authorization", "Accept","x-user-id","x-user-email","x-user-data"],
     supports_credentials=True)
 
 
@@ -680,7 +744,7 @@ def home():
 
 @app.route('/health', methods=['GET'])
 def health_check():
-    """Health check endpoint to keep the app awake"""
+    """Health check endpoint to keep the app awake""" 
     return jsonify({
         'status': 'healthy',
         'timestamp': time.time(),
@@ -938,6 +1002,7 @@ def register_user():
         password = str(data['password'])
         phone_number = str(data['phoneNumber']).strip()
         auth_provider = str(data.get('authProvider', '')).strip()
+        referral_code = str(data.get('referralCode', '')).strip()
         
         
         # Validate username
@@ -1000,9 +1065,55 @@ def register_user():
                 'error': 'Database error during user lookup'
             }), 500
         
+        # Check for referral code
+        referral_code = data.get('referralCode', '').strip()
+        referrer_id = None
+        
+        if referral_code:
+            try:
+                with db.get_db_connection() as cursor:
+                    cursor.execute("SELECT userId FROM users WHERE referral_code = %s", (referral_code,))
+                    referrer = cursor.fetchone()
+                    if referrer:
+                        referrer_id = referrer[0]
+                    else:
+                        return jsonify({
+                            'success': False,
+                            'error': 'Invalid referral code'
+                        }), 400
+            except Exception as e:
+                print(f"Error checking referral code: {e}")
+                return jsonify({
+                    'success': False,
+                    'error': 'Error processing referral code'
+            }), 500
+        
         # Create user
         try:
             user = db.create_user(username, email, password, phone_number)
+            
+            # Generate referral code for new user
+            if user:
+                new_referral_code = generate_referral_code()
+                try:
+                    with db.get_db_connection() as cursor:
+                        cursor.execute("UPDATE users SET referral_code = %s WHERE userId = %s", 
+                                     (new_referral_code, user['userId']))
+                        user['referral_code'] = new_referral_code
+                except Exception as e:
+                    print(f"Error setting referral code: {e}")
+                
+                # Track referral relationship (no rewards yet)
+                if referrer_id:
+                    try:
+                        with db.get_db_connection() as cursor:
+                            cursor.execute("UPDATE users SET referred_by = %s WHERE userId = %s", 
+                                         (referrer_id, user['userId']))
+                            user['referred_by'] = referrer_id
+                            print(f"Referral relationship established: {referrer_id} referred {user['userId']} (no rewards yet)")
+                    except Exception as e:
+                        print(f"Error establishing referral relationship: {e}")
+                        
         except Exception as e:
             print(f"REGISTER ERROR (db.create_user): {e}")
             traceback.print_exc()
@@ -1039,7 +1150,8 @@ def register_user():
             'userId': user.get('userid') or user.get('userId'),
             'username': user['username'],
             'email': user['email'],
-            'phoneNumber': user.get('phone_number', '')
+            'phoneNumber': user.get('phone_number', ''),
+            'referral_code': user.get('referral_code', '')
         }
         
         return jsonify({
@@ -1154,7 +1266,8 @@ def login():
             'userId': user.get('userid') or user.get('userId'),
             'username': user['username'],
             'email': user['email'],
-            'phoneNumber': user.get('phone_number', '')
+            'phoneNumber': user.get('phone_number', ''),
+            'referral_code': user.get('referral_code', '')
         }
         
         return jsonify({
@@ -1611,6 +1724,157 @@ def admin_stats():
                 'premium_payment_brands': premium_payment_brands
             }
         })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+# ===================== REFERRAL SYSTEM =====================
+
+@app.route('/referral/stats/<user_id>', methods=['GET'])
+def get_user_referral_stats(user_id):
+    """Get referral statistics for a user"""
+    try:
+        stats = get_referral_stats(user_id)
+        if stats:
+            return jsonify({
+                'success': True,
+                'stats': stats
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'User not found'
+            }), 404
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/referral/validate/<referral_code>', methods=['GET'])
+def validate_referral_code(referral_code):
+    """Validate a referral code"""
+    try:
+        with db.get_db_connection() as cursor:
+            cursor.execute("""
+                SELECT userId, username, email 
+                FROM users 
+                WHERE referral_code = %s
+            """, (referral_code,))
+            
+            referrer = cursor.fetchone()
+            if referrer:
+                return jsonify({
+                    'success': True,
+                    'valid': True,
+                    'referrer': {
+                        'id': referrer[0],
+                        'username': referrer[1],
+                        'email': referrer[2]
+                    }
+                })
+            else:
+                return jsonify({
+                    'success': True,
+                    'valid': False,
+                    'message': 'Invalid referral code'
+                })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/referral/referrals/<user_id>', methods=['GET'])
+def get_user_referrals(user_id):
+    """Get list of users referred by a specific user"""
+    try:
+        with db.get_db_connection() as cursor:
+            cursor.execute("""
+                SELECT userId, username, email, created_at
+                FROM users 
+                WHERE referred_by = %s
+                ORDER BY created_at DESC
+            """, (user_id,))
+            
+            referrals = cursor.fetchall()
+            referral_list = []
+            
+            for ref in referrals:
+                referral_list.append({
+                    'id': ref[0],
+                    'username': ref[1],
+                    'email': ref[2],
+                    'joined_date': ref[3].isoformat() if ref[3] else None
+                })
+            
+            return jsonify({
+                'success': True,
+                'referrals': referral_list,
+                'total_referrals': len(referral_list)
+            })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/referral/leaderboard', methods=['GET'])
+def get_referral_leaderboard():
+    """Get referral leaderboard"""
+    try:
+        with db.get_db_connection() as cursor:
+            cursor.execute("""
+                SELECT username, referred_users, referred_amount
+                FROM users 
+                WHERE referred_users > 0
+                ORDER BY referred_users DESC, referred_amount DESC
+                LIMIT 20
+            """)
+            
+            leaderboard = cursor.fetchall()
+            leaderboard_list = []
+            
+            for i, user in enumerate(leaderboard, 1):
+                leaderboard_list.append({
+                    'rank': i,
+                    'username': user[0],
+                    'referred_users': user[1] or 0,
+                    'referred_amount': user[2] or 0
+                })
+            
+            return jsonify({
+                'success': True,
+                'leaderboard': leaderboard_list
+            })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/referral/generate-code/<user_id>', methods=['POST'])
+def regenerate_referral_code(user_id):
+    """Generate a new referral code for a user"""
+    try:
+        new_code = generate_referral_code()
+        
+        with db.get_db_connection() as cursor:
+            cursor.execute("UPDATE users SET referral_code = %s WHERE userId = %s", 
+                         (new_code, user_id))
+            
+            if cursor.rowcount > 0:
+                return jsonify({
+                    'success': True,
+                    'new_referral_code': new_code
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': 'User not found'
+                }), 404
     except Exception as e:
         return jsonify({
             'success': False,
@@ -2097,7 +2361,7 @@ def download_brand_pdf(brandId):
                     image_url = pattern.get('image_url')
                     pdf.add_application_image(image_url, "Brand Pattern")
         
-      
+        
         # Social Media Content Section (from brand_assets)
         if brand_assets and brand_assets.get('social_media_content'):
             social_content = brand_assets['social_media_content']
@@ -2289,15 +2553,24 @@ def update_brand_payment_status():
     """Update the payment status of a brand"""
     try:
         data = request.get_json()
-        if not data or 'brandId' not in data or 'paymentStatus' not in data:
+        if not data or 'brandId' not in data or 'paymentStatus' not in data or 'transactionId' not in data:
             return jsonify({
                 'success': False,
-                'message': 'brandId and paymentStatus are required',
+                'message': 'brandId, paymentStatus, and transactionId are required',
                 'updated': False
             }), 400
         
         brand_id = data['brandId']
         payment_status = data['paymentStatus']
+        transaction_id = data['transactionId']
+        # Get the userid from the headers
+        userid = request.headers.get('x-user-id')
+        if not userid:
+            return jsonify({
+                'success': False,
+                'message': 'userid header is required',
+                'updated': False
+            }), 400
         
         # Validate payment_status is boolean
         if not isinstance(payment_status, bool):
@@ -2307,12 +2580,65 @@ def update_brand_payment_status():
                 'updated': False
             }), 400
         
+        # Check if transaction already exists to prevent duplicate processing
+        if db.check_transaction_exists(transaction_id):
+            return jsonify({
+                'success': False,
+                'message': 'Transaction ID already exists. Payment status not updated.',
+                'updated': False
+            }), 400
+        
+        # Create transaction record
+        if not db.create_transaction(transaction_id, userid, brand_id):
+            return jsonify({
+                'success': False,
+                'message': 'Failed to create transaction record',
+                'updated': False
+            }), 500
+        
         success = db.update_brand_payment_status(brand_id, payment_status)
         
         if success:
+            # Mark transaction as paid
+            db.mark_transaction_paid(transaction_id, payment_status)
+            
+            # Check if referral rewards should be processed
+            referral_message = ""
+            if payment_status:  # Only process rewards when payment is successful
+                try:
+                    with db.get_db_connection() as cursor:
+                        # Get brand owner info
+                        cursor.execute("SELECT userid FROM brands WHERE id = %s", (brand_id,))
+                        brand_info = cursor.fetchone()
+                        if brand_info:
+                            user_id = brand_info[0]
+                            # Check if user was referred by someone
+                            cursor.execute("SELECT referred_by FROM users WHERE userId = %s", (user_id,))
+                            referrer_info = cursor.fetchone()
+                            if referrer_info and referrer_info[0]:
+                                referrer_id = referrer_info[0]
+                                # Increment referrer's referral amount by 1000 and referred_users by 1
+                                cursor.execute("""
+                                    UPDATE users 
+                                    SET referred_amount = referred_amount + 4500,
+                                        referred_users = referred_users + 1
+                                    WHERE userId = %s
+                                """, (referrer_id,))
+                                
+                                if cursor.rowcount > 0:
+                                    # Mark referral reward as processed
+                                    db.mark_referral_reward_processed(transaction_id)
+                                    referral_message = f" Referral reward of 4,500 processed for user {referrer_id}. Referred users count incremented."
+                                    print(f"Referral reward processed: {referrer_id} earned 4,500 from {user_id}, referred_users incremented")
+                                else:
+                                    print(f"Failed to update referral stats for user {referrer_id}")
+                except Exception as e:
+                    print(f"Error processing referral reward: {e}")
+                    # Don't fail the payment update if referral processing fails
+            
             return jsonify({
                 'success': True,
-                'message': 'Payment status updated successfully',
+                'message': f'Payment status updated successfully.{referral_message}',
                 'updated': True
             }), 200
         else:
