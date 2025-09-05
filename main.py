@@ -1315,6 +1315,41 @@ def user_brands():
     response = {'userId': data['userId'], 'brands': brands}
 
     return jsonify(response), 200
+@app.route('/get_answer/<answer_id>', methods=['GET'])
+def get_answer_endpoint(answer_id):
+    """
+    Get the complete answer object for a given answer ID.
+    """
+    try:
+        if not answer_id:
+            return jsonify({
+                'success': False,
+                'message': 'answer_id is required',
+                'answer': None
+            }), 400
+        
+        answer = db.get_answer(answer_id)
+        
+        if answer:
+            return jsonify({
+                'success': True,
+                'message': 'Answer retrieved successfully',
+                'answer': answer
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Answer not found',
+                'answer': None
+            }), 404
+            
+    except Exception as e:
+        print(f"Error getting answer: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Error retrieving answer: {str(e)}',
+            'answer': None
+        }), 500
 
 
 @app.route('/all_brands_with_users', methods=['GET'])

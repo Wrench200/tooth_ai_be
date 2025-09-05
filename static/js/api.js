@@ -25,6 +25,7 @@
     // q&a
     sendAnswer: (payload) => postSoft('/send_answer', payload),
     getSuggestions: (payload) => post('/get_suggestions', payload),
+    getAnswer: (answerId) => get(`/get_answer/${encodeURIComponent(answerId)}`),
 
     // results
     generateResults: (userId, brandId) => post('/get_results', { userId, brandId }),

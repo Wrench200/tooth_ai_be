@@ -329,11 +329,20 @@
           </div>
         `;
       } else if (tab === 'qa') {
-        const answerData = await API.getAnswer(brand.answerid);
-        tabView.innerHTML = `
+        const answerId = brand.answerid || brand.answerId; // Handle both cases
+        if (!answerId) {
+          tabView.innerHTML = '<div class="empty">No Q&A data found for this brand.</div>';
+          return;
+        }
+        try {
+          const answerData = await API.getAnswer(answerId);
+          if (!answerData || !answerData.answer || !answerData.answer.sections) {
+            throw new Error("Invalid answer data format");
+          }
+          tabView.innerHTML = `
           <h4>Questions & Answers</h4>
           <div class="accordion">
-            ${answerData.sections.map(s => s.questions.map((q, i) => `
+            ${answerData.answer.sections.map(s => s.questions.map((q, i) => `
               <div class="accordion-item">
                 <div class="accordion-header">Question ${s.section_number}.${i + 1}</div>
                 <div class="accordion-content">
@@ -348,6 +357,9 @@
             header.parentElement.classList.toggle('active');
           });
         });
+        } catch (error) {
+          tabView.innerHTML = '<div class="empty">Could not load Q&A data.</div>';
+        }
       } else if (tab === 'assets' && brand.premium) {
         tabView.innerHTML = `
           <h4>Brand Assets</h4>
