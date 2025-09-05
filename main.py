@@ -1317,7 +1317,24 @@ def user_brands():
     return jsonify(response), 200
 
 
-
+@app.route('/all_brands_with_users', methods=['GET'])
+def all_brands_with_users():
+    """
+    Get all brands with their associated user information.
+    """
+    try:
+        brands = db.get_all_brands_with_user_info()
+        return jsonify({
+            'success': True,
+            'brands': brands
+        }), 200
+    except Exception as e:
+        print(f"Error getting all brands with users: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Error retrieving brands: {str(e)}',
+            'brands': []
+        }), 500
 
 
 @app.route('/brand', methods=['POST'])
@@ -1330,7 +1347,6 @@ def brand():
     brand = db.get_brand(data["brandId"])
 
     return jsonify(brand), 200
-
 
 
 
@@ -1713,6 +1729,7 @@ def admin_stats():
     """Get admin statistics"""
     try:
         total_users = db.count_total_users()
+        total_brands = db.count_total_brands()
         first_payment_brands = db.count_brands_with_first_payment()
         premium_payment_brands = db.count_brands_with_premium_payment()
         
@@ -1720,6 +1737,7 @@ def admin_stats():
             'success': True,
             'stats': {
                 'total_users': total_users,
+                'total_brands': total_brands,
                 'first_payment_brands': first_payment_brands,
                 'premium_payment_brands': premium_payment_brands
             }

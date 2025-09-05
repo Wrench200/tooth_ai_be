@@ -656,6 +656,45 @@ def get_all_user_brands(user_id):
             return []
     return []
 
+
+def get_all_brands_with_user_info():
+    """Get all brands with their associated user information"""
+    for attempt in range(2):
+        try:
+            with get_db_connection() as cursor:
+                cursor.execute("""
+                    SELECT
+                        b.id AS brand_id,
+                        b.name AS brand_name,
+                        b.logo AS brand_logo,
+                        b.payment_status,
+                        b.premium,
+                        u.userId AS user_id,
+                        u.username AS user_name,
+                        u.email AS user_email,
+                        u.phone_number AS user_phone_number
+                    FROM brands AS b
+                    JOIN users AS u ON b.userId = u.userId
+                    ORDER BY b.created_at DESC
+                """)
+                rows = cursor.fetchall()
+                if not rows:
+                    return []
+                
+                # Get column names from cursor description
+                column_names = [desc[0] for desc in cursor.description]
+                
+                # Create dictionaries from rows and column names
+                return [dict(zip(column_names, row)) for row in rows]
+        except psycopg2.InterfaceError as e:
+            print(f"[get_all_brands_with_user_info] InterfaceError: {e}. Resetting connection and retrying once.")
+            reset_connection()
+        except psycopg2.Error as e:
+            print(f"Database error in get_all_brands_with_user_info: {e}")
+            return []
+    return []
+
+
 def update_brand(brand_id, property_name, new_value):
     allowed_properties = [
         "name", "logo", "answerId", "brand_strategy", "brand_communication",
@@ -1692,6 +1731,10 @@ def get_full_brand(brand_id):
                     "brand_assets": brand_assets_data
                 }
                 
+                # Get user information
+                user_data = get_user(brand_data['userid'])
+                full_brand['user'] = user_data
+                
                 return full_brand
                 
         except psycopg2.InterfaceError as e:
@@ -1744,6 +1787,21 @@ def count_brands_with_premium_payment():
                 return count
         except psycopg2.Error as e:
             print(f"Database error in count_brands_with_premium_payment (attempt {attempt + 1}): {e}")
+            if attempt == 0:
+                reset_connection()
+            else:
+                return 0
+    return 0
+def count_total_brands():
+    """Count the total number of brands"""
+    for attempt in range(2):
+        try:
+            with get_db_connection() as cursor:
+                cursor.execute("SELECT COUNT(*) FROM brands")
+                count = cursor.fetchone()
+                return count
+        except psycopg2.Error as e:
+            print(f"Database error in count_total_brands (attempt {attempt + 1}): {e}")
             if attempt == 0:
                 reset_connection()
             else:

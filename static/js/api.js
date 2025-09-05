@@ -18,6 +18,7 @@
     // brands
     createBrand: (userId) => post('/create_brand', { userId }),
     listBrands: (userId) => post('/user_brands', { userId }),
+    getAllBrandsWithUsers: () => get('/all_brands_with_users'),
     getBrand: (brandId) => post('/brand', { brandId }),
     getFullBrand: (brandId) => get(`/get_full_brand/${encodeURIComponent(brandId)}`),
 

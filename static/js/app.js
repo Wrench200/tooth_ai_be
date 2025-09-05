@@ -124,82 +124,243 @@
   }
 
   function viewDashboard() {
+    viewBrandWall();
+  }
+
+  function viewBrandWall() {
     const user = getUser();
     root.innerHTML = `
       <div class="hero">
         <div class="row">
-          <div class="title">Dashboard</div>
+          <div class="title">Brand Showcase</div>
           <span class="muted">Welcome, ${user?.username || user?.email}</span>
         </div>
         <div class="row">
           <a class="btn primary" href="#/create">Create Brand</a>
         </div>
       </div>
-      <div class="grid cols-2">
-        <div class="card">
-          <div class="title">My Brands</div>
-          <div id="brandList" class="list"></div>
+      <div id="metrics" class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-value" id="totalBrands">...</div>
+          <div class="metric-label">Total Brands</div>
         </div>
-        <div class="card">
-          <div class="title">Statistics</div>
-          <div id="stats" class="list"></div>
+        <div class="metric-card">
+          <div class="metric-value" id="paidBrands">...</div>
+          <div class="metric-label">Paid Brands</div>
         </div>
-      </div>`;
+        <div class="metric-card">
+          <div class="metric-value" id="premiumBrands">...</div>
+          <div class="metric-label">Premium Brands</div>
+        </div>
+      </div>
+      <div class="brand-wall-controls">
+        <div class="tabs">
+          <button class="tab-btn active" data-filter="all">All Brands</button>
+          <button class="tab-btn" data-filter="premium">Premium</button>
+          <button class="tab-btn" data-filter="standard">Standard</button>
+        </div>
+        <div class="search-sort">
+          <input type="search" id="search" placeholder="Search brands..." />
+          <select id="sort">
+            <option value="date_desc">Newest First</option>
+            <option value="date_asc">Oldest First</option>
+            <option value="name_asc">Name (A-Z)</option>
+            <option value="name_desc">Name (Z-A)</option>
+          </select>
+        </div>
+      </div>
+      <div id="brandWall" class="brand-wall"></div>
+    `;
 
-    (async () => {
-      try {
-        const res = await API.listBrands(user.userId);
-        const list = root.querySelector('#brandList');
-        list.innerHTML = '';
-        if (!res?.brands?.length) {
-          list.innerHTML = `<div class="empty">No brands yet. Click Create Brand to start.</div>`;
-          return;
-        }
-        (res.brands || []).forEach((b) => {
-          const el = document.createElement('div');
-          el.className = 'item';
-          el.innerHTML = `
-            <div class="meta">
-              <strong>${b.name || 'Untitled Brand'}</strong>
-              <span class="muted">${b.id}</span>
-            </div>
-            <div class="actions">
-              <a class="btn" href="#/brand/${b.id}">Open</a>
-            </div>`;
-          list.appendChild(el);
-        });
-      } catch (_) {
-        // do nothing
+    const brandWall = root.querySelector('#brandWall');
+    let allBrands = [];
+
+    const renderBrands = (brands) => {
+      brandWall.innerHTML = '';
+      if (!brands.length) {
+        brandWall.innerHTML = '<div class="empty">No brands found.</div>';
+        return;
       }
-    })();
+      brands.forEach(brand => {
+        const card = document.createElement('div');
+        card.className = `brand-card ${brand.premium ? 'premium' : ''}`;
+        card.innerHTML = `
+          <div class="brand-card-logo">${brand.brand_logo ? `<img src="${brand.brand_logo}" alt="${brand.brand_name}">` : brand.brand_name.charAt(0)}</div>
+          <div class="brand-card-name">${brand.brand_name || 'Untitled Brand'}</div>
+          <div class="brand-card-user">${brand.user_name}</div>
+          ${brand.premium ? '<div class="premium-badge">Premium</div>' : ''}
+        `;
+        card.addEventListener('click', () => showBrandDetails(brand.brand_id));
+        brandWall.appendChild(card);
+      });
+    };
+
+    const filterAndSortBrands = () => {
+      const filter = document.querySelector('.tab-btn.active').dataset.filter;
+      const sort = document.getElementById('sort').value;
+      const search = document.getElementById('search').value.toLowerCase();
+
+      let filtered = allBrands;
+
+      if (filter === 'premium') {
+        filtered = allBrands.filter(b => b.premium);
+      } else if (filter === 'standard') {
+        filtered = allBrands.filter(b => !b.premium);
+      }
+
+      if (search) {
+        filtered = filtered.filter(b =>
+          b.brand_name.toLowerCase().includes(search) ||
+          b.user_name.toLowerCase().includes(search) ||
+          b.user_email.toLowerCase().includes(search)
+        );
+      }
+
+      switch (sort) {
+        case 'date_asc':
+          filtered.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+          break;
+        case 'name_asc':
+          filtered.sort((a, b) => a.brand_name.localeCompare(b.brand_name));
+          break;
+        case 'name_desc':
+          filtered.sort((a, b) => b.brand_name.localeCompare(a.brand_name));
+          break;
+        default: // date_desc
+          filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+          break;
+      }
+
+      renderBrands(filtered);
+    };
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelector('.tab-btn.active').classList.remove('active');
+        btn.classList.add('active');
+        filterAndSortBrands();
+      });
+    });
+
+    document.getElementById('search').addEventListener('input', filterAndSortBrands);
+    document.getElementById('sort').addEventListener('change', filterAndSortBrands);
 
     (async () => {
       try {
         const res = await API.getAdminStats();
-        const stats = root.querySelector('#stats');
-        stats.innerHTML = `
-          <div class="item">
-            <div class="meta">
-              <strong>Total Users</strong>
-              <span class="muted">${res.stats.total_users}</span>
-            </div>
-          </div>
-          <div class="item">
-            <div class="meta">
-              <strong>Brands (First Payment)</strong>
-              <span class="muted">${res.stats.first_payment_brands}</span>
-            </div>
-          </div>
-          <div class="item">
-            <div class="meta">
-              <strong>Brands (Premium)</strong>
-              <span class="muted">${res.stats.premium_payment_brands}</span>
-            </div>
-          </div>`;
-      } catch (_) {
-        // do nothing
+        if (res.success) {
+          document.getElementById('totalBrands').textContent = res.stats.total_brands;
+          document.getElementById('paidBrands').textContent = res.stats.first_payment_brands;
+          document.getElementById('premiumBrands').textContent = res.stats.premium_payment_brands;
+        }
+      } catch (err) {
+        console.error("Failed to load admin stats", err);
       }
     })();
+
+    (async () => {
+      try {
+        const res = await API.getAllBrandsWithUsers();
+        allBrands = res.brands;
+        filterAndSortBrands();
+      } catch (err) {
+        brandWall.innerHTML = '<div class="empty">Could not load brands.</div>';
+      }
+    })();
+  }
+
+  async function showBrandDetails(brandId) {
+    const modalHost = document.getElementById('modalHost');
+    modalHost.innerHTML = `
+      <div class="modal-overlay">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2 id="modalTitle"></h2>
+            <button id="closeModal" class="icon-btn">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="tabs" id="modalTabs">
+              <button class="tab-btn active" data-tab="overview">Overview</button>
+              <button class="tab-btn" data-tab="qa">Q&A Journal</button>
+              <button class="tab-btn" data-tab="assets" style="display:none;">Brand Assets</button>
+            </div>
+            <div id="modalTabView">Loading...</div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const closeModal = () => modalHost.innerHTML = '';
+    modalHost.querySelector('#closeModal').addEventListener('click', closeModal);
+    modalHost.querySelector('.modal-overlay').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) closeModal();
+    });
+
+    const switchTab = async (tab) => {
+      document.querySelectorAll('#modalTabs .tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelector(`#modalTabs .tab-btn[data-tab="${tab}"]`).classList.add('active');
+      const tabView = document.getElementById('modalTabView');
+      tabView.innerHTML = 'Loading...';
+
+      const brandData = await API.getFullBrand(brandId);
+      const brand = brandData.full_brand.brand;
+      const user = brandData.full_brand.user;
+      const assets = brandData.full_brand.brand_assets;
+
+      document.getElementById('modalTitle').textContent = brand.name || 'Untitled Brand';
+      if (brand.premium) {
+        document.querySelector('#modalTabs .tab-btn[data-tab="assets"]').style.display = 'block';
+      }
+
+      if (tab === 'overview') {
+        tabView.innerHTML = `
+          <div class="grid cols-2">
+            <div>
+              <h4>User Details</h4>
+              <p><strong>Name:</strong> ${user.username}</p>
+              <p><strong>Email:</strong> ${user.email}</p>
+              <p><strong>Phone:</strong> ${user.phone_number || 'N/A'}</p>
+            </div>
+            <div>
+              <h4>Brand Status</h4>
+              <p><strong>Created:</strong> ${new Date(brand.created_at).toLocaleDateString()}</p>
+              <p><strong>Premium:</strong> ${brand.premium ? 'Yes' : 'No'}</p>
+            </div>
+          </div>
+        `;
+      } else if (tab === 'qa') {
+        const answerData = await API.getAnswer(brand.answerid);
+        tabView.innerHTML = `
+          <h4>Questions & Answers</h4>
+          <div class="accordion">
+            ${answerData.sections.map(s => s.questions.map((q, i) => `
+              <div class="accordion-item">
+                <div class="accordion-header">Question ${s.section_number}.${i + 1}</div>
+                <div class="accordion-content">
+                  <p>${q.answer_text || 'No answer provided.'}</p>
+                </div>
+              </div>
+            `).join('')).join('')}
+          </div>
+        `;
+        document.querySelectorAll('.accordion-header').forEach(header => {
+          header.addEventListener('click', () => {
+            header.parentElement.classList.toggle('active');
+          });
+        });
+      } else if (tab === 'assets' && brand.premium) {
+        tabView.innerHTML = `
+          <h4>Brand Assets</h4>
+          <pre>${JSON.stringify(assets, null, 2)}</pre>
+        `;
+      }
+    };
+
+    document.querySelectorAll('#modalTabs .tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    });
+
+    switchTab('overview');
   }
 
   function viewCreateBrand() {
