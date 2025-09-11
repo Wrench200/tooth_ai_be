@@ -188,6 +188,8 @@
           <div class="brand-card-logo">${brand.brand_logo ? `<img src="${brand.brand_logo}" alt="${brand.brand_name}">` : brand.brand_name.charAt(0)}</div>
           <div class="brand-card-name">${brand.brand_name || 'Untitled Brand'}</div>
           <div class="brand-card-user">${brand.user_name}</div>
+          <div class="brand-card-user muted">${brand.user_email}</div>
+          <div class="brand-card-user muted">${brand.user_phone_number || ''}</div>
           ${brand.premium ? '<div class="premium-badge">Premium</div>' : ''}
         `;
         card.addEventListener('click', () => showBrandDetails(brand.brand_id));
