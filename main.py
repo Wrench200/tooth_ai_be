@@ -1384,6 +1384,59 @@ def brand():
     return jsonify(brand), 200
 
 
+@app.route('/brand/upload_logo', methods=['POST'])
+def upload_logo():
+    """
+    Upload a logo for a specific brand.
+
+    Request body (JSON):
+    {
+        "userId": "string",
+        "brandId": "string",
+        "imageFilePath": "string"
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No JSON data provided'}), 400
+
+        required_fields = ['userId', 'brandId', 'imageFilePath']
+        if not all(field in data for field in required_fields):
+            return jsonify({'error': 'Missing required fields'}), 400
+
+        brandId = data['brandId']
+        image_path = data['imageFilePath']
+
+        if not os.path.isfile(image_path):
+            return jsonify({'error': 'Image file not found at the provided path'}), 400
+
+        # Upload to Cloudinary
+        upload_result = cloudinary_utils.upload_image_from_file(
+            image_path,
+            public_id=f"toothai/{brandId}/logo",
+            folder=f"toothai/{brandId}"
+        )
+
+        if not upload_result:
+            return jsonify({'error': 'Failed to upload logo to Cloudinary'}), 500
+
+        logo_url = upload_result['secure_url']
+
+        # Update brand logo in the database
+        db.update_brand(brandId, "logo", logo_url)
+
+        return jsonify({
+            'success': True,
+            'message': 'Logo uploaded successfully',
+            'logo_url': logo_url
+        }), 200
+
+    except Exception as e:
+        print(f"Error in upload_logo: {e}")
+        return jsonify({'error': f'Internal server error: {str(e)}'}), 500
+
+
 
 
 

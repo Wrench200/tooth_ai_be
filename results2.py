@@ -448,29 +448,35 @@ def generate_results(userId, brandId):
         applications = brand_identity_data.get("applications", [])
 
         # Generate 3 logos and upload to Cloudinary in parallel
-        try:
-            print("Generating 3 logos and uploading to Cloudinary...")
-            def generate_logo_url(prompt, idx):
-                url = imagen.generate_image(prompt, public_id=f"toothai/{brandId}/logo_{idx}")
-                print("Generated logo: ", url)
-                if not url:
-                    print(f"Warning: Logo {idx} generation failed, using placeholder")
-                    url = f"https://via.placeholder.com/400x200?text=Logo+{idx}"
-                return url
-            with ThreadPoolExecutor(max_workers=3) as executor:
-                future1 = executor.submit(generate_logo_url, logo_prompt_1, 1)
-                future2 = executor.submit(generate_logo_url, logo_prompt_2, 2)
-                future3 = executor.submit(generate_logo_url, logo_prompt_3, 3)
-                logo_image_url_1 = future1.result()
-                logo_image_url_2 = future2.result()
-                logo_image_url_3 = future3.result()
-            print("Logo generation completed successfully")
-        except Exception as e:
-            print(f"Error during logo generation: {e}")
-            print("Using placeholder logos")
-            logo_image_url_1 = "https://via.placeholder.com/400x200?text=Logo+1"
-            logo_image_url_2 = "https://via.placeholder.com/400x200?text=Logo+2"
-            logo_image_url_3 = "https://via.placeholder.com/400x200?text=Logo+3"
+        if brand.get("logo"):
+            print("Logo already exists, skipping generation.")
+            logo_image_url_1 = brand["logo"]
+            logo_image_url_2 = ""
+            logo_image_url_3 = ""
+        else:
+            try:
+                print("Generating 3 logos and uploading to Cloudinary...")
+                def generate_logo_url(prompt, idx):
+                    url = imagen.generate_image(prompt, public_id=f"toothai/{brandId}/logo_{idx}")
+                    print("Generated logo: ", url)
+                    if not url:
+                        print(f"Warning: Logo {idx} generation failed, using placeholder")
+                        url = f"https://via.placeholder.com/400x200?text=Logo+{idx}"
+                    return url
+                with ThreadPoolExecutor(max_workers=3) as executor:
+                    future1 = executor.submit(generate_logo_url, logo_prompt_1, 1)
+                    future2 = executor.submit(generate_logo_url, logo_prompt_2, 2)
+                    future3 = executor.submit(generate_logo_url, logo_prompt_3, 3)
+                    logo_image_url_1 = future1.result()
+                    logo_image_url_2 = future2.result()
+                    logo_image_url_3 = future3.result()
+                print("Logo generation completed successfully")
+            except Exception as e:
+                print(f"Error during logo generation: {e}")
+                print("Using placeholder logos")
+                logo_image_url_1 = "https://via.placeholder.com/400x200?text=Logo+1"
+                logo_image_url_2 = "https://via.placeholder.com/400x200?text=Logo+2"
+                logo_image_url_3 = "https://via.placeholder.com/400x200?text=Logo+3"
 
         results = {
             "userId": userId,

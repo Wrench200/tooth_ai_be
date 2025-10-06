@@ -113,3 +113,5 @@ def get_image_url(public_id, transformation=None):
         return None 
     
     
+    
+# print(upload_image_from_file("newLogo.jpeg"))
