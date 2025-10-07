@@ -1762,11 +1762,11 @@ def count_total_users():
     return 0
 
 def count_brands_with_first_payment():
-    """Count the number of brands that have made the first payment"""
+    """Count the number of brands that have non-empty names (previously counted first payment)"""
     for attempt in range(2):
         try:
             with get_db_connection() as cursor:
-                cursor.execute("SELECT COUNT(*) FROM brands WHERE payment_status = TRUE")
+                cursor.execute("SELECT COUNT(*) FROM brands WHERE name IS NOT NULL AND name != ''")
                 count = cursor.fetchone()
                 return count
         except psycopg2.Error as e:
