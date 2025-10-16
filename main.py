@@ -1397,16 +1397,7 @@ def create_brand():
     brand = db.create_brand(data['userId'])
     
     if brand is None:
-        # Check if it's because user has already generated a brand
-        generated_status = db.check_user_generated_status(data['userId'])
-        if generated_status is True:
-            return jsonify({
-                'success': False,
-                'message': 'You have already generated a brand. You can only generate one brand per account.',
-                'brand': None
-            }), 400
-        else:
-            return jsonify({
+        return jsonify({
                 'success': False,
                 'message': 'Failed to create brand. Please try again.',
                 'brand': None
@@ -2998,255 +2989,358 @@ def google_token_auth():
             'message': f'Error during Google token authentication: {str(e)}'
         }), 500
 
-# ===================== Flutterwave Payment Endpoints =====================
+# ===================== Fapshi Payment Endpoints =====================
 
-@app.route('/payment/initiate', methods=['POST'])
-def initiate_payment():
-    """Initiate a payment transaction"""
+@app.route('/api/payment/initiate', methods=['POST'])
+def initiate_fapshi_payment():
+    """Initiate a Fapshi payment transaction"""
     try:
         data = request.get_json()
         
         # Validate required fields
-        required_fields = ['amount', 'email', 'phone_number', 'name', 'brand_id']
+        required_fields = ['amount', 'brandId']
         for field in required_fields:
             if field not in data:
                 return jsonify({
                     'success': False,
-                    'message': f'Missing required field: {field}'
+                    'error': f'Missing required field: {field}'
                 }), 400
         
         # Extract data
         amount = data['amount']
-        email = data['email']
-        phone_number = data['phone_number']
-        name = data['name']
-        brand_id = data['brand_id']
-        currency = data.get('currency', 'NGN')
+        brand_id = data['brandId']
+        email = data.get('email')
+        redirect_url = data.get('redirectUrl')
+        user_id = data.get('userId')
+        message = data.get('message', f'Payment for Brand Kit - {brand_id}')
         
-        # Generate unique transaction reference
+        # Generate unique external ID
         import uuid
-        tx_ref = f"brand_ai_{brand_id}_{uuid.uuid4().hex[:8]}"
+        external_id = f"brand_ai_{brand_id}_{uuid.uuid4().hex[:8]}"
         
-        # Import Flutterwave payment handler
+        # Import Fapshi payment handler
         try:
-            from flutterwave_payment import flutterwave
+            from fapshi_payment import fapshi
         except ImportError:
             return jsonify({
                 'success': False,
-                'message': 'Payment service not available'
+                'error': 'Payment service not available'
             }), 500
         
         # Initiate payment
-        result = flutterwave.initiate_payment(
+        result = fapshi.initiate_payment(
             amount=amount,
             email=email,
-            phone_number=phone_number,
-            name=name,
-            tx_ref=tx_ref,
-            currency=currency
+            redirect_url=redirect_url,
+            user_id=user_id,
+            external_id=external_id,
+            message=message
         )
         
         if result['success']:
-            # Store payment info in database (optional)
-            # You can create a payments table to track payment attempts
+            # Store payment transaction in database
+            transaction_id = db.create_payment_transaction(
+                external_id=external_id,
+                brand_id=brand_id,
+                user_id=user_id,
+                amount=amount,
+                currency='XAF',
+                redirect_url=redirect_url,
+                message=message,
+                payer_email=email
+            )
+            
+            # Update with Fapshi transaction details
+            if transaction_id and result['data']:
+                db.update_payment_transaction(
+                    external_id=external_id,
+                    fapshi_trans_id=result['data'].get('transId'),
+                    payment_link=result['data'].get('link'),
+                    status='PENDING'
+                )
             
             return jsonify({
                 'success': True,
                 'message': 'Payment initiated successfully',
-                'payment_url': result['payment_url'],
-                'tx_ref': result['tx_ref'],
-                'flw_ref': result['flw_ref']
+                'data': result['data'],
+                'external_id': external_id
             }), 200
         else:
             return jsonify({
                 'success': False,
-                'message': result['message']
+                'error': result['error']
             }), 400
             
     except Exception as e:
-        print(f"Error initiating payment: {e}")
+        print(f"Error initiating Fapshi payment: {e}")
         return jsonify({
             'success': False,
-            'message': f'Error initiating payment: {str(e)}'
+            'error': f'Error initiating payment: {str(e)}'
         }), 500
 
-@app.route('/payment/verify', methods=['POST'])
-def verify_payment():
-    """Verify a payment transaction"""
+@app.route('/api/payment/verify', methods=['POST'])
+def verify_fapshi_payment():
+    """Verify a Fapshi payment transaction"""
     try:
         data = request.get_json()
         
-        if not data or 'transaction_id' not in data:
+        if not data or 'transId' not in data:
             return jsonify({
                 'success': False,
-                'message': 'Transaction ID is required'
+                'error': 'Transaction ID is required'
             }), 400
         
-        transaction_id = data['transaction_id']
+        trans_id = data['transId']
         
-        # Import Flutterwave payment handler
+        # Import Fapshi payment handler
         try:
-            from flutterwave_payment import flutterwave
+            from fapshi_payment import fapshi
         except ImportError:
             return jsonify({
                 'success': False,
-                'message': 'Payment service not available'
+                'error': 'Payment service not available'
             }), 500
         
         # Verify payment
-        result = flutterwave.verify_payment(transaction_id)
+        result = fapshi.verify_payment(trans_id)
         
         if result['success']:
-            # Update brand payment status if payment is successful
-            if result['status'] == 'successful':
-                # Extract brand_id from tx_ref (format: brand_ai_{brand_id}_{random})
-                tx_ref = result['tx_ref']
-                if tx_ref.startswith('brand_ai_'):
-                    parts = tx_ref.split('_')
+            if result['verified']:
+                # Payment was successful
+                payment_data = result['payment_data']
+                
+                # Extract brand_id from external_id if available
+                external_id = payment_data.get('externalId', '')
+                if external_id.startswith('brand_ai_'):
+                    parts = external_id.split('_')
                     if len(parts) >= 3:
                         brand_id = parts[2]
-                        # Update payment status
+                        
+                        # Update payment transaction status
+                        db.update_payment_transaction(
+                            external_id=external_id,
+                            status='SUCCESSFUL',
+                            payment_data=payment_data,
+                            payer_name=payment_data.get('payerName'),
+                            payer_phone=payment_data.get('phone_number'),
+                            payment_method=payment_data.get('medium')
+                        )
+                        
+                        # Update brand payment status
                         db.update_brand_payment_status(brand_id, True)
-                        print(f"Payment successful for brand {brand_id}")
-            
-            return jsonify({
-                'success': True,
-                'message': 'Payment verified successfully',
-                'payment_data': result
-            }), 200
-        else:
-            return jsonify({
-                'success': False,
-                'message': result['message']
-            }), 400
-            
-    except Exception as e:
-        print(f"Error verifying payment: {e}")
-        return jsonify({
-            'success': False,
-            'message': f'Error verifying payment: {str(e)}'
-        }), 500
-
-@app.route('/payment/callback', methods=['GET'])
-def payment_callback():
-    """Handle payment callback from Flutterwave"""
-    try:
-        # Get query parameters
-        status = request.args.get('status')
-        tx_ref = request.args.get('tx_ref')
-        transaction_id = request.args.get('transaction_id')
-        
-        if status == 'successful':
-            # Verify the payment
-            try:
-                from flutterwave_payment import flutterwave
-                result = flutterwave.verify_payment(transaction_id)
+                        print(f"Fapshi payment successful for brand {brand_id}")
                 
-                if result['success'] and result['status'] == 'successful':
-                    # Extract brand_id from tx_ref
-                    if tx_ref.startswith('brand_ai_'):
-                        parts = tx_ref.split('_')
-                        if len(parts) >= 3:
-                            brand_id = parts[2]
-                            # Update payment status
-                            db.update_brand_payment_status(brand_id, True)
-                            print(f"Payment successful for brand {brand_id}")
-                    
-                    return jsonify({
-                        'success': True,
-                        'message': 'Payment completed successfully',
-                        'tx_ref': tx_ref,
-                        'transaction_id': transaction_id
-                    }), 200
-                else:
-                    return jsonify({
-                        'success': False,
-                        'message': 'Payment verification failed'
-                    }), 400
-            except ImportError:
                 return jsonify({
-                    'success': False,
-                    'message': 'Payment service not available'
-                }), 500
+                    'success': True,
+                    'verified': True,
+                    'message': 'Payment verified successfully',
+                    'payment_data': payment_data
+                }), 200
+            else:
+                # Payment failed or pending
+                return jsonify({
+                    'success': True,
+                    'verified': False,
+                    'error': result.get('error', 'Payment verification failed'),
+                    'payment_data': result.get('payment_data', {})
+                }), 200
         else:
             return jsonify({
                 'success': False,
-                'message': f'Payment failed with status: {status}'
+                'error': result['error']
             }), 400
             
     except Exception as e:
-        print(f"Error in payment callback: {e}")
+        print(f"Error verifying Fapshi payment: {e}")
         return jsonify({
             'success': False,
-            'message': f'Error processing payment callback: {str(e)}'
+            'error': f'Error verifying payment: {str(e)}'
         }), 500
 
-@app.route('/payment/webhook', methods=['POST'])
-def payment_webhook():
-    """Handle webhook from Flutterwave"""
+@app.route('/api/payment/status', methods=['GET'])
+def get_fapshi_payment_status():
+    """Get Fapshi payment status"""
     try:
-        # Get the raw request body and signature
-        payload = request.get_data(as_text=True)
-        signature = request.headers.get('Verif-Hash')
+        trans_id = request.args.get('transId')
         
-        if not signature:
+        if not trans_id:
             return jsonify({
                 'success': False,
-                'message': 'Missing webhook signature'
+                'error': 'Transaction ID is required'
             }), 400
         
-        # Parse the payload
+        # Import Fapshi payment handler
         try:
-            webhook_data = json.loads(payload)
-        except json.JSONDecodeError:
-            return jsonify({
-                'success': False,
-                'message': 'Invalid JSON payload'
-            }), 400
-        
-        # Import Flutterwave payment handler
-        try:
-            from flutterwave_payment import flutterwave
+            from fapshi_payment import fapshi
         except ImportError:
             return jsonify({
                 'success': False,
-                'message': 'Payment service not available'
+                'error': 'Payment service not available'
             }), 500
         
-        # Process webhook
-        result = flutterwave.process_webhook(webhook_data, signature)
-        
-        if result['success']:
-            # Handle successful payment
-            if result['event'] == 'charge.completed':
-                # Extract brand_id from tx_ref
-                tx_ref = result['tx_ref']
-                if tx_ref.startswith('brand_ai_'):
-                    parts = tx_ref.split('_')
-                    if len(parts) >= 3:
-                        brand_id = parts[2]
-                        # Update payment status
-                        db.update_brand_payment_status(brand_id, True)
-                        print(f"Webhook: Payment successful for brand {brand_id}")
+        # Get payment status
+        try:
+            payment_data = fapshi.get_payment_status(trans_id)
             
             return jsonify({
                 'success': True,
-                'message': 'Webhook processed successfully'
+                'payment_data': payment_data
+            }), 200
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 400
+            
+    except Exception as e:
+        print(f"Error getting Fapshi payment status: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'Error getting payment status: {str(e)}'
+        }), 500
+
+@app.route('/api/payment/callback', methods=['POST'])
+def fapshi_payment_callback():
+    """Handle Fapshi payment callback/webhook"""
+    try:
+        data = request.get_json()
+        
+        print(f"Fapshi callback received: {json.dumps(data, indent=2)}")
+        
+        # Extract payment data from Fapshi callback
+        trans_id = data.get('transId')
+        status = data.get('status')
+        amount = data.get('amount')
+        external_id = data.get('externalId')
+        
+        if status == 'SUCCESSFUL' and trans_id:
+            # Payment was successful
+            print(f"Fapshi payment successful for transaction: {trans_id}")
+            
+            # Extract brand_id from external_id if available
+            if external_id and external_id.startswith('brand_ai_'):
+                parts = external_id.split('_')
+                if len(parts) >= 3:
+                    brand_id = parts[2]
+                    
+                    # Update payment transaction status
+                    db.update_payment_transaction(
+                        external_id=external_id,
+                        fapshi_trans_id=trans_id,
+                        status='SUCCESSFUL',
+                        payment_data=data,
+                        payer_name=data.get('payerName'),
+                        payer_phone=data.get('phone_number'),
+                        payment_method=data.get('medium')
+                    )
+                    
+                    # Update brand payment status
+                    db.update_brand_payment_status(brand_id, True)
+                    print(f"Payment status updated for brand {brand_id}")
+            
+            return jsonify({
+                'success': True,
+                'message': 'Fapshi payment callback processed successfully'
+            }), 200
+        else:
+            print(f"Fapshi payment failed or pending for transaction: {trans_id}")
+            print(f"Status: {status}")
+            
+            return jsonify({
+                'success': False,
+                'message': f'Fapshi payment not successful. Status: {status}'
+            }), 400
+            
+    except Exception as e:
+        print(f"Fapshi callback error: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'Failed to process Fapshi callback: {str(e)}'
+        }), 500
+
+@app.route('/api/payment/transactions/<brand_id>', methods=['GET'])
+def get_payment_transactions_by_brand(brand_id):
+    """Get all payment transactions for a specific brand"""
+    try:
+        transactions = db.get_payment_transactions_by_brand(brand_id)
+        
+        return jsonify({
+            'success': True,
+            'transactions': transactions,
+            'count': len(transactions)
+        }), 200
+        
+    except Exception as e:
+        print(f"Error getting payment transactions for brand {brand_id}: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'Error retrieving payment transactions: {str(e)}'
+        }), 500
+
+@app.route('/api/payment/transactions/user/<user_id>', methods=['GET'])
+def get_payment_transactions_by_user(user_id):
+    """Get all payment transactions for a specific user"""
+    try:
+        transactions = db.get_payment_transactions_by_user(user_id)
+        
+        return jsonify({
+            'success': True,
+            'transactions': transactions,
+            'count': len(transactions)
+        }), 200
+        
+    except Exception as e:
+        print(f"Error getting payment transactions for user {user_id}: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'Error retrieving payment transactions: {str(e)}'
+        }), 500
+
+@app.route('/api/payment/transaction/<external_id>', methods=['GET'])
+def get_payment_transaction(external_id):
+    """Get a specific payment transaction by external_id"""
+    try:
+        transaction = db.get_payment_transaction(external_id=external_id)
+        
+        if transaction:
+            return jsonify({
+                'success': True,
+                'transaction': transaction
             }), 200
         else:
             return jsonify({
                 'success': False,
-                'message': result['message']
-            }), 400
-            
+                'error': 'Transaction not found'
+            }), 404
+        
     except Exception as e:
-        print(f"Error processing webhook: {e}")
+        print(f"Error getting payment transaction {external_id}: {e}")
         return jsonify({
             'success': False,
-            'message': f'Error processing webhook: {str(e)}'
+            'error': f'Error retrieving payment transaction: {str(e)}'
         }), 500
+
+@app.route('/api/user/<user_id>/brands', methods=['GET'])
+def get_user_brands(user_id):
+    """Get all brands created by a specific user"""
+    try:
+        brands = db.get_user_brands(user_id)
+        
+        return jsonify({
+            'success': True,
+            'brands': brands,
+            'count': len(brands)
+        }), 200
+        
+    except Exception as e:
+        print(f"Error getting brands for user {user_id}: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'Error retrieving user brands: {str(e)}'
+        }), 500
+
 
 if __name__ == '__main__':
     # Run on host 0.0.0.0 to be accessible from outside, port 8080
-    app.run(host='0.0.0.0', port=8080, debug=True)
-    app.run(host='0.0.0.0', port=8080, debug=True)
+    app.run(host='0.0.0.0', port=8090, debug=True)
+    app.run(host='0.0.0.0', port=8090, debug=True)

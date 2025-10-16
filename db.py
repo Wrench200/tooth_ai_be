@@ -1,7 +1,12 @@
 # db.py - now uses Neon Postgres (psycopg2) and loads connection string from .env
 import os
 import json
-from dotenv import load_dotenv
+# Try to load dotenv if available, otherwise use environment variables directly
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    print("Note: python-dotenv not installed, using environment variables directly")
 import uuid
 import psycopg2
 import psycopg2.extras
@@ -10,7 +15,7 @@ import threading
 import time
 from contextlib import contextmanager
 
-load_dotenv()  # Load environment variables from .env
+# Environment variables are loaded above
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
@@ -250,22 +255,176 @@ with get_db_connection() as cursor:
         except Exception as e:
             print(f"Note: Column {column_name} may already exist: {e}")
 
-    # Create transactions table for tracking payment transactions
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS transactions (
-            id SERIAL PRIMARY KEY,
-            transaction_id TEXT UNIQUE NOT NULL,
-            userid uuid NOT NULL,
-            brandid uuid NOT NULL,
-            payment_status BOOLEAN DEFAULT FALSE,
-            referral_reward_processed BOOLEAN DEFAULT FALSE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (userid) REFERENCES users(userId),
-            FOREIGN KEY (brandid) REFERENCES brands(id)
-        )
-    ''')
-    
-    print("✅ Transactions table ensured")
+    print("✅ Users table ensured")
+
+# Payment Transaction Management Functions
+
+def create_payment_transaction(external_id, brand_id, user_id, amount, currency='XAF', 
+                              redirect_url=None, message=None, payer_email=None):
+    """Create a new payment transaction record"""
+    try:
+        with get_db_connection() as cursor:
+            cursor.execute('''
+                INSERT INTO payment_transactions 
+                (external_id, brand_id, user_id, amount, currency, redirect_url, message, payer_email, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'PENDING')
+                RETURNING id
+            ''', (external_id, brand_id, user_id, amount, currency, redirect_url, message, payer_email))
+            
+            result = cursor.fetchone()
+            if result:
+                print(f"✅ Payment transaction created: {external_id}")
+                return result[0]
+            return None
+    except Exception as e:
+        print(f"Error creating payment transaction: {e}")
+        return None
+
+def update_payment_transaction(external_id, fapshi_trans_id=None, status=None, 
+                              payment_link=None, payment_data=None, payer_name=None, 
+                              payer_phone=None, payment_method=None):
+    """Update payment transaction with Fapshi details"""
+    try:
+        with get_db_connection() as cursor:
+            update_fields = []
+            update_values = []
+            
+            if fapshi_trans_id:
+                update_fields.append("fapshi_trans_id = %s")
+                update_values.append(fapshi_trans_id)
+            
+            if status:
+                update_fields.append("status = %s")
+                update_values.append(status)
+                
+            if payment_link:
+                update_fields.append("fapshi_payment_link = %s")
+                update_values.append(payment_link)
+                
+            if payment_data:
+                update_fields.append("payment_data = %s")
+                update_values.append(json.dumps(payment_data))
+                
+            if payer_name:
+                update_fields.append("payer_name = %s")
+                update_values.append(payer_name)
+                
+            if payer_phone:
+                update_fields.append("payer_phone = %s")
+                update_values.append(payer_phone)
+                
+            if payment_method:
+                update_fields.append("payment_method = %s")
+                update_values.append(payment_method)
+            
+            # Always update the updated_at timestamp
+            update_fields.append("updated_at = CURRENT_TIMESTAMP")
+            
+            # Set completed_at if status is SUCCESSFUL
+            if status == 'SUCCESSFUL':
+                update_fields.append("completed_at = CURRENT_TIMESTAMP")
+            
+            if update_fields:
+                update_values.append(external_id)
+                query = f'''
+                    UPDATE payment_transactions 
+                    SET {', '.join(update_fields)}
+                    WHERE external_id = %s
+                '''
+                cursor.execute(query, update_values)
+                
+                if cursor.rowcount > 0:
+                    print(f"✅ Payment transaction updated: {external_id}")
+                    return True
+            
+            return False
+    except Exception as e:
+        print(f"Error updating payment transaction: {e}")
+        return False
+
+def get_payment_transaction(external_id=None, fapshi_trans_id=None):
+    """Get payment transaction by external_id or fapshi_trans_id"""
+    try:
+        with get_db_connection() as cursor:
+            if external_id:
+                cursor.execute('''
+                    SELECT * FROM payment_transactions 
+                    WHERE external_id = %s
+                ''', (external_id,))
+            elif fapshi_trans_id:
+                cursor.execute('''
+                    SELECT * FROM payment_transactions 
+                    WHERE fapshi_trans_id = %s
+                ''', (fapshi_trans_id,))
+            else:
+                return None
+            
+            result = cursor.fetchone()
+            if result:
+                # Convert to dictionary
+                columns = [desc[0] for desc in cursor.description]
+                return dict(zip(columns, result))
+            return None
+    except Exception as e:
+        print(f"Error getting payment transaction: {e}")
+        return None
+
+def get_payment_transactions_by_brand(brand_id):
+    """Get all payment transactions for a specific brand"""
+    try:
+        with get_db_connection() as cursor:
+            cursor.execute('''
+                SELECT * FROM payment_transactions 
+                WHERE brand_id = %s
+                ORDER BY created_at DESC
+            ''', (brand_id,))
+            
+            results = cursor.fetchall()
+            if results:
+                columns = [desc[0] for desc in cursor.description]
+                return [dict(zip(columns, row)) for row in results]
+            return []
+    except Exception as e:
+        print(f"Error getting payment transactions by brand: {e}")
+        return []
+
+def get_payment_transactions_by_user(user_id):
+    """Get all payment transactions for a specific user"""
+    try:
+        with get_db_connection() as cursor:
+            cursor.execute('''
+                SELECT * FROM payment_transactions 
+                WHERE user_id = %s
+                ORDER BY created_at DESC
+            ''', (user_id,))
+            
+            results = cursor.fetchall()
+            if results:
+                columns = [desc[0] for desc in cursor.description]
+                return [dict(zip(columns, row)) for row in results]
+            return []
+    except Exception as e:
+        print(f"Error getting payment transactions by user: {e}")
+        return []
+
+def get_user_brands(user_id):
+    """Get all brands created by a specific user"""
+    try:
+        with get_db_connection() as cursor:
+            cursor.execute('''
+                SELECT * FROM brands 
+                WHERE userId = %s
+                ORDER BY created_at DESC
+            ''', (user_id,))
+            
+            results = cursor.fetchall()
+            if results:
+                columns = [desc[0] for desc in cursor.description]
+                return [dict(zip(columns, row)) for row in results]
+            return []
+    except Exception as e:
+        print(f"Error getting brands for user {user_id}: {e}")
+        return []
 
 def create_user(username, email, password, phone_number=None):
     for attempt in range(2):
@@ -513,7 +672,66 @@ def ensure_tables_exist():
                 FOREIGN KEY (userId) REFERENCES users(userId) ON DELETE CASCADE
             )
             ''')
-            print("Tables ensured successfully")
+            print("✅ Brands table ensured")
+            
+            # Create transactions table for tracking payment transactions
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS transactions (
+                    id SERIAL PRIMARY KEY,
+                    transaction_id TEXT UNIQUE NOT NULL,
+                    userid uuid NOT NULL,
+                    brandid uuid NOT NULL,
+                    payment_status BOOLEAN DEFAULT FALSE,
+                    referral_reward_processed BOOLEAN DEFAULT FALSE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (userid) REFERENCES users(userId),
+                    FOREIGN KEY (brandid) REFERENCES brands(id)
+                )
+            ''')
+            print("✅ Transactions table ensured")
+            
+            # Create payment_transactions table for detailed Fapshi payment tracking
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS payment_transactions (
+                    id SERIAL PRIMARY KEY,
+                    external_id TEXT UNIQUE NOT NULL,
+                    fapshi_trans_id TEXT,
+                    brand_id TEXT NOT NULL,
+                    user_id TEXT,
+                    amount INTEGER NOT NULL,
+                    currency TEXT DEFAULT 'XAF',
+                    status TEXT DEFAULT 'PENDING',
+                    payment_method TEXT,
+                    payer_name TEXT,
+                    payer_email TEXT,
+                    payer_phone TEXT,
+                    redirect_url TEXT,
+                    message TEXT,
+                    fapshi_payment_link TEXT,
+                    payment_data JSONB,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    completed_at TIMESTAMP
+                )
+            ''')
+            print("✅ Payment transactions table ensured")
+            
+            # Create indexes for faster lookups
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_payment_transactions_external_id 
+                ON payment_transactions(external_id)
+            ''')
+            
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_payment_transactions_fapshi_trans_id 
+                ON payment_transactions(fapshi_trans_id)
+            ''')
+            
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_payment_transactions_brand_id 
+                ON payment_transactions(brand_id)
+            ''')
+            print("✅ Payment transaction indexes ensured")
     except Exception as e:
         print(f"Error ensuring tables exist: {e}")
 
@@ -557,15 +775,14 @@ def update_user_generated_status(user_id, generated_status):
     return False
 
 def create_brand(user_id):
-    # First check if user has already generated a brand
+    # Check if user exists
     generated_status = check_user_generated_status(user_id)
     if generated_status is None:
         print(f"User {user_id} not found.")
         return None
     
-    if generated_status:
-        print(f"User {user_id} has already generated a brand.")
-        return None
+    # Allow users to create multiple brands - removed the constraint
+    print(f"Creating new brand for user {user_id}.")
     
     brand_id = str(uuid.uuid4())
     answers = create_answers(user_id)
@@ -600,10 +817,9 @@ def create_brand(user_id):
             new_brand["brand_identity"], new_brand["marketing_and_social_media_strategy"], new_brand["payment_status"]
         ))
             
-            # Update user's generated status to True
-            cursor.execute("UPDATE users SET generated = TRUE WHERE userId = %s", (user_id,))
+            # Note: No longer updating generated status since users can create multiple brands
         
-        print(f"Brand {brand_id} created for user {user_id} and generated status updated.")
+        print(f"Brand {brand_id} created for user {user_id}.")
         return new_brand
     except psycopg2.IntegrityError as e:
         print(f"Error creating brand: {e}")
