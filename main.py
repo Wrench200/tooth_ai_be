@@ -1394,6 +1394,9 @@ def create_brand():
     #     'userId': 'userId',
     # }
 
+    print(f"🔄 CREATE_BRAND endpoint called for user: {data.get('userId', 'unknown')}")
+    print(f"🔄 Request data: {data}")
+    
     brand = db.create_brand(data['userId'])
     
     if brand is None:
@@ -1923,6 +1926,114 @@ def regenerate_referral_code(user_id):
         return jsonify({
             'success': False,
             'error': str(e)
+        }), 500
+
+@app.route('/referral/rewards/<user_id>', methods=['GET'])
+def get_referral_rewards(user_id):
+    """Get referral reward history and statistics for a user"""
+    try:
+        print(f"🔄 Getting referral rewards for user: {user_id}")
+        
+        # Get referral reward history
+        reward_history = db.get_referral_reward_history(user_id)
+        
+        if not reward_history:
+            return jsonify({
+                'success': False,
+                'message': 'User not found'
+            }), 404
+        
+        # Calculate additional statistics
+        total_earnings = reward_history.get('referred_amount', 0)
+        total_referrals = reward_history.get('referred_users', 0)
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'userId': reward_history['userId'],
+                'referral_code': reward_history['referral_code'],
+                'total_referrals': total_referrals,
+                'total_earnings': total_earnings,
+                'can_refer': reward_history.get('can_refer', False),
+                'referred_by': reward_history.get('referred_by'),
+                'earnings_breakdown': {
+                    'from_referrals': total_earnings,
+                    'from_purchases': 0,  # This could be calculated from payment history
+                    'total': total_earnings
+                }
+            }
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ Error getting referral rewards: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Error retrieving referral rewards: {str(e)}'
+        }), 500
+
+@app.route('/referral/history/<user_id>', methods=['GET'])
+def get_referral_history(user_id):
+    """Get detailed referral history for a user"""
+    try:
+        print(f"🔄 Getting referral history for user: {user_id}")
+        
+        with db.get_db_connection() as cursor:
+            # Get users referred by this user
+            cursor.execute("""
+                SELECT 
+                    u.userId,
+                    u.username,
+                    u.email,
+                    u.created_at,
+                    u.referred_amount,
+                    COUNT(b.id) as brand_count,
+                    MAX(b.created_at) as last_brand_created
+                FROM users u
+                LEFT JOIN brands b ON u.userId = b.userId
+                WHERE u.referred_by = %s
+                GROUP BY u.userId, u.username, u.email, u.created_at, u.referred_amount
+                ORDER BY u.created_at DESC
+            """, (user_id,))
+            
+            referrals = cursor.fetchall()
+            
+            referral_history = []
+            for referral in referrals:
+                user_id_ref, username, email, created_at, referred_amount, brand_count, last_brand_created = referral
+                
+                # Determine status based on whether they've created brands and earned rewards
+                if referred_amount > 0:
+                    status = "completed"
+                    reward = referred_amount
+                elif brand_count > 0:
+                    status = "pending"
+                    reward = 0
+                else:
+                    status = "registered"
+                    reward = 0
+                
+                referral_history.append({
+                    'id': user_id_ref,
+                    'name': username or 'Unknown User',
+                    'email': email or 'No email',
+                    'status': status,
+                    'date': created_at.isoformat() if created_at else None,
+                    'reward': reward,
+                    'brandCreated': brand_count > 0,
+                    'brandCount': brand_count,
+                    'lastBrandCreated': last_brand_created.isoformat() if last_brand_created else None
+                })
+            
+            return jsonify({
+                'success': True,
+                'data': referral_history
+            }), 200
+        
+    except Exception as e:
+        print(f"❌ Error getting referral history: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Error retrieving referral history: {str(e)}'
         }), 500
 
 @app.route('/download_brand_pdf/<brandId>', methods=['GET'])
@@ -2556,6 +2667,65 @@ def delete_brand_assets():
             'deleted': False
         }), 500
 
+@app.route('/delete_brand', methods=['POST'])
+def delete_brand():
+    """Delete a brand and all its associated data"""
+    try:
+        data = request.get_json()
+        if not data or 'brandId' not in data:
+            return jsonify({
+                'success': False,
+                'message': 'brandId is required',
+                'deleted': False
+            }), 400
+        
+        brand_id = data['brandId']
+        user_id = data.get('userId')  # Optional user ID for additional validation
+        
+        print(f"🔄 DELETE_BRAND endpoint called for brandId: {brand_id}, userId: {user_id}")
+        
+        # Check if brand exists
+        brand_exists = db.get_brand(brand_id)
+        if not brand_exists:
+            return jsonify({
+                'success': False,
+                'message': 'Brand not found',
+                'deleted': False
+            }), 404
+        
+        # Optional: Verify user owns the brand (if userId provided)
+        if user_id and brand_exists.get('userId') != user_id:
+            return jsonify({
+                'success': False,
+                'message': 'Unauthorized: You can only delete your own brands',
+                'deleted': False
+            }), 403
+        
+        # Delete the brand (this will cascade delete related data due to foreign key constraints)
+        deleted = db.delete_brand(brand_id)
+        
+        if deleted:
+            print(f"✅ Brand {brand_id} deleted successfully")
+            return jsonify({
+                'success': True,
+                'message': 'Brand deleted successfully',
+                'deleted': True
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to delete brand',
+                'deleted': False
+            }), 500
+            
+    except Exception as e:
+        print(f"❌ Error deleting brand: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Error deleting brand: {str(e)}',
+            'deleted': False
+        }), 500
+
 @app.route('/get_full_brand/<brand_id>', methods=['GET'])
 def get_full_brand(brand_id):
     """Get complete brand information including brand details and brand assets"""
@@ -3084,13 +3254,17 @@ def verify_fapshi_payment():
     try:
         data = request.get_json()
         
+        print(f"🔄 VERIFY_PAYMENT endpoint called with data: {data}")
+        
         if not data or 'transId' not in data:
+            print("❌ Missing transaction ID in request")
             return jsonify({
                 'success': False,
                 'error': 'Transaction ID is required'
             }), 400
         
         trans_id = data['transId']
+        print(f"🔄 Verifying payment for transaction ID: {trans_id}")
         
         # Import Fapshi payment handler
         try:
@@ -3103,11 +3277,13 @@ def verify_fapshi_payment():
         
         # Verify payment
         result = fapshi.verify_payment(trans_id)
+        print(f"🔄 Fapshi verification result: {result}")
         
         if result['success']:
             if result['verified']:
                 # Payment was successful
                 payment_data = result['payment_data']
+                print(f"✅ Payment verified successfully: {payment_data}")
                 
                 # Extract brand_id from external_id if available
                 external_id = payment_data.get('externalId', '')
@@ -3128,7 +3304,28 @@ def verify_fapshi_payment():
                         
                         # Update brand payment status
                         db.update_brand_payment_status(brand_id, True)
-                        print(f"Fapshi payment successful for brand {brand_id}")
+                        print(f"✅ Fapshi payment successful for brand {brand_id}")
+                        
+                        # Process referral rewards (20% of 15k = 3k XAF shared equally)
+                        try:
+                            # Get the user who owns this brand
+                            brand_info = db.get_brand(brand_id)
+                            if brand_info and brand_info.get('userId'):
+                                user_id = brand_info['userId']
+                                payment_amount = payment_data.get('amount', 15000)  # Default to 15k if not specified
+                                
+                                print(f"🔄 Processing referral rewards for user {user_id}, amount {payment_amount}")
+                                referral_result = db.process_referral_reward(brand_id, user_id, payment_amount)
+                                
+                                if referral_result['success']:
+                                    print(f"✅ Referral rewards processed: {referral_result}")
+                                else:
+                                    print(f"❌ Failed to process referral rewards: {referral_result}")
+                            else:
+                                print(f"❌ Could not find brand owner for brand {brand_id}")
+                        except Exception as e:
+                            print(f"❌ Error processing referral rewards: {e}")
+                            # Don't fail the payment verification if referral processing fails
                 
                 return jsonify({
                     'success': True,
@@ -3138,16 +3335,20 @@ def verify_fapshi_payment():
                 }), 200
             else:
                 # Payment failed or pending
+                error_msg = result.get('error', 'Payment verification failed')
+                print(f"❌ Payment verification failed: {error_msg}")
                 return jsonify({
                     'success': True,
                     'verified': False,
-                    'error': result.get('error', 'Payment verification failed'),
+                    'error': error_msg,
                     'payment_data': result.get('payment_data', {})
                 }), 200
         else:
+            error_msg = result['error']
+            print(f"❌ Payment verification error: {error_msg}")
             return jsonify({
                 'success': False,
-                'error': result['error']
+                'error': error_msg
             }), 400
             
     except Exception as e:
@@ -3339,8 +3540,57 @@ def get_user_brands(user_id):
             'error': f'Error retrieving user brands: {str(e)}'
         }), 500
 
+@app.route('/api/health/database', methods=['GET'])
+def api_database_health_check():
+    """Check database connection health"""
+    try:
+        # Get database info
+        db_info = db.get_database_info()
+        
+        # Perform health check
+        is_healthy = db.check_database_health()
+        
+        return jsonify({
+            'success': True,
+            'healthy': is_healthy,
+            'database_info': db_info,
+            'timestamp': datetime.now().isoformat()
+        }), 200 if is_healthy else 503
+        
+    except Exception as e:
+        print(f"Database health check error: {e}")
+        return jsonify({
+            'success': False,
+            'healthy': False,
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 503
+
+@app.route('/api/health', methods=['GET'])
+def api_health_check():
+    """General health check endpoint"""
+    try:
+        # Check database health
+        db_healthy = db.check_database_health()
+        
+        return jsonify({
+            'success': True,
+            'status': 'healthy' if db_healthy else 'unhealthy',
+            'database': 'connected' if db_healthy else 'disconnected',
+            'timestamp': datetime.now().isoformat()
+        }), 200 if db_healthy else 503
+        
+    except Exception as e:
+        print(f"Health check error: {e}")
+        return jsonify({
+            'success': False,
+            'status': 'unhealthy',
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 503
+
 
 if __name__ == '__main__':
     # Run on host 0.0.0.0 to be accessible from outside, port 8080
-    app.run(host='0.0.0.0', port=8090, debug=True)
-    app.run(host='0.0.0.0', port=8090, debug=True)
+    app.run(host='0.0.0.0', port=8080, debug=True)
+    

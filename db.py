@@ -45,122 +45,262 @@ def fix_database_url(url):
 # Fix the DATABASE_URL if needed
 DATABASE_URL = fix_database_url(DATABASE_URL)
 
-class ThreadLocalConnection:
-    """Thread-local database connection manager with SSL support"""
+class ImprovedDatabaseManager:
+    """Improved database connection manager with better error handling and retry logic"""
     
     def __init__(self, database_url):
         self.database_url = database_url
         self._thread_local = threading.local()
+        self.max_retries = 3
+        self.retry_delay = 1  # seconds
+        self.connection_timeout = 30  # seconds
     
     def _create_connection(self):
-        """Create a new database connection with proper SSL settings"""
+        """Create a new database connection with improved settings"""
         try:
-            conn = psycopg2.connect(self.database_url)
+            # Parse the database URL to add connection parameters
+            parsed_url = urllib.parse.urlparse(self.database_url)
+            query_params = urllib.parse.parse_qs(parsed_url.query)
             
-            # Set basic session parameters
+            # Add connection parameters for better stability
+            connection_params = {
+                'host': parsed_url.hostname,
+                'port': parsed_url.port or 5432,
+                'database': parsed_url.path[1:],  # Remove leading slash
+                'user': parsed_url.username,
+                'password': parsed_url.password,
+                'connect_timeout': self.connection_timeout,
+                'application_name': 'jara_backend',
+                'keepalives_idle': 600,
+                'keepalives_interval': 30,
+                'keepalives_count': 3,
+            }
+            
+            # Add SSL parameters
+            if 'sslmode' in query_params:
+                connection_params['sslmode'] = query_params['sslmode'][0]
+            else:
+                connection_params['sslmode'] = 'require'
+            
+            print(f"🔄 Creating database connection to {parsed_url.hostname}:{parsed_url.port}")
+            conn = psycopg2.connect(**connection_params)
+            
+            # Set session parameters for better connection management
             conn.autocommit = False
             
+            # Test the connection
+            with conn.cursor() as test_cursor:
+                test_cursor.execute("SELECT 1")
+            
+            print(f"✅ Database connection established successfully")
             return conn
             
+        except psycopg2.OperationalError as e:
+            print(f"❌ Database connection failed: {e}")
+            raise
         except Exception as e:
-            print(f"Error creating database connection: {e}")
+            print(f"❌ Unexpected error creating database connection: {e}")
             raise
     
     def _is_connection_valid(self, conn):
-        """Check if a connection is still valid"""
+        """Check if a connection is still valid with timeout"""
         if conn is None:
             return False
         
         try:
-            # Check if connection is still alive
-            cursor = conn.cursor()
-            cursor.execute("SELECT 1")
-            cursor.close()
+            # Set a short timeout for the test query
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT 1")
             return True
-        except (psycopg2.OperationalError, psycopg2.InterfaceError, AttributeError):
+        except (psycopg2.OperationalError, psycopg2.InterfaceError, AttributeError, psycopg2.DatabaseError):
             return False
     
-    def get_connection(self):
-        """Get a valid database connection for the current thread"""
-        # For now, always create a new connection to avoid issues
-        conn = self._create_connection()
-        return conn
+    def get_connection(self, retry_count=0):
+        """Get a valid database connection with retry logic"""
+        try:
+            # Check if we have a valid connection in thread local storage
+            if hasattr(self._thread_local, 'connection'):
+                conn = self._thread_local.connection
+                if self._is_connection_valid(conn):
+                    return conn
+                else:
+                    # Connection is invalid, close it
+                    try:
+                        conn.close()
+                    except:
+                        pass
+                    delattr(self._thread_local, 'connection')
+            
+            # Create a new connection
+            conn = self._create_connection()
+            self._thread_local.connection = conn
+            return conn
+            
+        except psycopg2.OperationalError as e:
+            if retry_count < self.max_retries:
+                print(f"🔄 Connection attempt {retry_count + 1} failed, retrying in {self.retry_delay}s...")
+                time.sleep(self.retry_delay)
+                return self.get_connection(retry_count + 1)
+            else:
+                print(f"❌ Max retries ({self.max_retries}) exceeded for database connection")
+                raise
+        except Exception as e:
+            print(f"❌ Unexpected error getting database connection: {e}")
+            raise
     
     def close_connection(self):
         """Close the current thread's database connection"""
         if hasattr(self._thread_local, 'connection'):
             try:
                 self._thread_local.connection.close()
-            except:
-                pass
-            delattr(self._thread_local, 'connection')
+                print("🔒 Database connection closed")
+            except Exception as e:
+                print(f"⚠️ Error closing database connection: {e}")
+            finally:
+                delattr(self._thread_local, 'connection')
 
-# Create global thread-local connection manager
-db_manager = ThreadLocalConnection(DATABASE_URL)
+    def reset_connection(self):
+        """Force reset the connection"""
+        self.close_connection()
+        return self.get_connection()
+
+# Create global improved database manager
+db_manager = ImprovedDatabaseManager(DATABASE_URL)
 
 @contextmanager
 def get_db_connection():
-    """Context manager for database connections with automatic error handling"""
+    """Improved context manager for database connections with better error handling"""
     conn = None
     cursor = None
+    max_attempts = 3
     
-    # First attempt
-    try:
-        conn = db_manager.get_connection()
-        cursor = conn.cursor()
-        yield cursor
-        conn.commit()
-        return  # Success, exit early
-    except psycopg2.OperationalError as e:
-        print(f"Database operational error: {e}")
-        if conn:
-            try:
-                conn.rollback()
-            except:
-                pass
-        # Don't yield here - this was causing the nested yield issue
-    except Exception as e:
-        print(f"Database error: {e}")
-        if conn:
-            try:
-                conn.rollback()
-            except:
-                pass
-        raise
-    finally:
-        if cursor:
-            try:
-                cursor.close()
-            except:
-                pass
-    
-    # Second attempt (only if first attempt failed with OperationalError)
-    conn = None
-    cursor = None
-    try:
-        db_manager.close_connection()
-        conn = db_manager.get_connection()
-        cursor = conn.cursor()
-        yield cursor
-        conn.commit()
-    except Exception as e:
-        print(f"Database retry failed: {e}")
-        if conn:
-            try:
-                conn.rollback()
-            except:
-                pass
-        raise
-    finally:
-        if cursor:
-            try:
-                cursor.close()
-            except:
-                pass
+    for attempt in range(max_attempts):
+        try:
+            # Get connection with built-in retry logic
+            conn = db_manager.get_connection()
+            cursor = conn.cursor()
+            
+            # Yield the cursor for use
+            yield cursor
+            
+            # If we get here, the operation was successful
+            conn.commit()
+            return  # Success, exit early
+            
+        except psycopg2.OperationalError as e:
+            print(f"🔄 Database operational error (attempt {attempt + 1}/{max_attempts}): {e}")
+            
+            # Rollback any pending transaction
+            if conn:
+                try:
+                    conn.rollback()
+                except Exception as rollback_error:
+                    print(f"⚠️ Error during rollback: {rollback_error}")
+            
+            # Close cursor if it exists
+            if cursor:
+                try:
+                    cursor.close()
+                except:
+                    pass
+                cursor = None
+            
+            # If this is not the last attempt, reset connection and try again
+            if attempt < max_attempts - 1:
+                print(f"🔄 Resetting connection and retrying...")
+                try:
+                    db_manager.reset_connection()
+                except Exception as reset_error:
+                    print(f"⚠️ Error resetting connection: {reset_error}")
+                continue
+            else:
+                print(f"❌ All {max_attempts} connection attempts failed")
+                raise
+                
+        except psycopg2.InterfaceError as e:
+            print(f"🔄 Database interface error (attempt {attempt + 1}/{max_attempts}): {e}")
+            
+            # Close cursor if it exists
+            if cursor:
+                try:
+                    cursor.close()
+                except:
+                    pass
+                cursor = None
+            
+            # If this is not the last attempt, reset connection and try again
+            if attempt < max_attempts - 1:
+                print(f"🔄 Resetting connection and retrying...")
+                try:
+                    db_manager.reset_connection()
+                except Exception as reset_error:
+                    print(f"⚠️ Error resetting connection: {reset_error}")
+                continue
+            else:
+                print(f"❌ All {max_attempts} connection attempts failed")
+                raise
+                
+        except Exception as e:
+            print(f"❌ Unexpected database error: {e}")
+            
+            # Rollback any pending transaction
+            if conn:
+                try:
+                    conn.rollback()
+                except:
+                    pass
+            
+            # Close cursor if it exists
+            if cursor:
+                try:
+                    cursor.close()
+                except:
+                    pass
+            
+            raise  # Re-raise unexpected errors immediately
+            
+        finally:
+            # Always close cursor
+            if cursor:
+                try:
+                    cursor.close()
+                except:
+                    pass
 
 def reset_connection():
     """Reset the current thread's database connection"""
     db_manager.close_connection()
+
+def check_database_health():
+    """Check if the database connection is healthy"""
+    try:
+        with get_db_connection() as cursor:
+            cursor.execute("SELECT 1 as health_check")
+            result = cursor.fetchone()
+            if result and result[0] == 1:
+                print("✅ Database health check passed")
+                return True
+            else:
+                print("❌ Database health check failed - unexpected result")
+                return False
+    except Exception as e:
+        print(f"❌ Database health check failed: {e}")
+        return False
+
+def get_database_info():
+    """Get database connection information"""
+    try:
+        parsed_url = urllib.parse.urlparse(DATABASE_URL)
+        return {
+            'host': parsed_url.hostname,
+            'port': parsed_url.port or 5432,
+            'database': parsed_url.path[1:],
+            'user': parsed_url.username,
+            'ssl_mode': urllib.parse.parse_qs(parsed_url.query).get('sslmode', ['unknown'])[0]
+        }
+    except Exception as e:
+        print(f"Error getting database info: {e}")
+        return None
 
 def test_connection():
     """Test if the database connection is working"""
@@ -775,14 +915,16 @@ def update_user_generated_status(user_id, generated_status):
     return False
 
 def create_brand(user_id):
+    print(f"🔄 DB: create_brand called for user: {user_id}")
+    
     # Check if user exists
     generated_status = check_user_generated_status(user_id)
     if generated_status is None:
-        print(f"User {user_id} not found.")
+        print(f"❌ DB: User {user_id} not found.")
         return None
     
     # Allow users to create multiple brands - removed the constraint
-    print(f"Creating new brand for user {user_id}.")
+    print(f"✅ DB: Creating new brand for user {user_id}.")
     
     brand_id = str(uuid.uuid4())
     answers = create_answers(user_id)
@@ -2076,3 +2218,116 @@ def mark_referral_reward_processed(transaction_id):
     except Exception as e:
         print(f"Error marking referral reward processed: {e}")
         return False
+
+def process_referral_reward(brand_id, user_id, amount_paid=15000):
+    """
+    Process referral reward when a user pays for a brand
+    20% of the payment (3k XAF) is shared equally between:
+    1. The person who generated the brand (user_id)
+    2. The person who referred them (if any)
+    
+    Args:
+        brand_id: ID of the brand that was paid for
+        user_id: ID of the user who paid
+        amount_paid: Amount paid (default 15000 XAF)
+    
+    Returns:
+        dict: Result of the referral reward processing
+    """
+    try:
+        print(f"🔄 Processing referral reward for brand {brand_id}, user {user_id}, amount {amount_paid}")
+        
+        # Calculate reward amount (20% of payment, split equally = 10% each)
+        total_reward = int(amount_paid * 0.20)  # 20% = 3000 XAF
+        individual_reward = int(total_reward / 2)  # 10% each = 1500 XAF
+        
+        print(f"💰 Total reward: {total_reward} XAF, Individual reward: {individual_reward} XAF")
+        
+        with get_db_connection() as cursor:
+            # Get user information to check if they were referred
+            cursor.execute("""
+                SELECT userId, referred_by, referral_code, referred_amount
+                FROM users 
+                WHERE userId = %s
+            """, (user_id,))
+            
+            user_row = cursor.fetchone()
+            if not user_row:
+                print(f"❌ User {user_id} not found")
+                return {'success': False, 'message': 'User not found'}
+            
+            user_id_db, referred_by, referral_code, current_referred_amount = user_row
+            
+            # Reward the brand creator (the user who paid)
+            cursor.execute("""
+                UPDATE users 
+                SET referred_amount = referred_amount + %s
+                WHERE userId = %s
+            """, (individual_reward, user_id))
+            
+            print(f"✅ Brand creator {user_id} rewarded {individual_reward} XAF")
+            
+            # If user was referred by someone, reward the referrer
+            if referred_by:
+                cursor.execute("""
+                    UPDATE users 
+                    SET referred_amount = referred_amount + %s
+                    WHERE userId = %s
+                """, (individual_reward, referred_by))
+                
+                print(f"✅ Referrer {referred_by} rewarded {individual_reward} XAF")
+                
+                return {
+                    'success': True,
+                    'message': 'Referral rewards processed successfully',
+                    'brand_creator_reward': individual_reward,
+                    'referrer_reward': individual_reward,
+                    'total_reward': total_reward,
+                    'referrer_id': referred_by
+                }
+            else:
+                print(f"ℹ️ User {user_id} was not referred by anyone")
+                return {
+                    'success': True,
+                    'message': 'Brand creator rewarded (no referrer)',
+                    'brand_creator_reward': individual_reward,
+                    'referrer_reward': 0,
+                    'total_reward': individual_reward,
+                    'referrer_id': None
+                }
+                
+    except Exception as e:
+        print(f"❌ Error processing referral reward: {e}")
+        return {'success': False, 'message': f'Error processing referral reward: {str(e)}'}
+
+def get_referral_reward_history(user_id):
+    """Get referral reward history for a user"""
+    try:
+        with get_db_connection() as cursor:
+            cursor.execute("""
+                SELECT 
+                    u.userId,
+                    u.referral_code,
+                    u.referred_users,
+                    u.referred_amount,
+                    u.can_refer,
+                    u.referred_by
+                FROM users u
+                WHERE u.userId = %s
+            """, (user_id,))
+            
+            row = cursor.fetchone()
+            if not row:
+                return None
+            
+            return {
+                'userId': row[0],
+                'referral_code': row[1],
+                'referred_users': row[2],
+                'referred_amount': row[3],
+                'can_refer': row[4],
+                'referred_by': row[5]
+            }
+    except Exception as e:
+        print(f"Error getting referral reward history: {e}")
+        return None
