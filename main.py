@@ -7,6 +7,7 @@ import suggestions
 import json
 import os
 import results2
+from datetime import datetime
 import cloudinary_utils
 import time
 import traceback
