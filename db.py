@@ -364,11 +364,12 @@ with get_db_connection() as cursor:
         referred_by TEXT,
         referred_users INT DEFAULT 0,
         referred_amount INT DEFAULT 0,
-        can_refer BOOLEAN DEFAULT FALSE,
+        can_refer BOOLEAN DEFAULT TRUE,
         generated BOOLEAN DEFAULT FALSE,
         google_id TEXT UNIQUE,
         profile_picture TEXT,
         auth_provider TEXT DEFAULT 'email',
+        is_first_login BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
 ''')
@@ -380,11 +381,12 @@ with get_db_connection() as cursor:
         ('referred_by', 'TEXT'),
         ('referred_users', 'INT DEFAULT 0'),
         ('referred_amount', 'INT DEFAULT 0'),
-        ('can_refer', 'BOOLEAN DEFAULT FALSE'),
+        ('can_refer', 'BOOLEAN DEFAULT TRUE'),
         ('generated', 'BOOLEAN DEFAULT FALSE'),
         ('google_id', 'TEXT UNIQUE'),
         ('profile_picture', 'TEXT'),
         ('auth_provider', 'TEXT DEFAULT \'email\''),
+        ('is_first_login', 'BOOLEAN DEFAULT TRUE'),
         ('created_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
     ]
     
