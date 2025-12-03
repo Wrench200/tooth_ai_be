@@ -1106,12 +1106,22 @@ def register_user():
                 if referrer_id:
                     try:
                         with db.get_db_connection() as cursor:
+                            # Set referred_by for the new user
                             cursor.execute("UPDATE users SET referred_by = %s WHERE userId = %s", 
                                          (referrer_id, user['userId']))
                             user['referred_by'] = referrer_id
-                            print(f"Referral relationship established: {referrer_id} referred {user['userId']} (no rewards yet)")
+                            
+                            # Increment referred_users count for the referrer
+                            cursor.execute("""
+                                UPDATE users 
+                                SET referred_users = COALESCE(referred_users, 0) + 1
+                                WHERE userId = %s
+                            """, (referrer_id,))
+                            
+                            print(f"✅ Referral relationship established: {referrer_id} referred {user['userId']} (referred_users count incremented)")
                     except Exception as e:
-                        print(f"Error establishing referral relationship: {e}")
+                        print(f"❌ Error establishing referral relationship: {e}")
+                        traceback.print_exc()
                         
         except Exception as e:
             print(f"REGISTER ERROR (db.create_user): {e}")
@@ -2886,34 +2896,28 @@ def update_brand_payment_status():
             referral_message = ""
             if payment_status:  # Only process rewards when payment is successful
                 try:
-                    with db.get_db_connection() as cursor:
-                        # Get brand owner info
-                        cursor.execute("SELECT userid FROM brands WHERE id = %s", (brand_id,))
-                        brand_info = cursor.fetchone()
-                        if brand_info:
-                            user_id = brand_info[0]
-                            # Check if user was referred by someone
-                            cursor.execute("SELECT referred_by FROM users WHERE userId = %s", (user_id,))
-                            referrer_info = cursor.fetchone()
-                            if referrer_info and referrer_info[0]:
-                                referrer_id = referrer_info[0]
-                                # Increment referrer's referral amount by 1000 and referred_users by 1
-                                cursor.execute("""
-                                    UPDATE users 
-                                    SET referred_amount = referred_amount + 4500,
-                                        referred_users = referred_users + 1
-                                    WHERE userId = %s
-                                """, (referrer_id,))
-                                
-                                if cursor.rowcount > 0:
-                                    # Mark referral reward as processed
-                                    db.mark_referral_reward_processed(transaction_id)
-                                    referral_message = f" Referral reward of 4,500 processed for user {referrer_id}. Referred users count incremented."
-                                    print(f"Referral reward processed: {referrer_id} earned 4,500 from {user_id}, referred_users incremented")
-                                else:
-                                    print(f"Failed to update referral stats for user {referrer_id}")
+                    # Get brand owner info
+                    brand_info = db.get_brand(brand_id)
+                    if brand_info and brand_info.get('userid'):
+                        user_id = brand_info['userid']
+                        payment_amount = data.get('amount', 15000)  # Default to 15k if not specified
+                        
+                        print(f"🔄 Processing referral rewards for user {user_id}, amount {payment_amount}")
+                        referral_result = db.process_referral_reward(brand_id, user_id, payment_amount)
+                        
+                        if referral_result['success'] and referral_result.get('referrer_id'):
+                            # Mark referral reward as processed
+                            db.mark_referral_reward_processed(transaction_id)
+                            referral_message = f" Referral reward of {referral_result.get('referrer_reward', 0)} XAF processed for referrer {referral_result.get('referrer_id')}."
+                            print(f"✅ Referral rewards processed: {referral_result}")
+                        elif referral_result['success']:
+                            print(f"ℹ️ No referral reward (user was not referred)")
+                        else:
+                            print(f"❌ Failed to process referral rewards: {referral_result}")
                 except Exception as e:
-                    print(f"Error processing referral reward: {e}")
+                    print(f"❌ Error processing referral reward: {e}")
+                    import traceback
+                    traceback.print_exc()
                     # Don't fail the payment update if referral processing fails
             
             return jsonify({
