@@ -65,8 +65,7 @@ def process_referral(referrer_id, new_user_id):
             cursor.execute("""
                 UPDATE users 
                 SET referred_users = referred_users + 1,
-                    referred_amount = referred_amount + 1000,
-                    can_refer = TRUE
+                    referred_amount = referred_amount + 1000
                 WHERE userId = %s
             """, (referrer_id,))
             
@@ -1108,12 +1107,22 @@ def register_user():
                 if referrer_id:
                     try:
                         with db.get_db_connection() as cursor:
+                            # Set referred_by for the new user
                             cursor.execute("UPDATE users SET referred_by = %s WHERE userId = %s", 
                                          (referrer_id, user['userId']))
                             user['referred_by'] = referrer_id
-                            print(f"Referral relationship established: {referrer_id} referred {user['userId']} (no rewards yet)")
+                            
+                            # Increment referred_users count for the referrer
+                            cursor.execute("""
+                                UPDATE users 
+                                SET referred_users = COALESCE(referred_users, 0) + 1
+                                WHERE userId = %s
+                            """, (referrer_id,))
+                            
+                            print(f"✅ Referral relationship established: {referrer_id} referred {user['userId']} (referred_users count incremented)")
                     except Exception as e:
-                        print(f"Error establishing referral relationship: {e}")
+                        print(f"❌ Error establishing referral relationship: {e}")
+                        traceback.print_exc()
                         
         except Exception as e:
             print(f"REGISTER ERROR (db.create_user): {e}")
@@ -1262,13 +1271,33 @@ def login():
                 'error': 'Invalid email or password'
             }), 401
         print("user:", user)
+        
+        # Check if this is the user's first login
+        is_first_login = user['is_first_login']
+        print("is_first_login:", is_first_login)
+        user_id = user.get('userid') or user.get('userId')
+        
+        # If it's the first login, update the field to False
+        if is_first_login and user_id:
+            try:
+                with db.get_db_connection() as cursor:
+                    cursor.execute(
+                        "UPDATE users SET is_first_login = FALSE WHERE userId = %s",
+                        (user_id,)
+                    )
+                print(f"Updated is_first_login to False for user {user_id}")
+            except Exception as e:
+                print(f"Error updating is_first_login: {e}")
+                # Continue with login even if update fails
+        
         # Remove password from response for security
         user_response = {
-            'userId': user.get('userid') or user.get('userId'),
+            'userId': user_id,
             'username': user['username'],
             'email': user['email'],
             'phoneNumber': user.get('phone_number', ''),
-            'referral_code': user.get('referral_code', '')
+            'referral_code': user.get('referral_code', ''),
+            'is_first_login': is_first_login
         }
         
         return jsonify({
@@ -2059,7 +2088,7 @@ def get_referral_history(user_id):
                 if referred_amount > 0:
                     status = "completed"
                     reward = referred_amount
-                elif brand_count > 0:
+                elif brand_count > 0 :
                     status = "pending"
                     reward = 0
                 else:
@@ -2747,13 +2776,7 @@ def delete_brand():
                 'deleted': False
             }), 404
         
-        # Optional: Verify user owns the brand (if userId provided)
-        if user_id and brand_exists.get('userId') != user_id:
-            return jsonify({
-                'success': False,
-                'message': 'Unauthorized: You can only delete your own brands',
-                'deleted': False
-            }), 403
+       
         
         # Delete the brand (this will cascade delete related data due to foreign key constraints)
         deleted = db.delete_brand(brand_id)
@@ -2874,34 +2897,28 @@ def update_brand_payment_status():
             referral_message = ""
             if payment_status:  # Only process rewards when payment is successful
                 try:
-                    with db.get_db_connection() as cursor:
-                        # Get brand owner info
-                        cursor.execute("SELECT userid FROM brands WHERE id = %s", (brand_id,))
-                        brand_info = cursor.fetchone()
-                        if brand_info:
-                            user_id = brand_info[0]
-                            # Check if user was referred by someone
-                            cursor.execute("SELECT referred_by FROM users WHERE userId = %s", (user_id,))
-                            referrer_info = cursor.fetchone()
-                            if referrer_info and referrer_info[0]:
-                                referrer_id = referrer_info[0]
-                                # Increment referrer's referral amount by 1000 and referred_users by 1
-                                cursor.execute("""
-                                    UPDATE users 
-                                    SET referred_amount = referred_amount + 4500,
-                                        referred_users = referred_users + 1
-                                    WHERE userId = %s
-                                """, (referrer_id,))
-                                
-                                if cursor.rowcount > 0:
-                                    # Mark referral reward as processed
-                                    db.mark_referral_reward_processed(transaction_id)
-                                    referral_message = f" Referral reward of 4,500 processed for user {referrer_id}. Referred users count incremented."
-                                    print(f"Referral reward processed: {referrer_id} earned 4,500 from {user_id}, referred_users incremented")
-                                else:
-                                    print(f"Failed to update referral stats for user {referrer_id}")
+                    # Get brand owner info
+                    brand_info = db.get_brand(brand_id)
+                    if brand_info and brand_info.get('userid'):
+                        user_id = brand_info['userid']
+                        payment_amount = data.get('amount', 15000)  # Default to 15k if not specified
+                        
+                        print(f"🔄 Processing referral rewards for user {user_id}, amount {payment_amount}")
+                        referral_result = db.process_referral_reward(brand_id, user_id, payment_amount)
+                        
+                        if referral_result['success'] and referral_result.get('referrer_id'):
+                            # Mark referral reward as processed
+                            db.mark_referral_reward_processed(transaction_id)
+                            referral_message = f" Referral reward of {referral_result.get('referrer_reward', 0)} XAF processed for referrer {referral_result.get('referrer_id')}."
+                            print(f"✅ Referral rewards processed: {referral_result}")
+                        elif referral_result['success']:
+                            print(f"ℹ️ No referral reward (user was not referred)")
+                        else:
+                            print(f"❌ Failed to process referral rewards: {referral_result}")
                 except Exception as e:
-                    print(f"Error processing referral reward: {e}")
+                    print(f"❌ Error processing referral reward: {e}")
+                    import traceback
+                    traceback.print_exc()
                     # Don't fail the payment update if referral processing fails
             
             return jsonify({
@@ -3095,13 +3112,31 @@ def google_auth_callback():
         existing_user = db.get_user_by_google_id(google_id)
         if existing_user:
             # User exists, log them in
+            # Check if this is the user's first login
+            is_first_login = existing_user.get('is_first_login', True)
+            user_id = existing_user.get('userid') or existing_user.get('userId')
+            
+            # If it's the first login, update the field to False
+            if is_first_login and user_id:
+                try:
+                    with db.get_db_connection() as cursor:
+                        cursor.execute(
+                            "UPDATE users SET is_first_login = FALSE WHERE userId = %s",
+                            (user_id,)
+                        )
+                    print(f"Updated is_first_login to False for user {user_id}")
+                except Exception as e:
+                    print(f"Error updating is_first_login: {e}")
+                    # Continue with login even if update fails
+            
             user_response = {
-                'userId': existing_user.get('userid') or existing_user.get('userId'),
+                'userId': user_id,
                 'username': existing_user['username'],
                 'email': existing_user['email'],
                 'phoneNumber': existing_user.get('phone_number', ''),
                 'profile_picture': existing_user.get('profile_picture'),
-                'auth_provider': existing_user.get('auth_provider', 'google')
+                'auth_provider': existing_user.get('auth_provider', 'google'),
+                'is_first_login': is_first_login
             }
             return jsonify({
                 'success': True,
@@ -3118,7 +3153,8 @@ def google_auth_callback():
                     'email': new_user['email'],
                     'phoneNumber': new_user.get('phone_number', ''),
                     'profile_picture': new_user.get('profile_picture'),
-                    'auth_provider': 'google'
+                    'auth_provider': 'google',
+                    'is_first_login': new_user.get('is_first_login', True)
                 }
                 return jsonify({
                     'success': True,
@@ -3163,13 +3199,31 @@ def google_token_auth():
         existing_user = db.get_user_by_google_id(user_info['google_id'])
         if existing_user:
             # User exists, log them in
+            # Check if this is the user's first login
+            is_first_login = existing_user.get('is_first_login', True)
+            user_id = existing_user.get('userid') or existing_user.get('userId')
+            
+            # If it's the first login, update the field to False
+            if is_first_login and user_id:
+                try:
+                    with db.get_db_connection() as cursor:
+                        cursor.execute(
+                            "UPDATE users SET is_first_login = FALSE WHERE userId = %s",
+                            (user_id,)
+                        )
+                    print(f"Updated is_first_login to False for user {user_id}")
+                except Exception as e:
+                    print(f"Error updating is_first_login: {e}")
+                    # Continue with login even if update fails
+            
             user_response = {
-                'userId': existing_user.get('userid') or existing_user.get('userId'),
+                'userId': user_id,
                 'username': existing_user['username'],
                 'email': existing_user['email'],
                 'phoneNumber': existing_user.get('phone_number', ''),
                 'profile_picture': existing_user.get('profile_picture'),
-                'auth_provider': existing_user.get('auth_provider', 'google')
+                'auth_provider': existing_user.get('auth_provider', 'google'),
+                'is_first_login': is_first_login
             }
             return jsonify({
                 'success': True,
@@ -3191,7 +3245,8 @@ def google_token_auth():
                     'email': new_user['email'],
                     'phoneNumber': new_user.get('phone_number', ''),
                     'profile_picture': new_user.get('profile_picture'),
-                    'auth_provider': 'google'
+                    'auth_provider': 'google',
+                    'is_first_login': new_user.get('is_first_login', True)
                 }
                 return jsonify({
                     'success': True,
@@ -3362,10 +3417,11 @@ def verify_fapshi_payment():
                         
                         # Process referral rewards (20% of 15k = 3k XAF shared equally)
                         try:
-                            # Get the user who owns this brand
                             brand_info = db.get_brand(brand_id)
-                            if brand_info and brand_info.get('userId'):
-                                user_id = brand_info['userId']
+                            print(f"🔄 Brand info: {brand_info}")
+                            # Get the user who owns this brand
+                            if brand_info and brand_info.get('userid'):
+                                user_id = brand_info['userid']
                                 payment_amount = payment_data.get('amount', 15000)  # Default to 15k if not specified
                                 
                                 print(f"🔄 Processing referral rewards for user {user_id}, amount {payment_amount}")

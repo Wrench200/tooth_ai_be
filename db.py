@@ -364,11 +364,12 @@ with get_db_connection() as cursor:
         referred_by TEXT,
         referred_users INT DEFAULT 0,
         referred_amount INT DEFAULT 0,
-        can_refer BOOLEAN DEFAULT FALSE,
+        can_refer BOOLEAN DEFAULT TRUE,
         generated BOOLEAN DEFAULT FALSE,
         google_id TEXT UNIQUE,
         profile_picture TEXT,
         auth_provider TEXT DEFAULT 'email',
+        is_first_login BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
 ''')
@@ -380,11 +381,12 @@ with get_db_connection() as cursor:
         ('referred_by', 'TEXT'),
         ('referred_users', 'INT DEFAULT 0'),
         ('referred_amount', 'INT DEFAULT 0'),
-        ('can_refer', 'BOOLEAN DEFAULT FALSE'),
+        ('can_refer', 'BOOLEAN DEFAULT TRUE'),
         ('generated', 'BOOLEAN DEFAULT FALSE'),
         ('google_id', 'TEXT UNIQUE'),
         ('profile_picture', 'TEXT'),
         ('auth_provider', 'TEXT DEFAULT \'email\''),
+        ('is_first_login', 'BOOLEAN DEFAULT TRUE'),
         ('created_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
     ]
     
@@ -2222,26 +2224,26 @@ def mark_referral_reward_processed(transaction_id):
 def process_referral_reward(brand_id, user_id, amount_paid=15000):
     """
     Process referral reward when a user pays for a brand
-    20% of the payment (3k XAF) is shared equally between:
-    1. The person who generated the brand (user_id)
-    2. The person who referred them (if any)
+    20% of the payment (3,000 XAF) is shared equally between:
+    1. The brand creator (user_id) - 1,500 XAF
+    2. The referrer (if user was referred) - 1,500 XAF
     
     Args:
         brand_id: ID of the brand that was paid for
-        user_id: ID of the user who paid
+        user_id: ID of the user who paid for the brand (brand creator)
         amount_paid: Amount paid (default 15000 XAF)
     
     Returns:
         dict: Result of the referral reward processing
     """
     try:
-        print(f"🔄 Processing referral reward for brand {brand_id}, user {user_id}, amount {amount_paid}")
+        print(f"🔄 Processing referral rewards for brand {brand_id}, user {user_id}, amount {amount_paid}")
         
-        # Calculate reward amount (20% of payment, split equally = 10% each)
-        total_reward = int(amount_paid * 0.20)  # 20% = 3000 XAF
-        individual_reward = int(total_reward / 2)  # 10% each = 1500 XAF
+        # Calculate reward amount (10% of payment = 1,500 XAF each)
+        individual_reward = int(amount_paid * 0.10)  # 10% = 1500 XAF each
+        total_reward = individual_reward * 2  # 3,000 XAF total (20% of 15,000)
         
-        print(f"💰 Total reward: {total_reward} XAF, Individual reward: {individual_reward} XAF")
+        print(f"💰 Individual reward: {individual_reward} XAF each, Total reward: {total_reward} XAF")
         
         with get_db_connection() as cursor:
             # Get user information to check if they were referred
@@ -2258,20 +2260,20 @@ def process_referral_reward(brand_id, user_id, amount_paid=15000):
             
             user_id_db, referred_by, referral_code, current_referred_amount = user_row
             
-            # Reward the brand creator (the user who paid)
+            # Always reward the brand creator (user who paid)
             cursor.execute("""
                 UPDATE users 
-                SET referred_amount = referred_amount + %s
+                SET referred_amount = COALESCE(referred_amount, 0) + %s
                 WHERE userId = %s
             """, (individual_reward, user_id))
             
             print(f"✅ Brand creator {user_id} rewarded {individual_reward} XAF")
             
-            # If user was referred by someone, reward the referrer
+            # If user was referred by someone, also reward the referrer
             if referred_by:
                 cursor.execute("""
                     UPDATE users 
-                    SET referred_amount = referred_amount + %s
+                    SET referred_amount = COALESCE(referred_amount, 0) + %s
                     WHERE userId = %s
                 """, (individual_reward, referred_by))
                 
@@ -2286,7 +2288,7 @@ def process_referral_reward(brand_id, user_id, amount_paid=15000):
                     'referrer_id': referred_by
                 }
             else:
-                print(f"ℹ️ User {user_id} was not referred by anyone")
+                print(f"ℹ️ User {user_id} was not referred by anyone - only brand creator rewarded")
                 return {
                     'success': True,
                     'message': 'Brand creator rewarded (no referrer)',
@@ -2298,6 +2300,8 @@ def process_referral_reward(brand_id, user_id, amount_paid=15000):
                 
     except Exception as e:
         print(f"❌ Error processing referral reward: {e}")
+        import traceback
+        traceback.print_exc()
         return {'success': False, 'message': f'Error processing referral reward: {str(e)}'}
 
 def get_referral_reward_history(user_id):
@@ -2322,10 +2326,10 @@ def get_referral_reward_history(user_id):
             
             return {
                 'userId': row[0],
-                'referral_code': row[1],
-                'referred_users': row[2],
-                'referred_amount': row[3],
-                'can_refer': row[4],
+                'referral_code': row[1] or None,
+                'referred_users': row[2] or 0,
+                'referred_amount': row[3] or 0,
+                'can_refer': row[4] or False,
                 'referred_by': row[5]
             }
     except Exception as e:
