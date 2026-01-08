@@ -1,0 +1,79 @@
+# Render.com Blueprint - Infrastructure as Code
+# Deploy with one click: https://render.com/deploy
+#
+# After connecting your repo to Render, it will automatically detect this file
+# and configure the service accordingly.
+
+services:
+  - type: web
+    name: toothai-api
+    runtime: python
+    region: frankfurt  # Change to your preferred region: oregon, ohio, virginia, frankfurt, singapore
+    plan: free  # Options: free, starter, standard, pro
+    branch: main
+    
+    # Build configuration
+    buildCommand: pip install -r requirements.txt
+    
+    # Start command - Gunicorn with extended timeout for AI operations
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --timeout 600 --workers 2 --threads 4 main:app
+    
+    # Health check configuration
+    healthCheckPath: /health
+    
+    # Auto-deploy on push
+    autoDeploy: true
+    
+    # Environment variables
+    # NOTE: Replace placeholder values with your actual secrets in Render Dashboard
+    # Or use Render's secret file feature for sensitive values
+    envVars:
+      # Database
+      - key: DATABASE_URL
+        sync: false  # Set manually in dashboard for security
+        
+      # Google Gemini API (Primary AI)
+      - key: GEMINI_API_KEY
+        sync: false
+        
+      # OpenAI API (Backup/Additional)
+      - key: OPENAI_API_KEY
+        sync: false
+        
+      # Replicate API (Image Generation)
+      - key: REPLICATE_API_TOKEN
+        sync: false
+        
+      # Cloudinary (Image Storage)
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+        
+      # Fapshi Payment Gateway
+      - key: FAPSHI_API_KEY
+        sync: false
+      - key: FAPSHI_API_USER
+        sync: false
+      - key: FAPSHI_API_URL
+        value: https://live.fapshi.com
+        
+      # Google OAuth
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false  # Set to https://YOUR-APP.onrender.com/auth/google/callback
+        
+      # Flask Configuration
+      - key: FLASK_ENV
+        value: production
+      - key: FLASK_DEBUG
+        value: "0"
+        
+      # Python Configuration
+      - key: PYTHONUNBUFFERED
+        value: "1"

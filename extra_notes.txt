@@ -2,7 +2,10 @@ Cloud run deploy command:
 gcloud run deploy toothai-app --source . --region us-central1 --allow-unauthenticated --env-vars-file env.yaml
 
 
-gcloud run deploy toothai-app --source . --region us-central1 --allow-unauthenticated --env-vars-file env.yaml --timeout=600s --memory=1Gi --cpu=2 
+gcloud run deploy toothai-app-production --source . --region us-central1 --allow-unauthenticated --env-vars-file env.yaml --timeout=600s --memory=1Gi --cpu=2 
+
+
+gcloud run deploy toothai-app-test --source . --region us-central1 --allow-unauthenticated --env-vars-file env.yaml --timeout=600s --memory=1Gi --cpu=2 
 
 
 Cloud run endpoint:
